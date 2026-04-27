@@ -1,0 +1,38 @@
+name: Feature slice
+description: Track a shippable PF2e tracker implementation slice.
+title: "[Feature]: "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What user-visible or domain behavior should this slice deliver?
+    validations:
+      required: true
+  - type: textarea
+    id: spec_refs
+    attributes:
+      label: Canonical specs
+      description: List the relevant pf2e-*-spec.md files and sections.
+      placeholder: "pf2e-command-vocabulary-spec.md §4.4"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete checks that prove this is complete.
+      placeholder: |
+        - npm run check passes
+        - npm run test:run passes
+        - Behavior X is covered by a focused test
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What should not be included in this issue?
+    validations:
+      required: false

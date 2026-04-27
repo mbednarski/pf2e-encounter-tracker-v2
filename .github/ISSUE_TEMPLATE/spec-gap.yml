@@ -1,0 +1,26 @@
+name: Spec gap
+description: Track an ambiguity or missing decision in the canonical specs.
+title: "[Spec Gap]: "
+labels: ["spec-gap"]
+body:
+  - type: textarea
+    id: gap
+    attributes:
+      label: Gap
+      description: What is ambiguous, missing, or contradictory?
+    validations:
+      required: true
+  - type: textarea
+    id: affected_specs
+    attributes:
+      label: Affected specs
+      description: List the relevant files and sections.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_resolution
+    attributes:
+      label: Proposed resolution
+      description: Preferred decision or options to evaluate.
+    validations:
+      required: false

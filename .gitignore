@@ -1,3 +1,10 @@
 # Local transcript/export scratch files. Canonical specs are pf2e-*-spec.md.
 # PF2e Encounter Tracker v2*.txt
 Untitled-*.txt
+
+# Node/SvelteKit build artifacts.
+node_modules/
+.svelte-kit/
+build/
+.vite/
+coverage/
