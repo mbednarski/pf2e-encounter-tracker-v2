@@ -91,7 +91,10 @@ type DomainEvent =
   | ReactionResetEvent
   | NoteChangedEvent
 
-  // §4.9 Errors
+  // §4.9 Spellcasting
+  | SpellUsageChangedEvent
+
+  // §4.10 Errors
   | CommandRejectedEvent
 ```
 
@@ -572,7 +575,32 @@ interface NoteChangedEvent {
 
 ---
 
-### 4.9 Errors
+### 4.9 Spellcasting
+
+#### SpellUsageChangedEvent
+
+```typescript
+interface SpellUsageChangedEvent {
+  type: "spell-usage-changed"
+  combatantId: CombatantId
+  blockId: string
+  blockName: string
+  kind: "slot" | "focus" | "innate"
+  action: "used" | "restored" | "set" | "reset"
+  rank?: number
+  spellSlug?: string
+  spellName?: string
+  toValue?: number
+}
+```
+
+**Emitted by:** USE_SPELL_SLOT, RESTORE_SPELL_SLOT, USE_FOCUS_POINT, RESTORE_FOCUS_POINT, USE_INNATE_SPELL, RESTORE_INNATE_SPELL, SET_SPELL_SLOT_USAGE, SET_FOCUS_USAGE, SET_INNATE_USAGE, RESET_SPELL_BLOCK.
+
+**Notes:** A single event variant covers all spell usage state changes. `blockName` and `spellName` are denormalized so combat log entries remain readable even if the library data changes later.
+
+---
+
+### 4.10 Errors
 
 #### CommandRejectedEvent
 
@@ -616,6 +644,16 @@ This table is the source of truth for what each command emits. Where multiple ev
 | SET_EFFECT_VALUE | `effect-value-changed`, [death subsystem events if effectId is `"dying"`] |
 | MODIFY_EFFECT_VALUE | Either `effect-value-changed` OR `effect-removed` (reason `"auto-decremented"`), [death subsystem events] |
 | SET_EFFECT_DURATION | `effect-duration-changed` |
+| USE_SPELL_SLOT | `spell-usage-changed` (`kind: "slot"`, `action: "used"`) |
+| RESTORE_SPELL_SLOT | `spell-usage-changed` (`kind: "slot"`, `action: "restored"`) |
+| USE_FOCUS_POINT | `spell-usage-changed` (`kind: "focus"`, `action: "used"`) |
+| RESTORE_FOCUS_POINT | `spell-usage-changed` (`kind: "focus"`, `action: "restored"`) |
+| USE_INNATE_SPELL | `spell-usage-changed` (`kind: "innate"`, `action: "used"`) |
+| RESTORE_INNATE_SPELL | `spell-usage-changed` (`kind: "innate"`, `action: "restored"`) |
+| SET_SPELL_SLOT_USAGE | `spell-usage-changed` (`kind: "slot"`, `action: "set"`) |
+| SET_FOCUS_USAGE | `spell-usage-changed` (`kind: "focus"`, `action: "set"`) |
+| SET_INNATE_USAGE | `spell-usage-changed` (`kind: "innate"`, `action: "set"`) |
+| RESET_SPELL_BLOCK | `spell-usage-changed` (`action: "reset"`) |
 | RESOLVE_PROMPT | `prompt-resolved`, [resolution-specific effect events], [if last prompt: `phase-changed` → ACTIVE, `turn-started` for next combatant + start-of-turn cascade] |
 | MARK_REACTION_USED | `reaction-used` |
 | RESET_REACTION | `reaction-reset` (cause `"manual"`) |
@@ -753,7 +791,11 @@ The `effect-duration-changed` event referenced in SET_EFFECT_DURATION is now for
 
 Restate: the death subsystem composes existing events. See §6 for the composition table.
 
-### 9.6 Hazards Spec — No Changes
+### 9.6 Spellcasting Spec §7
+
+`SpellUsageChangedEvent` is now formally typed in §4.9 here and included in the per-command emission table.
+
+### 9.7 Hazards Spec — No Changes
 
 Hazards spec already states "no new domain events" (§7). Confirmed — hazards reuse the catalog as-is.
 

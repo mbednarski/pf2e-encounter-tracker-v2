@@ -424,9 +424,9 @@ For companion combatants: populated from the `Companion` record. Companions have
 
 Add `spells` to the persistence spec (arch spec §13.1). Keyed by `slug`. Same import/export treatment as creatures and effect definitions.
 
-### 7.4 Spell Commands — Deferred
+### 7.4 Spell Commands
 
-Commands for tracking spell usage (USE_SPELL_SLOT, USE_FOCUS_POINT, etc.) are deferred to the **Spellcasting & Spell Slots** specification topic. The data structures defined here are sufficient for the domain layer to hold the data; the command vocabulary for mutating it is a separate concern.
+Commands for tracking spell usage (USE_SPELL_SLOT, USE_FOCUS_POINT, etc.) are canonical in the **Spellcasting & Spell Slots** specification and included in the command vocabulary spec. The data structures defined here are sufficient for the domain layer to hold the data; the spellcasting spec defines how commands mutate it.
 
 ---
 

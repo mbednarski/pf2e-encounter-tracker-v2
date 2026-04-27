@@ -60,6 +60,18 @@ type CommandType =
   | "REMOVE_EFFECT"
   | "SET_EFFECT_VALUE"
   | "MODIFY_EFFECT_VALUE"
+  | "SET_EFFECT_DURATION"
+  // Spellcasting
+  | "USE_SPELL_SLOT"
+  | "RESTORE_SPELL_SLOT"
+  | "USE_FOCUS_POINT"
+  | "RESTORE_FOCUS_POINT"
+  | "USE_INNATE_SPELL"
+  | "RESTORE_INNATE_SPELL"
+  | "SET_SPELL_SLOT_USAGE"
+  | "SET_FOCUS_USAGE"
+  | "SET_INNATE_USAGE"
+  | "RESET_SPELL_BLOCK"
   // Turn resolution
   | "RESOLVE_PROMPT"
   // Combat state
@@ -98,7 +110,6 @@ Each command is legal in specific encounter phases. Dispatching a command in an 
 | RENAME_COMBATANT | ✓ | ✓ | ✓ | — |
 | SET_INITIATIVE_ORDER | ✓ | ✓ | — | — |
 | REORDER_COMBATANT | ✓ | ✓ | — | — |
-| ADVANCE_TURN | — | ✓ | — | — |
 | END_TURN | — | ✓ | — | — |
 | DELAY | — | ✓ | — | — |
 | RESUME_FROM_DELAY | — | ✓ | — | — |
@@ -110,6 +121,17 @@ Each command is legal in specific encounter phases. Dispatching a command in an 
 | REMOVE_EFFECT | ✓ | ✓ | ✓ | — |
 | SET_EFFECT_VALUE | ✓ | ✓ | ✓ | — |
 | MODIFY_EFFECT_VALUE | ✓ | ✓ | ✓ | — |
+| SET_EFFECT_DURATION | ✓ | ✓ | ✓ | — |
+| USE_SPELL_SLOT | — | ✓ | ✓ | — |
+| RESTORE_SPELL_SLOT | — | ✓ | ✓ | — |
+| USE_FOCUS_POINT | — | ✓ | ✓ | — |
+| RESTORE_FOCUS_POINT | — | ✓ | ✓ | — |
+| USE_INNATE_SPELL | — | ✓ | ✓ | — |
+| RESTORE_INNATE_SPELL | — | ✓ | ✓ | — |
+| SET_SPELL_SLOT_USAGE | ✓ | ✓ | ✓ | — |
+| SET_FOCUS_USAGE | ✓ | ✓ | ✓ | — |
+| SET_INNATE_USAGE | ✓ | ✓ | ✓ | — |
+| RESET_SPELL_BLOCK | ✓ | ✓ | ✓ | — |
 | RESOLVE_PROMPT | — | — | ✓ | — |
 | MARK_REACTION_USED | — | ✓ | ✓ | — |
 | RESET_REACTION | — | ✓ | ✓ | — |
@@ -119,7 +141,7 @@ Each command is legal in specific encounter phases. Dispatching a command in an 
 
 **Notes on the table:**
 
-- HP and effect commands are allowed in RESOLVING because prompt resolution may require applying damage (persistent damage) or modifying effects. The GM should be able to fix things mid-resolution without being blocked.
+- HP, effect, and spellcasting correction commands are allowed in RESOLVING because prompt resolution may require applying damage, modifying effects, or correcting spell usage before the next turn starts. The GM should be able to fix things mid-resolution without being blocked.
 - RENAME_COMBATANT is allowed in RESOLVING — it's harmless and the GM might realize a naming error while looking at prompts.
 - Nothing is allowed in COMPLETED except RESET_ENCOUNTER. The encounter is read-only.
 - ADD_COMBATANT in ACTIVE supports creatures joining mid-combat (reinforcements). The new combatant is added to state but not to initiative — the GM uses REORDER_COMBATANT or SET_INITIATIVE_ORDER to place them.
@@ -245,12 +267,12 @@ interface RemoveCombatantPayload {
 - Remove from `combatants` record
 - Remove from `initiative.order` (if present)
 - Remove from `initiative.delaying` (if present)
-- Remove any `AppliedEffect` instances on other combatants where `sourceId` is this combatant
+- For `AppliedEffect` instances on other combatants where `sourceId` is this combatant, clear `sourceId` and preserve `sourceLabel`
 - If removal shifts `initiative.currentIndex`, adjust pointer to keep the same combatant's turn active
 
 **Events:**
 - `{ type: "combatant-removed", combatantId, name }`
-- Any effect-removed events from orphaned effects
+- No events are emitted for source cleanup; the effects remain active.
 
 #### RENAME_COMBATANT
 
@@ -507,7 +529,7 @@ Applies an effect to a combatant. The domain looks up the `EffectDefinition` fro
 interface ApplyEffectPayload {
   effectId: string              // references EffectDefinition
   targetId: CombatantId
-  sourceId: CombatantId         // who caused this effect
+  sourceId?: CombatantId        // who caused this effect, if attributed
   value?: number                // for value conditions; defaults to 1 if hasValue
   duration?: Duration           // defaults to { type: "unlimited" }
   note?: string                 // free text (e.g., "2d6" for persistent damage)
@@ -516,9 +538,9 @@ interface ApplyEffectPayload {
 
 **Validation:**
 - Target combatant must exist
-- Source combatant must exist (can be same as target)
+- If provided, source combatant must exist (can be same as target)
 - `effectId` must resolve in the effect library
-- If effect `hasValue` and `value` is provided: must be >= 1 and <= `maxValue`
+- If effect `hasValue` and `value` is provided: must be >= 1. `maxValue` is advisory only (effects & durations spec §6.1).
 - If effect `!hasValue` and `value` is provided: rejected
 
 **State changes:**
@@ -526,7 +548,7 @@ interface ApplyEffectPayload {
 - Create `AppliedEffect` with resolved defaults
 - Push onto `combatants[targetId].appliedEffects`
 - For each entry in `impliedEffects`: recursively apply (same source, same target, `parentInstanceId` set to the new instance, value 1 if applicable, duration unlimited)
-  - **Duplicate check:** If the target already has an implied effect from a different source (no parent, or different parent), do NOT create a duplicate. Each effect source gets its own instance. This means a creature can have Off-Guard from Prone (implied) AND Off-Guard from a spell (separate instance). Both exist; removing Prone removes only its implied Off-Guard.
+  - Each implied effect source gets its own child instance. This means a creature can have Off-Guard from Prone (implied) AND Off-Guard from a spell (separate instance). Both exist; removing Prone removes only its implied Off-Guard.
 - **Death subsystem:** If `effectId` is `"dying"`, invoke the death tracking subsystem (conditions library spec §3.2) instead of standard application. The value is adjusted by Wounded, and the death threshold is checked.
 
 **Events:**
@@ -574,7 +596,7 @@ interface SetEffectValuePayload {
 **Validation:**
 - Target and instance must exist
 - Effect must have `hasValue: true`
-- `newValue` must be >= 1 and <= `maxValue`. Setting to 0 is not allowed — use REMOVE_EFFECT instead.
+- `newValue` must be >= 1. `maxValue` is advisory only. Setting to 0 is not allowed — use REMOVE_EFFECT instead.
 
 **State changes:**
 - `appliedEffects[instance].value → newValue`
@@ -598,8 +620,7 @@ interface ModifyEffectValuePayload {
 **Validation:**
 - Target and instance must exist
 - Effect must have `hasValue: true`
-- Resulting value must be <= `maxValue`
-- If resulting value exceeds `maxValue`: rejected
+- Resulting value may exceed `maxValue`; `maxValue` is a UI hint, not a domain constraint.
 
 **State changes:**
 - `appliedEffects[instance].value += delta`
@@ -609,9 +630,50 @@ interface ModifyEffectValuePayload {
 **Events:**
 - `{ type: "effect-value-changed", combatantId: targetId, effectName, from, to }`
 
+#### SET_EFFECT_DURATION
+
+Overwrites an effect's duration. Used for sustained effects, manually ticking `rounds` counters, or GM corrections.
+
+```typescript
+interface SetEffectDurationPayload {
+  combatantId: CombatantId
+  instanceId: string
+  newDuration: Duration
+}
+```
+
+**Validation:**
+- Combatant must exist
+- Instance must exist on combatant
+
+**State changes:**
+- `appliedEffects[instance].duration → newDuration`
+
+**Events:**
+- `{ type: "effect-duration-changed", combatantId, effectName, instanceId }`
+
 ---
 
-### 4.6 Turn Resolution
+### 4.6 Spellcasting
+
+Spellcasting commands are defined canonically in the spellcasting spec §6. They mutate `CombatantSpellcasting` usage counters only; they do not validate action economy or spell targeting.
+
+| Command | Canonical payload | Event |
+|---|---|---|
+| USE_SPELL_SLOT | spellcasting spec §6.1 | `spell-usage-changed` (`kind: "slot"`, `action: "used"`) |
+| RESTORE_SPELL_SLOT | spellcasting spec §6.2 | `spell-usage-changed` (`kind: "slot"`, `action: "restored"`) |
+| USE_FOCUS_POINT | spellcasting spec §6.3 | `spell-usage-changed` (`kind: "focus"`, `action: "used"`) |
+| RESTORE_FOCUS_POINT | spellcasting spec §6.4 | `spell-usage-changed` (`kind: "focus"`, `action: "restored"`) |
+| USE_INNATE_SPELL | spellcasting spec §6.5 | `spell-usage-changed` (`kind: "innate"`, `action: "used"`) |
+| RESTORE_INNATE_SPELL | spellcasting spec §6.6 | `spell-usage-changed` (`kind: "innate"`, `action: "restored"`) |
+| SET_SPELL_SLOT_USAGE | spellcasting spec §6.7 | `spell-usage-changed` (`kind: "slot"`, `action: "set"`) |
+| SET_FOCUS_USAGE | spellcasting spec §6.8 | `spell-usage-changed` (`kind: "focus"`, `action: "set"`) |
+| SET_INNATE_USAGE | spellcasting spec §6.9 | `spell-usage-changed` (`kind: "innate"`, `action: "set"`) |
+| RESET_SPELL_BLOCK | spellcasting spec §6.10 | `spell-usage-changed` (`action: "reset"`) |
+
+---
+
+### 4.7 Turn Resolution
 
 #### RESOLVE_PROMPT
 
@@ -647,8 +709,8 @@ For complex multi-outcome prompts (Dying recovery check), the UI presents labele
   - `suggestDecrement` + `setValue` → set effect to specified value. If value ≤ 0, remove.
   - `suggestDecrement` + `dismiss` → no change
   - `suggestDecrement` + `remove` → remove effect
-  - `confirmSustained` + `accept` → keep effect (no change)
-  - `confirmSustained` + `dismiss` → keep effect (same as accept for sustained)
+  - `confirmSustained` + `accept` → extend the effect by setting duration to `{ type: "untilTurnEnd", combatantId: casterId }` for the caster's next turn end; emit `effect-duration-changed`
+  - `confirmSustained` + `dismiss` → keep effect as-is without changing duration (GM override)
   - `confirmSustained` + `remove` → remove effect (caster didn't sustain)
   - `promptResolution` + `accept` → execute the "positive outcome" (remove persistent damage, etc.)
   - `promptResolution` + `setValue` → set effect to specified value
@@ -672,7 +734,7 @@ For complex multi-outcome prompts (Dying recovery check), the UI presents labele
 
 ---
 
-### 4.7 Combat State
+### 4.8 Combat State
 
 #### MARK_REACTION_USED
 
@@ -914,7 +976,7 @@ When damage reduces HP to 0, the domain emits `hp-reached-zero` but does NOT aut
 
 ## 9. Summary — Command Count
 
-25 commands total (ADVANCE_TURN removed, REVIVE added):
+36 commands total (ADVANCE_TURN removed, REVIVE added, SET_EFFECT_DURATION and spellcasting commands added):
 
 | Category | Count | Commands |
 |---|---|---|
@@ -922,8 +984,9 @@ When damage reduces HP to 0, the domain emits `hp-reached-zero` but does NOT aut
 | Combatant Management | 3 | ADD_COMBATANT, REMOVE_COMBATANT, RENAME_COMBATANT |
 | Initiative & Turns | 5 | SET_INITIATIVE_ORDER, REORDER_COMBATANT, END_TURN, DELAY, RESUME_FROM_DELAY |
 | HP | 4 | APPLY_DAMAGE, APPLY_HEALING, SET_TEMP_HP, SET_HP |
-| Effects | 4 | APPLY_EFFECT, REMOVE_EFFECT, SET_EFFECT_VALUE, MODIFY_EFFECT_VALUE |
+| Effects | 5 | APPLY_EFFECT, REMOVE_EFFECT, SET_EFFECT_VALUE, MODIFY_EFFECT_VALUE, SET_EFFECT_DURATION |
+| Spellcasting | 10 | USE_SPELL_SLOT, RESTORE_SPELL_SLOT, USE_FOCUS_POINT, RESTORE_FOCUS_POINT, USE_INNATE_SPELL, RESTORE_INNATE_SPELL, SET_SPELL_SLOT_USAGE, SET_FOCUS_USAGE, SET_INNATE_USAGE, RESET_SPELL_BLOCK |
 | Turn Resolution | 1 | RESOLVE_PROMPT |
 | Combat State | 5 | MARK_REACTION_USED, RESET_REACTION, SET_NOTE, MARK_DEAD, REVIVE |
 
-Total: 25 commands, ~20 event types.
+Total: 36 commands. Domain events are canonical in `pf2e-domain-events-spec.md`.

@@ -3,7 +3,7 @@
 **Version:** 0.1 (draft)
 **Date:** 2026-04-21
 **Author:** Mateusz + Claude (collaborative)
-**Status:** In progress — architecture decisions locked, subsystem specs pending
+**Status:** Ready for implementation — architecture decisions locked, subsystem specs split into canonical topic specs
 
 ---
 
@@ -264,90 +264,21 @@ The effects engine does three things:
 
 The engine never auto-modifies effects. All value changes, removals, and state transitions require explicit GM commands. The system suggests (e.g., "Frightened 3 → decrease to 2?"), the GM confirms, modifies, or dismisses.
 
-### 8.2 Effect Definition
+### 8.2 Canonical Effect Types
 
-An effect definition describes what an effect *is*. Both built-in PF2e conditions and user-imported custom effects share this shape.
+`EffectDefinition`, `AppliedEffect`, `Duration`, `TurnBoundarySuggestion`, implied-effect behavior, source-label handling, persistence hydration, and `SET_EFFECT_DURATION` are canonical in `pf2e-effects-and-durations-spec.md`.
 
-```typescript
-interface EffectDefinition {
-  id: string                        // "frightened", "bless", "giant-centipede-venom"
-  name: string
-  category: EffectCategory
-  description?: string              // human-readable rules text
-  modifiers: Modifier[]             // stat changes this effect causes
-  hasValue: boolean                 // does it have a numeric level (Frightened 2)
-  maxValue?: number
-  impliedEffects?: string[]         // effect IDs applied automatically (Grabbed → Off-Guard)
-  turnEndSuggestion?: TurnEndSuggestion
-  traits?: string[]
-}
+The architecture-level rules are:
 
-type EffectCategory =
-  | "condition"
-  | "spell"
-  | "affliction"
-  | "persistent-damage"
-  | "custom"
-```
+- Effects live on combatants as applied instances.
+- `targetId` is implicit from the containing combatant.
+- `sourceId` is optional; `sourceLabel` preserves readable attribution when the source combatant no longer exists.
+- `maxValue` is advisory only. The domain validates minimum values, not PF2e display caps.
+- Hard-clock durations (`untilTurnEnd`, `untilTurnStart`) are the only automatic expirations.
+- `rounds` is a manually adjusted display counter.
+- Sustained effects use `untilTurnEnd` plus a `confirmSustained` prompt.
 
-### 8.3 Applied Effect — Instance on a Combatant
-
-When an effect is active on a combatant, it exists as an applied instance:
-
-```typescript
-interface AppliedEffect {
-  instanceId: string                // unique per application
-  effectId: string                  // references EffectDefinition
-  value?: number                    // current value (Frightened 2, Clumsy 3)
-  sourceId: CombatantId             // who caused this
-  targetId: CombatantId             // who has it
-  duration: Duration                // resolved with concrete combatant IDs
-  parentInstanceId?: string         // if implied (Off-Guard from Grabbed)
-  note?: string                     // free-text GM annotation
-}
-```
-
-**Implied effect lifecycle:** When Grabbed is applied, the system automatically creates Off-Guard and Immobilized instances with `parentInstanceId` pointing to the Grabbed instance. When Grabbed is removed, all children are removed. If the creature also has Off-Guard from another source (separate instance, no parent link), that stays.
-
-### 8.4 Duration Model
-
-Every duration is anchored to a combatant, not a position or round counter.
-
-```typescript
-type Duration =
-  | { type: "untilTurnEnd"; combatantId: CombatantId }
-  | { type: "untilTurnStart"; combatantId: CombatantId }
-  | { type: "rounds"; count: number; anchorCombatantId: CombatantId; anchorTiming: "start" | "end" }
-  | { type: "sustained"; casterId: CombatantId }
-  | { type: "unlimited" }
-  | { type: "conditional"; description: string }
-```
-
-**Hard clock expiry** is the only automatic behavior: effects with `untilTurnEnd` or `untilTurnStart` are removed when the specified combatant's turn reaches that boundary. No GM prompt needed — these are unambiguous.
-
-**Round-counted durations** (`rounds` type): `count` tracks how many more times the anchor combatant's turn must hit the specified timing before expiry. The system does not auto-decrement — it presents a prompt suggesting the effect should expire when the count would reach 0. The GM confirms.
-
-### 8.5 Turn-End Suggestions
-
-Suggestions are UI hints for generating prompts. They do not automate anything.
-
-```typescript
-type TurnEndSuggestion =
-  | { type: "suggestDecrement"; amount: number }
-  | { type: "suggestRemoval"; method: string }
-  | { type: "confirmSustained" }
-  | { type: "promptResolution"; description: string }
-```
-
-Examples:
-
-- Frightened: `{ type: "suggestDecrement", amount: 1 }` → prompt: "Frightened 3 — decrease to 2? [Yes] [Set to...] [Remove] [Keep]"
-- Persistent fire damage: `{ type: "promptResolution", description: "Flat check DC 15" }` → prompt: "Persistent Fire 2d6 — flat check DC 15? [Passed → Remove] [Failed → Keep]"
-- Bless (sustained): `{ type: "confirmSustained" }` → prompt: "Bless — sustained this turn? [Yes → Keep] [No → Remove]"
-
-Effects like Grabbed, Prone, Off-Guard have no turn-end suggestion — they sit on the combatant and modify stats until the GM explicitly removes them.
-
-### 8.6 Turn-End Resolution Flow (Blocking)
+### 8.3 Turn Boundary Resolution Flow (Blocking)
 
 When `END_TURN` is dispatched for combatant X:
 
@@ -355,7 +286,7 @@ When `END_TURN` is dispatched for combatant X:
 2. System collects all active effects on X (and sustained effects where X is the caster).
 3. **Hard clock expirations** are applied automatically: effects with matching `untilTurnEnd` duration are removed. Events emitted for combat log.
 4. **Suggestion prompts** are generated for remaining relevant effects and placed in `pendingPrompts`.
-5. Only `RESOLVE_PROMPT` commands are legal in this phase.
+5. `RESOLVE_PROMPT` is the primary command in this phase. HP, effect, note, death-state, and spellcasting correction commands remain legal per command vocabulary phase restrictions.
 6. GM resolves each prompt (accept suggestion, modify, dismiss).
 7. When `pendingPrompts` is empty, state transitions back to `ACTIVE` and initiative advances to next combatant.
 
@@ -573,6 +504,11 @@ Every command produces a full state snapshot stored alongside it. Given state is
 ### 13.1 IndexedDB Stores
 
 - **creatures** — Creature library. Keyed by `creature.id`. JSON objects.
+- **spells** — Spell index entries. Keyed by `spell.slug`.
+- **hazards** — Hazard library. Keyed by `hazard.id`.
+- **partyMembers** — Persistent PC/NPC ally records. Keyed by `partyMember.id`.
+- **companions** — Persistent companion records. Keyed by `companion.id`.
+- **parties** — Saved party groupings. Keyed by `party.id`.
 - **activeEncounter** — The currently running encounter state. Single record. Written on every command dispatch (async, non-blocking). Read on page load to restore.
 - **userEffects** — User-imported custom effect definitions. Keyed by `effect.id`.
 - **settings** — User preferences, API key (for LLM parser), UI config.
@@ -590,10 +526,13 @@ On page load:
 YAML is the exchange format. Import/export covers:
 
 - **Creatures:** Full creature data. YAML schema mirrors the `Creature` TypeScript interface. Round-trips cleanly.
+- **Spells:** Spell index entries for tooltip/enrichment data.
+- **Hazards:** Hazard library records.
+- **Party records:** Party members, companions, and parties.
 - **Encounters:** Full encounter state (combatant list with creature references). Exportable during PREPARING for re-use, or after COMPLETED for archival. Re-importing recreates the encounter in PREPARING phase.
 - **Effect definitions:** Custom effects in the same shape as `EffectDefinition`.
 
-The YAML schema is a direct serialization of the TypeScript types. No separate schema — the types *are* the schema. This means YAML files are human-readable and editable, which is the primary editing workflow for creature corrections.
+The YAML schema is a direct serialization of the TypeScript types. `pf2e-yaml-schema-spec.md` defines the document envelope, supported document kinds, and import/export rules.
 
 ---
 
@@ -649,26 +588,9 @@ function resolveEffect(id: string): EffectDefinition | null {
 
 User definitions override built-ins with the same ID. This allows house-ruling standard conditions.
 
-### 15.3 Built-In Conditions (non-exhaustive, to be completed as data work)
+### 15.3 Built-In Conditions
 
-**Value-based conditions with modifiers:**
-Clumsy (1-4), Drained (1-4), Enfeebled (1-4), Frightened (1-4), Sickened (1-4), Stupefied (1-4), Doomed (1-3), Wounded (1-3), Dying (1-4), Slowed (1-3), Stunned (1+).
-
-**Binary conditions with modifiers:**
-Off-Guard, Blinded, Dazzled, Encumbered, Prone.
-
-**Composite conditions (with implied effects):**
-Grabbed → Off-Guard + Immobilized.
-Restrained → Off-Guard + Immobilized.
-Paralyzed → Off-Guard + (special rules).
-
-**Reminder-only conditions (no mechanical modifiers in system):**
-Concealed, Hidden, Undetected, Unnoticed, Fascinated, Fleeing, Controlled, Confused, Invisible, Quickened, Unconscious, Petrified.
-
-**Persistent damage types:**
-Fire, Cold, Acid, Electricity, Sonic, Bleed, Poison, Mental, Bludgeoning, Piercing, Slashing.
-
-Note: the categorization above is preliminary. Some "reminder-only" conditions do have mechanical effects (e.g., Fascinated applies a -2 status penalty to Perception and skill checks). The full conditions library will be built as a separate data specification document with exact modifiers, implied effects, and suggestion types for each condition.
+The complete built-in condition and persistent damage library is canonical in `pf2e-conditions-library-spec.md`. That spec defines modifiers, implied effects, value ranges, start/end turn suggestions, death tracking behavior, and persistent damage note conventions.
 
 ### 15.4 Detection Conditions (Concealed, Hidden, Undetected, Unnoticed)
 
@@ -680,7 +602,7 @@ These conditions have no stat modifiers in the system — they modify targeting 
 
 ## 16. Command Vocabulary
 
-To be specified in detail. Preliminary categories:
+The complete command vocabulary is canonical in `pf2e-command-vocabulary-spec.md`, with spell usage command behavior detailed in `pf2e-spellcasting-spec.md`.
 
 ### 16.1 Encounter Lifecycle
 `START_ENCOUNTER`, `COMPLETE_ENCOUNTER`, `RESET_ENCOUNTER`
@@ -695,36 +617,26 @@ To be specified in detail. Preliminary categories:
 `APPLY_DAMAGE`, `APPLY_HEALING`, `SET_TEMP_HP`, `SET_HP`
 
 ### 16.5 Effects
-`APPLY_EFFECT`, `REMOVE_EFFECT`, `SET_EFFECT_VALUE`, `MODIFY_EFFECT_VALUE`
+`APPLY_EFFECT`, `REMOVE_EFFECT`, `SET_EFFECT_VALUE`, `MODIFY_EFFECT_VALUE`, `SET_EFFECT_DURATION`
 
-### 16.6 Turn Resolution
+### 16.6 Spellcasting
+`USE_SPELL_SLOT`, `RESTORE_SPELL_SLOT`, `USE_FOCUS_POINT`, `RESTORE_FOCUS_POINT`, `USE_INNATE_SPELL`, `RESTORE_INNATE_SPELL`, `SET_SPELL_SLOT_USAGE`, `SET_FOCUS_USAGE`, `SET_INNATE_USAGE`, `RESET_SPELL_BLOCK`
+
+### 16.7 Turn Resolution
 `RESOLVE_PROMPT` (accept/modify/dismiss turn-end suggestions)
 
-### 16.7 Combat State
+### 16.8 Combat State
 `MARK_REACTION_USED`, `RESET_REACTION`, `SET_NOTE`, `MARK_DEAD`, `REVIVE`
 
-Full command type definitions (with payloads and validation rules) are a separate specification deliverable.
+This is a summary only. Payloads, phase restrictions, validation rules, and event outputs live in the command vocabulary spec.
 
 ---
 
 ## 17. Combat Log
 
-Every command produces `DomainEvent[]`. The orchestrator maps events to human-readable log entries.
+Every command produces `DomainEvent[]`. The canonical event union, per-command emission table, and formatter contract live in `pf2e-domain-events-spec.md`.
 
-```typescript
-type DomainEvent =
-  | { type: "hp-changed"; combatantId: string; from: number; to: number; cause: string }
-  | { type: "effect-applied"; combatantId: string; effectName: string; value?: number }
-  | { type: "effect-removed"; combatantId: string; effectName: string; reason: string }
-  | { type: "effect-value-changed"; combatantId: string; effectName: string; from: number; to: number }
-  | { type: "turn-started"; combatantId: string; round: number }
-  | { type: "turn-ended"; combatantId: string }
-  | { type: "combatant-died"; combatantId: string }
-  // ... to be extended
-
-```
-
-The combat log is append-only and display-only. It does not drive state — it's derived from events. On undo, relevant log entries can be marked as "undone" rather than deleted, preserving the full history.
+The combat log is append-only and display-only. It does not drive state — it is derived from events. On undo, relevant log entries can be marked as "undone" rather than deleted, preserving the full history.
 
 ---
 
@@ -772,12 +684,20 @@ Playwright tests against the running app. Nice to have, not blocking. The domain
 - **Data versioning / migration:** Stubbed in persistence layer. Needed when schema evolves.
 - **Inline creature editor UI:** Architectural stub exists. Build when YAML editing proves too cumbersome.
 
-### 19.2 Separate Specification Documents Needed
+### 19.2 Canonical Specification Index
 
-- **Conditions library:** Full mapping of every PF2e condition to `EffectDefinition` (modifiers, implied effects, suggestions).
-- **Command vocabulary:** Complete command type definitions with payloads, validation rules, and event outputs.
-- **YAML schema reference:** Documentation of the YAML format for creatures, encounters, and effects.
-- **Afflictions subsystem:** Decision on whether V2 supports full stage progression or models afflictions as reminder-only effects with notes. (Recommended: reminder-only for V2, full tracking as future enhancement.)
+- `pf2e-tracker-v2-architecture-spec.md` — architecture, boundaries, stack, and state-machine overview.
+- `pf2e-effects-and-durations-spec.md` — effect types, applied instances, durations, turn-boundary suggestions, and effect duration command.
+- `pf2e-command-vocabulary-spec.md` — command union, payloads, phase restrictions, validation policy, and command count.
+- `pf2e-domain-events-spec.md` — event union, event payloads, emission order, and combat log formatter contract.
+- `pf2e-conditions-library-spec.md` — built-in conditions, persistent damage, and death tracking.
+- `pf2e-creature-types-spec.md` — creature subtypes, spell index, spellcasting blocks, weak/elite adjustments.
+- `pf2e-spellcasting-spec.md` — spell usage tracking commands and events.
+- `pf2e-party-members-spec.md` — party members, companions, persistent effects, and sync-back.
+- `pf2e-hazards-spec.md` — hazards as combatants and hazard factory behavior.
+- `pf2e-afflictions-spec.md` — reminder-only afflictions with stage tracking and save prompts.
+- `pf2e-llm-parser-spec.md` — parser prompts, validation, and error handling.
+- `pf2e-yaml-schema-spec.md` — YAML envelope, document kinds, import/export rules.
 
 ---
 

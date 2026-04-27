@@ -25,9 +25,10 @@ The type is unified — both fields use the same `TurnBoundarySuggestion` type (
 ```typescript
 type TurnBoundarySuggestion =
   | { type: "suggestDecrement"; amount: number }
-  | { type: "suggestRemoval"; method: string }
+  | { type: "suggestRemove"; description: string }
   | { type: "confirmSustained" }
   | { type: "promptResolution"; description: string }
+  | { type: "reminder"; description: string }
   | { type: "reminder"; description: string }          // NEW — no action needed, just display
 ```
 
