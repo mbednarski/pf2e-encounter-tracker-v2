@@ -65,7 +65,11 @@ export function makeCombatant(input: ManualCombatantInput): CombatantState {
     tempHp: 0,
     appliedEffects: [],
     reactionUsedThisRound: false,
-    isAlive: true
+    isAlive: true,
+    attacks: [],
+    passiveAbilities: [],
+    reactiveAbilities: [],
+    activeAbilities: []
   };
 }
 

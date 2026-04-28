@@ -21,6 +21,104 @@ export interface CreatureBaseStats {
 
 export type SourceType = 'creature' | 'partyMember' | 'companion' | 'hazard';
 
+export type CreatureSize = 'tiny' | 'small' | 'medium' | 'large' | 'huge' | 'gargantuan';
+
+export type CreatureRarity = 'common' | 'uncommon' | 'rare' | 'unique';
+
+export type AttackType = 'melee' | 'ranged';
+
+export interface DamageComponent {
+  dice?: number;
+  dieSize?: number;
+  bonus?: number;
+  type: string;
+  persistent?: boolean;
+  conditional?: string;
+}
+
+export interface Attack {
+  name: string;
+  type: AttackType;
+  modifier: number;
+  traits: string[];
+  damage: DamageComponent[];
+  effects?: string[];
+}
+
+export type ActionCost = 1 | 2 | 3 | 'free' | 'reaction';
+
+export interface Ability {
+  name: string;
+  actions?: ActionCost;
+  traits?: string[];
+  trigger?: string;
+  frequency?: string;
+  requirements?: string;
+  description: string;
+}
+
+export type SpellTradition = 'arcane' | 'divine' | 'occult' | 'primal';
+
+export type SpellcastingType = 'prepared' | 'spontaneous' | 'innate' | 'focus';
+
+export type SpellFrequency = { type: 'atWill' } | { type: 'constant' } | { type: 'perDay'; uses: number };
+
+export interface SpellListEntry {
+  spellSlug: string;
+  name: string;
+  level: number;
+  isCantrip?: boolean;
+  frequency?: SpellFrequency;
+  count?: number;
+}
+
+export interface SpellcastingBlock {
+  blockId: string;
+  name: string;
+  tradition: SpellTradition;
+  type: SpellcastingType;
+  dc: number;
+  attackModifier?: number;
+  focusPoints?: number;
+  slots?: Record<number, number>;
+  entries: SpellListEntry[];
+}
+
+export interface CombatantSpellcasting extends SpellcastingBlock {
+  usedSlots?: Record<number, number>;
+  usedFocusPoints?: number;
+  usedEntries?: Record<string, number>;
+}
+
+export interface Creature {
+  id: string;
+  name: string;
+  level: number;
+  traits: string[];
+  size: CreatureSize;
+  alignment?: string;
+  rarity: CreatureRarity;
+  ac: number;
+  fortitude: number;
+  reflex: number;
+  will: number;
+  perception: number;
+  hp: number;
+  immunities: string[];
+  resistances: { type: string; value: number }[];
+  weaknesses: { type: string; value: number }[];
+  speed: Record<string, number>;
+  attacks: Attack[];
+  spellcasting?: SpellcastingBlock[];
+  passiveAbilities: Ability[];
+  reactiveAbilities: Ability[];
+  activeAbilities: Ability[];
+  skills: Record<string, number>;
+  source?: string;
+  tags: string[];
+  notes?: string;
+}
+
 export type Duration =
   | { type: 'untilTurnEnd'; combatantId: CombatantId }
   | { type: 'untilTurnStart'; combatantId: CombatantId }
@@ -52,6 +150,14 @@ export interface CombatantState {
   reactionUsedThisRound: boolean;
   isAlive: boolean;
   notes?: string;
+  attacks: Attack[];
+  passiveAbilities: Ability[];
+  reactiveAbilities: Ability[];
+  activeAbilities: Ability[];
+  spellcasting?: CombatantSpellcasting[];
+  traits?: string[];
+  size?: CreatureSize;
+  level?: number;
 }
 
 export interface Prompt {

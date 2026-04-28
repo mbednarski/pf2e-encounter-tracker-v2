@@ -1,12 +1,22 @@
 export { applyCommand } from './reducer';
+export { createCombatantFromCreature } from './creatures/clone';
 export type {
+  Ability,
   AppliedEffect,
+  Attack,
+  AttackType,
+  ActionCost,
   CombatantId,
+  CombatantSpellcasting,
   CombatantState,
   Command,
   CommandResult,
   CommandType,
+  Creature,
   CreatureBaseStats,
+  CreatureRarity,
+  CreatureSize,
+  DamageComponent,
   DomainEvent,
   Duration,
   EffectLibrary,
@@ -15,5 +25,10 @@ export type {
   InitiativeState,
   LogEntry,
   Prompt,
-  SourceType
+  SourceType,
+  SpellcastingBlock,
+  SpellcastingType,
+  SpellFrequency,
+  SpellListEntry,
+  SpellTradition
 } from './types';
