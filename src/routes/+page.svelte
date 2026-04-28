@@ -1,19 +1,26 @@
 <script lang="ts">
-  import type { Command, CombatantState } from '../domain';
+  import type { Command, CombatantState, Creature } from '../domain';
+  import { creatureLibrary } from '$lib/creature-library';
   import {
     currentCombatant,
     dispatchEncounterCommand,
     makeCombatant,
+    makeCreatureCombatant,
     newEncounterState,
     toCommand,
     type FeedbackEntry,
-    type ManualCombatantInput
+    type TemplateAdjustmentChoice
   } from '$lib/encounter-app';
 
   let encounter = newEncounterState();
   let feedback: FeedbackEntry[] = [];
   let commandCounter = 1;
   let combatantCounter = 1;
+
+  let selectedCreatureId = creatureLibrary[0]?.id ?? '';
+  let selectedAdjustment: TemplateAdjustmentChoice = 'normal';
+  let creatureQuantity = 1;
+  let creatureNamePrefix = '';
 
   let manualName = 'Goblin Warrior';
   let manualHp = 18;
@@ -26,48 +33,20 @@
   let hpAmount = 5;
   let tempHpAmount = 0;
 
-  const sampleCombatants: ManualCombatantInput[] = [
-    {
-      id: 'goblin-warrior',
-      name: 'Goblin Warrior',
-      maxHp: 18,
-      ac: 16,
-      fortitude: 6,
-      reflex: 8,
-      will: 5,
-      perception: 7,
-      speed: 25
-    },
-    {
-      id: 'skeleton-guard',
-      name: 'Skeleton Guard',
-      maxHp: 20,
-      ac: 17,
-      fortitude: 7,
-      reflex: 8,
-      will: 5,
-      perception: 6,
-      speed: 25
-    },
-    {
-      id: 'fighter',
-      name: 'Fighter',
-      maxHp: 26,
-      ac: 18,
-      fortitude: 9,
-      reflex: 7,
-      will: 6,
-      perception: 8,
-      speed: 25
-    }
-  ];
-
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
     .filter((combatant): combatant is CombatantState => Boolean(combatant));
   $: unorderedCombatants = Object.values(encounter.combatants).filter((combatant) => !encounter.initiative.order.includes(combatant.id));
   $: activeCombatant = currentCombatant(encounter);
   $: canStart = encounter.phase === 'PREPARING' && encounter.initiative.order.length >= 2;
+  $: selectedCreature = creatureLibrary.find((creature) => creature.id === selectedCreatureId) ?? creatureLibrary[0];
+  $: previewCombatant = selectedCreature
+    ? makeCreatureCombatant({
+        creature: selectedCreature,
+        combatantId: 'preview',
+        adjustment: selectedAdjustment
+      })
+    : undefined;
 
   function runCommand(command: Command) {
     const result = dispatchEncounterCommand(encounter, feedback, command);
@@ -81,7 +60,7 @@
 
   function addManualCombatant() {
     const id = `${slugify(manualName)}-${combatantCounter++}`;
-    addCombatant({
+    const combatant = makeCombatant({
       id,
       name: manualName.trim() || `Combatant ${combatantCounter}`,
       maxHp: numberOrDefault(manualHp, 1),
@@ -92,18 +71,27 @@
       perception: numberOrDefault(manualPerception, 0),
       speed: numberOrDefault(manualSpeed, 25)
     });
+    addCombatant(combatant);
   }
 
-  function addSamples() {
-    for (const sample of sampleCombatants) {
-      if (!encounter.combatants[sample.id]) {
-        addCombatant(sample);
-      }
+  function addSelectedCreatures() {
+    if (!selectedCreature) {
+      return;
+    }
+
+    const count = Math.max(1, numberOrDefault(creatureQuantity, 1));
+    for (let index = 1; index <= count; index += 1) {
+      const combatant = makeCreatureCombatant({
+        creature: selectedCreature,
+        combatantId: `${selectedCreature.id}-${combatantCounter++}`,
+        name: creatureCombatantName(selectedCreature, index, count),
+        adjustment: selectedAdjustment
+      });
+      addCombatant(combatant);
     }
   }
 
-  function addCombatant(input: ManualCombatantInput) {
-    const combatant = makeCombatant(input);
+  function addCombatant(combatant: CombatantState) {
     runCommand(toCommand('ADD_COMBATANT', { combatant }, nextCommandId()));
     const nextOrder = [...encounter.initiative.order, combatant.id];
     runCommand(toCommand('SET_INITIATIVE_ORDER', { order: nextOrder }, nextCommandId()));
@@ -147,10 +135,36 @@
     feedback = [];
     commandCounter = 1;
     combatantCounter = 1;
+    selectedAdjustment = 'normal';
+    creatureQuantity = 1;
+    creatureNamePrefix = '';
   }
 
   function hpPercent(combatant: CombatantState) {
     return Math.max(0, Math.min(100, (combatant.currentHp / combatant.baseStats.hp) * 100));
+  }
+
+  function creatureCombatantName(creature: Creature, index: number, count: number) {
+    const prefix = creatureNamePrefix.trim();
+    if (prefix) {
+      return count > 1 ? `${prefix} ${index}` : prefix;
+    }
+
+    return count > 1 ? `${creature.name} ${index}` : creature.name;
+  }
+
+  function templateLabel(adjustment: TemplateAdjustmentChoice | undefined) {
+    if (adjustment === 'elite') {
+      return 'Elite';
+    }
+    if (adjustment === 'weak') {
+      return 'Weak';
+    }
+    return 'Normal';
+  }
+
+  function formatTraits(creature: Creature) {
+    return [creature.rarity, creature.size, ...creature.traits].join(' · ');
   }
 
   function numberOrDefault(value: number, fallback: number) {
@@ -189,49 +203,156 @@
     <aside class="panel setup-panel" aria-labelledby="setup-title">
       <div class="panel-heading">
         <h2 id="setup-title">Encounter Setup</h2>
-        <button type="button" class="secondary" onclick={addSamples}>Add Samples</button>
+        <span>{creatureLibrary.length} creatures</span>
       </div>
 
-      <form class="manual-form" onsubmit={(event) => {
+      <form class="creature-form" onsubmit={(event) => {
+        event.preventDefault();
+        addSelectedCreatures();
+      }}>
+        <label>
+          Creature
+          <select bind:value={selectedCreatureId}>
+            {#each creatureLibrary as creature (creature.id)}
+              <option value={creature.id}>{creature.name}</option>
+            {/each}
+          </select>
+        </label>
+
+        {#if selectedCreature && previewCombatant}
+          <section class="creature-preview" aria-label="Selected creature preview">
+            <div class="preview-heading">
+              <div>
+                <strong>{selectedCreature.name}</strong>
+                <span>Level {selectedCreature.level} · {formatTraits(selectedCreature)}</span>
+              </div>
+              <span class:adjusted={selectedAdjustment !== 'normal'}>{templateLabel(selectedAdjustment)}</span>
+            </div>
+            <dl class="preview-stats">
+              <div>
+                <dt>HP</dt>
+                <dd>{previewCombatant.baseStats.hp}</dd>
+              </div>
+              <div>
+                <dt>AC</dt>
+                <dd>{previewCombatant.baseStats.ac}</dd>
+              </div>
+              <div>
+                <dt>Fort</dt>
+                <dd>+{previewCombatant.baseStats.fortitude}</dd>
+              </div>
+              <div>
+                <dt>Ref</dt>
+                <dd>+{previewCombatant.baseStats.reflex}</dd>
+              </div>
+              <div>
+                <dt>Will</dt>
+                <dd>+{previewCombatant.baseStats.will}</dd>
+              </div>
+              <div>
+                <dt>Per</dt>
+                <dd>+{previewCombatant.baseStats.perception}</dd>
+              </div>
+            </dl>
+            <p class="preview-line">
+              {selectedCreature.attacks.length} attack{selectedCreature.attacks.length === 1 ? '' : 's'}
+              {selectedCreature.spellcasting ? ` · ${selectedCreature.spellcasting.length} spell block${selectedCreature.spellcasting.length === 1 ? '' : 's'}` : ''}
+            </p>
+          </section>
+        {/if}
+
+        <fieldset class="template-picker">
+          <legend>Template</legend>
+          <div class="segmented">
+            <button
+              type="button"
+              class:active={selectedAdjustment === 'normal'}
+              aria-pressed={selectedAdjustment === 'normal'}
+              onclick={() => (selectedAdjustment = 'normal')}
+            >
+              Normal
+            </button>
+            <button
+              type="button"
+              class:active={selectedAdjustment === 'weak'}
+              aria-pressed={selectedAdjustment === 'weak'}
+              onclick={() => (selectedAdjustment = 'weak')}
+            >
+              Weak
+            </button>
+            <button
+              type="button"
+              class:active={selectedAdjustment === 'elite'}
+              aria-pressed={selectedAdjustment === 'elite'}
+              onclick={() => (selectedAdjustment = 'elite')}
+            >
+              Elite
+            </button>
+          </div>
+        </fieldset>
+
+        {#if selectedAdjustment !== 'normal'}
+          <p class="template-warning">
+            {templateLabel(selectedAdjustment)} adjusts structured stats, attacks, spell DCs, and HP. DCs or damage written only inside ability text are not adjusted automatically.
+          </p>
+        {/if}
+
+        <div class="add-grid">
+          <label>
+            Quantity
+            <input type="number" min="1" max="12" bind:value={creatureQuantity} />
+          </label>
+          <label>
+            Name prefix
+            <input bind:value={creatureNamePrefix} autocomplete="off" placeholder={selectedCreature?.name ?? 'Combatant'} />
+          </label>
+        </div>
+        <button type="submit">Add Creature</button>
+      </form>
+
+      <details class="custom-combatant">
+        <summary>Custom Combatant</summary>
+        <form class="manual-form" onsubmit={(event) => {
         event.preventDefault();
         addManualCombatant();
       }}>
-        <label>
-          Name
-          <input bind:value={manualName} autocomplete="off" />
-        </label>
-        <div class="stat-grid">
           <label>
-            HP
-            <input type="number" min="1" bind:value={manualHp} />
+            Name
+            <input bind:value={manualName} autocomplete="off" />
           </label>
+          <div class="stat-grid">
+            <label>
+              HP
+              <input type="number" min="1" bind:value={manualHp} />
+            </label>
+            <label>
+              AC
+              <input type="number" bind:value={manualAc} />
+            </label>
+            <label>
+              Fort
+              <input type="number" bind:value={manualFortitude} />
+            </label>
+            <label>
+              Ref
+              <input type="number" bind:value={manualReflex} />
+            </label>
+            <label>
+              Will
+              <input type="number" bind:value={manualWill} />
+            </label>
+            <label>
+              Per
+              <input type="number" bind:value={manualPerception} />
+            </label>
+          </div>
           <label>
-            AC
-            <input type="number" bind:value={manualAc} />
+            Speed
+            <input type="number" min="0" bind:value={manualSpeed} />
           </label>
-          <label>
-            Fort
-            <input type="number" bind:value={manualFortitude} />
-          </label>
-          <label>
-            Ref
-            <input type="number" bind:value={manualReflex} />
-          </label>
-          <label>
-            Will
-            <input type="number" bind:value={manualWill} />
-          </label>
-          <label>
-            Per
-            <input type="number" bind:value={manualPerception} />
-          </label>
-        </div>
-        <label>
-          Speed
-          <input type="number" min="0" bind:value={manualSpeed} />
-        </label>
-        <button type="submit">Add Combatant</button>
-      </form>
+          <button type="submit">Add Custom</button>
+        </form>
+      </details>
 
       <div class="control-row">
         <button type="button" disabled={!canStart} onclick={startEncounter}>Start Encounter</button>
@@ -253,6 +374,9 @@
             <li class:current={combatant.id === activeCombatant?.id}>
               <div>
                 <strong>{combatant.name}</strong>
+                {#if combatant.templateAdjustment}
+                  <span class="template-badge {combatant.templateAdjustment}">{templateLabel(combatant.templateAdjustment)}</span>
+                {/if}
                 <span>HP {combatant.currentHp}/{combatant.baseStats.hp}</span>
               </div>
               <div class="icon-actions">
@@ -298,7 +422,12 @@
           <article class:current-card={combatant.id === activeCombatant?.id} class="combatant-card">
             <div class="card-heading">
               <div>
-                <h2>{combatant.name}</h2>
+                <div class="card-title">
+                  <h2>{combatant.name}</h2>
+                  {#if combatant.templateAdjustment}
+                    <span class="template-badge {combatant.templateAdjustment}">{templateLabel(combatant.templateAdjustment)}</span>
+                  {/if}
+                </div>
                 <p>AC {combatant.baseStats.ac} · Fort +{combatant.baseStats.fortitude} · Ref +{combatant.baseStats.reflex} · Will +{combatant.baseStats.will}</p>
               </div>
               <span>{combatant.id === activeCombatant?.id ? 'Turn' : encounter.phase}</span>
@@ -357,7 +486,8 @@
   }
 
   :global(button),
-  :global(input) {
+  :global(input),
+  :global(select) {
     font: inherit;
   }
 
@@ -467,6 +597,7 @@
     font-size: 14px;
   }
 
+  .creature-form,
   .manual-form,
   .cards,
   .feedback-list,
@@ -484,6 +615,15 @@
   }
 
   input {
+    min-width: 0;
+    border: 1px solid #b8c3be;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #1d2528;
+    padding: 9px 10px;
+  }
+
+  select {
     min-width: 0;
     border: 1px solid #b8c3be;
     border-radius: 6px;
@@ -520,6 +660,160 @@
     gap: 8px;
   }
 
+  .add-grid {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .creature-preview {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #d8ddd9;
+    border-radius: 7px;
+    background: #ffffff;
+    padding: 12px;
+  }
+
+  .preview-heading,
+  .card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .preview-heading strong,
+  .preview-heading span {
+    display: block;
+  }
+
+  .preview-heading span,
+  .preview-line,
+  .custom-combatant summary {
+    color: #627171;
+    font-size: 13px;
+  }
+
+  .preview-heading > span,
+  .template-badge {
+    border-radius: 999px;
+    background: #eef1ee;
+    color: #334143;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 5px 7px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .preview-heading > span.adjusted,
+  .template-badge.elite {
+    background: #f4e6d7;
+    color: #7c3d1f;
+  }
+
+  .template-badge.weak {
+    background: #e6eef6;
+    color: #275171;
+  }
+
+  .preview-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+  }
+
+  .preview-stats div {
+    border-radius: 6px;
+    background: #eef1ee;
+    padding: 8px;
+  }
+
+  .preview-stats dt,
+  .preview-stats dd,
+  .preview-line {
+    margin: 0;
+  }
+
+  .preview-stats dt {
+    color: #627171;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .preview-stats dd {
+    color: #1d2528;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .template-picker {
+    display: grid;
+    gap: 6px;
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .template-picker legend {
+    color: #526061;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0;
+  }
+
+  .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid #b8c3be;
+    border-radius: 7px;
+    overflow: hidden;
+  }
+
+  .segmented button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff;
+    color: #334143;
+  }
+
+  .segmented button + button {
+    border-left: 1px solid #d8ddd9;
+  }
+
+  .segmented button.active {
+    background: #28494c;
+    color: #ffffff;
+  }
+
+  .template-warning {
+    border-left: 4px solid #b6652e;
+    border-radius: 6px;
+    background: #fff7ee;
+    color: #5f3c23;
+    font-size: 13px;
+    line-height: 1.4;
+    margin: 0;
+    padding: 10px;
+  }
+
+  .custom-combatant {
+    border-top: 1px solid #d8ddd9;
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+
+  .custom-combatant summary {
+    cursor: pointer;
+    font-weight: 800;
+    margin-bottom: 10px;
+  }
+
   .control-row {
     margin-top: 12px;
   }
@@ -550,6 +844,11 @@
   .initiative-list strong,
   .initiative-list span {
     display: block;
+  }
+
+  .initiative-list .template-badge {
+    display: inline-block;
+    margin: 5px 0 1px;
   }
 
   .initiative-list span,
@@ -593,6 +892,11 @@
 
   .card-heading {
     align-items: start;
+  }
+
+  .card-title {
+    justify-content: start;
+    flex-wrap: wrap;
   }
 
   .card-heading p {

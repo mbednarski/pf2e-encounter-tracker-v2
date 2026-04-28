@@ -1,5 +1,5 @@
-import { applyCommand } from '../domain';
-import type { CombatantState, Command, CommandType, DomainEvent, EncounterState } from '../domain';
+import { applyCommand, createCombatantFromCreature } from '../domain';
+import type { CombatantState, Command, CommandType, Creature, CreatureTemplateAdjustment, DomainEvent, EncounterState } from '../domain';
 
 export interface ManualCombatantInput {
   id: string;
@@ -11,6 +11,15 @@ export interface ManualCombatantInput {
   will: number;
   perception: number;
   speed: number;
+}
+
+export type TemplateAdjustmentChoice = 'normal' | CreatureTemplateAdjustment;
+
+export interface CreatureCombatantInput {
+  creature: Creature;
+  combatantId: string;
+  name?: string;
+  adjustment: TemplateAdjustmentChoice;
 }
 
 export interface FeedbackEntry {
@@ -71,6 +80,15 @@ export function makeCombatant(input: ManualCombatantInput): CombatantState {
     reactiveAbilities: [],
     activeAbilities: []
   };
+}
+
+export function makeCreatureCombatant(input: CreatureCombatantInput): CombatantState {
+  return createCombatantFromCreature({
+    creature: input.creature,
+    combatantId: input.combatantId,
+    name: input.name,
+    adjustment: input.adjustment === 'normal' ? undefined : input.adjustment
+  });
 }
 
 export function toCommand<T extends CommandType>(
