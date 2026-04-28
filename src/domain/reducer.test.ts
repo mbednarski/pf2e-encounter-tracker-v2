@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { applyCommand } from './reducer';
-import { combatant, command, emptyEffects, encounter, expectEvents, expectRejected } from './test-support';
+import { activeEncounter, combatant, command, emptyEffects, encounter, expectEvents, expectRejected } from './test-support';
 
 describe('applyCommand lifecycle and initiative slice', () => {
   test('adds combatants and starts an encounter with the first turn active', () => {
@@ -145,5 +145,99 @@ describe('applyCommand HP slice', () => {
         cause: 'set-temp'
       }
     ]);
+  });
+});
+
+describe('applyCommand turn advancement slice', () => {
+  test('ends the current turn and advances to the next live combatant', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fallen-1', 'fighter-1'],
+        currentIndex: 0,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fallen-1': combatant('fallen-1', { isAlive: false }),
+        'fighter-1': combatant('fighter-1', { reactionUsedThisRound: true })
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), emptyEffects);
+
+    expect(result.newState.initiative.currentIndex).toBe(2);
+    expect(result.newState.round).toBe(1);
+    expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 }
+    ]);
+  });
+
+  test('wraps to the next round when advancement passes the end of initiative', () => {
+    const state = activeEncounter({
+      round: 3,
+      initiative: {
+        order: ['goblin-1', 'fallen-1', 'fighter-1'],
+        currentIndex: 2,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
+        'fallen-1': combatant('fallen-1', { isAlive: false }),
+        'fighter-1': combatant('fighter-1')
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), emptyEffects);
+
+    expect(result.newState.initiative.currentIndex).toBe(0);
+    expect(result.newState.round).toBe(4);
+    expect(result.newState.combatants['goblin-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'fighter-1' },
+      { type: 'reaction-reset', combatantId: 'goblin-1', cause: 'auto' },
+      { type: 'round-started', round: 4 },
+      { type: 'turn-started', combatantId: 'goblin-1', round: 4 }
+    ]);
+  });
+
+  test('emits all-combatants-dead without completing the encounter when no live combatants remain', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: 0,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1', { isAlive: false }),
+        'fighter-1': combatant('fighter-1', { isAlive: false })
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), emptyEffects);
+
+    expect(result.newState.phase).toBe('ACTIVE');
+    expect(result.newState.initiative.currentIndex).toBe(0);
+    expect(result.newState.round).toBe(1);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'all-combatants-dead' }
+    ]);
+  });
+
+  test('rejects END_TURN when the current initiative pointer is invalid', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: 8,
+        delaying: []
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), emptyEffects);
+
+    expectRejected(result, 'END_TURN', 'END_TURN requires a valid current combatant', state);
   });
 });
