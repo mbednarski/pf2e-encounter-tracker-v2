@@ -1,44 +1,50 @@
 import type { CombatantState, CombatantSpellcasting, Creature, SpellcastingBlock } from '../types';
+import { applyEliteWeak, type CreatureTemplateAdjustment } from './templates';
 
 export interface CreateCombatantFromCreatureInput {
   creature: Creature;
   combatantId: string;
   name?: string;
+  adjustment?: CreatureTemplateAdjustment;
 }
 
 export function createCombatantFromCreature({
   creature,
   combatantId,
-  name
+  name,
+  adjustment
 }: CreateCombatantFromCreatureInput): CombatantState {
+  const combatantCreature = adjustment ? applyEliteWeak(creature, adjustment) : creature;
+
   return {
     id: combatantId,
     creatureId: creature.id,
-    name: name ?? creature.name,
+    name: name ?? combatantCreature.name,
     sourceType: 'creature',
     baseStats: {
-      hp: creature.hp,
-      ac: creature.ac,
-      fortitude: creature.fortitude,
-      reflex: creature.reflex,
-      will: creature.will,
-      perception: creature.perception,
-      speed: primarySpeed(creature.speed),
-      skills: cloneValue(creature.skills)
+      hp: combatantCreature.hp,
+      ac: combatantCreature.ac,
+      fortitude: combatantCreature.fortitude,
+      reflex: combatantCreature.reflex,
+      will: combatantCreature.will,
+      perception: combatantCreature.perception,
+      speed: primarySpeed(combatantCreature.speed),
+      skills: cloneValue(combatantCreature.skills)
     },
-    currentHp: creature.hp,
+    currentHp: combatantCreature.hp,
     tempHp: 0,
     appliedEffects: [],
     reactionUsedThisRound: false,
     isAlive: true,
-    attacks: cloneValue(creature.attacks),
-    passiveAbilities: cloneValue(creature.passiveAbilities),
-    reactiveAbilities: cloneValue(creature.reactiveAbilities),
-    activeAbilities: cloneValue(creature.activeAbilities),
-    spellcasting: creature.spellcasting ? hydrateSpellcasting(creature.spellcasting) : undefined,
-    traits: cloneValue(creature.traits),
-    size: creature.size,
-    level: creature.level
+    attacks: cloneValue(combatantCreature.attacks),
+    passiveAbilities: cloneValue(combatantCreature.passiveAbilities),
+    reactiveAbilities: cloneValue(combatantCreature.reactiveAbilities),
+    activeAbilities: cloneValue(combatantCreature.activeAbilities),
+    spellcasting: combatantCreature.spellcasting ? hydrateSpellcasting(combatantCreature.spellcasting) : undefined,
+    traits: cloneValue(combatantCreature.traits),
+    size: combatantCreature.size,
+    level: combatantCreature.level,
+    templateAdjustment: adjustment
   };
 }
 

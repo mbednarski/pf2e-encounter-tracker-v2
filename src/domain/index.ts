@@ -1,5 +1,7 @@
 export { applyCommand } from './reducer';
 export { createCombatantFromCreature } from './creatures/clone';
+export { applyEliteWeak } from './creatures/templates';
+export type { CreatureTemplateAdjustment } from './creatures/templates';
 export type {
   Ability,
   AppliedEffect,

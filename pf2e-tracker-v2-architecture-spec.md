@@ -444,12 +444,12 @@ interface CombatantState {
 
 ### 10.3 Weak/Elite Templates
 
-Applied mechanically at combatant creation time (deep clone stage). The standard PF2e adjustments:
+Applied mechanically at combatant creation time (deep clone stage). Monster Core weak/elite adjustments:
 
-- **Elite:** +2 to AC, saves, attacks, DCs, perception, skills; +2 HP per level; damage adjustment per creature level table
-- **Weak:** -2 to AC, saves, attacks, DCs, perception, skills; -2 HP per level; damage adjustment per creature level table
+- **Elite:** raise level by 1, or by 2 if the starting level is -1 or 0; add +2 to AC, saves, attacks, DCs, perception, skills, and structured Strike damage; increase HP by starting-level band.
+- **Weak:** lower level by 1, or by 2 if the starting level is 1; subtract 2 from AC, saves, attacks, DCs, perception, skills, and structured Strike damage; decrease HP by starting-level band, floored at 1 HP.
 
-These are applied to the `baseStats` of the combatant. The creature library template is never modified. If the published creature deviates from the mechanical template, the GM can manually edit the combatant's values after creation — the combatant is a mutable deep clone, not a live reference.
+These are applied to the adjusted combatant display data and `baseStats`. The creature library template is never modified. If the published creature deviates from the mechanical template, the GM can manually edit the combatant's values after creation — the combatant is a mutable deep clone, not a live reference.
 
 ---
 

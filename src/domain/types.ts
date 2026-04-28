@@ -158,6 +158,7 @@ export interface CombatantState {
   traits?: string[];
   size?: CreatureSize;
   level?: number;
+  templateAdjustment?: 'elite' | 'weak';
 }
 
 export interface Prompt {
