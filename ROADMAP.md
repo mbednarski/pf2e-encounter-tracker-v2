@@ -8,7 +8,7 @@ This roadmap tracks implementation milestones. Canonical behavior still lives in
 - [x] Add first pure domain reducer slice for combatants, initiative setup, lifecycle, and HP commands.
 - [x] Add dependency audit script that fails on known low-or-higher vulnerabilities.
 - [ ] Add CI for `npm run check`, `npm run test:run`, `npm run audit`, and `npm run build`.
-- [ ] Expand command/event test fixtures for future domain tests.
+- [x] Expand command/event test fixtures for future domain tests.
 
 ## M1 Encounter Setup
 

@@ -1,58 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { applyCommand } from './reducer';
-import type { CombatantState, Command, EncounterState } from './types';
-
-const emptyEffects = {};
-
-function command<T extends Command['type']>(
-  type: T,
-  payload?: Extract<Command, { type: T }>['payload']
-): Extract<Command, { type: T }> {
-  return { id: `cmd-${type}`, type, payload: payload ?? {} } as Extract<Command, { type: T }>;
-}
-
-function combatant(id: string, overrides: Partial<CombatantState> = {}): CombatantState {
-  return {
-    id,
-    creatureId: `${id}-creature`,
-    name: id,
-    sourceType: 'creature',
-    baseStats: {
-      hp: 20,
-      ac: 16,
-      fortitude: 7,
-      reflex: 8,
-      will: 5,
-      perception: 6,
-      speed: 25,
-      skills: {}
-    },
-    currentHp: 20,
-    tempHp: 0,
-    appliedEffects: [],
-    reactionUsedThisRound: false,
-    isAlive: true,
-    ...overrides
-  };
-}
-
-function encounter(overrides: Partial<EncounterState> = {}): EncounterState {
-  return {
-    id: 'encounter-1',
-    name: 'Test Encounter',
-    phase: 'PREPARING',
-    round: 0,
-    initiative: {
-      order: [],
-      currentIndex: -1,
-      delaying: []
-    },
-    combatants: {},
-    pendingPrompts: [],
-    combatLog: [],
-    ...overrides
-  };
-}
+import { combatant, command, emptyEffects, encounter, expectEvents, expectRejected } from './test-support';
 
 describe('applyCommand lifecycle and initiative slice', () => {
   test('adds combatants and starts an encounter with the first turn active', () => {
@@ -71,7 +19,7 @@ describe('applyCommand lifecycle and initiative slice', () => {
     expect(result.newState.phase).toBe('ACTIVE');
     expect(result.newState.round).toBe(1);
     expect(result.newState.initiative.currentIndex).toBe(0);
-    expect(result.events).toEqual([
+    expectEvents(result, [
       { type: 'encounter-started' },
       { type: 'phase-changed', from: 'PREPARING', to: 'ACTIVE' },
       { type: 'turn-started', combatantId: 'goblin-1', round: 1 }
@@ -86,14 +34,7 @@ describe('applyCommand lifecycle and initiative slice', () => {
 
     const result = applyCommand(state, command('START_ENCOUNTER'), emptyEffects);
 
-    expect(result.newState).toBe(state);
-    expect(result.events).toEqual([
-      {
-        type: 'command-rejected',
-        commandType: 'START_ENCOUNTER',
-        reason: 'START_ENCOUNTER requires at least 2 combatants'
-      }
-    ]);
+    expectRejected(result, 'START_ENCOUNTER', 'START_ENCOUNTER requires at least 2 combatants', state);
   });
 
   test('rejects initiative orders with duplicate, unknown, or dead combatants', () => {
@@ -105,21 +46,24 @@ describe('applyCommand lifecycle and initiative slice', () => {
       }
     });
 
-    expect(
-      applyCommand(state, command('SET_INITIATIVE_ORDER', { order: ['goblin-1', 'goblin-1'] }), emptyEffects).events
-    ).toEqual([
-      { type: 'command-rejected', commandType: 'SET_INITIATIVE_ORDER', reason: 'Initiative order contains duplicate combatant goblin-1' }
-    ]);
-    expect(
-      applyCommand(state, command('SET_INITIATIVE_ORDER', { order: ['missing-1'] }), emptyEffects).events
-    ).toEqual([
-      { type: 'command-rejected', commandType: 'SET_INITIATIVE_ORDER', reason: 'Combatant missing-1 not found' }
-    ]);
-    expect(
-      applyCommand(state, command('SET_INITIATIVE_ORDER', { order: ['fallen-1'] }), emptyEffects).events
-    ).toEqual([
-      { type: 'command-rejected', commandType: 'SET_INITIATIVE_ORDER', reason: 'Combatant fallen-1 is not alive' }
-    ]);
+    expectRejected(
+      applyCommand(state, command('SET_INITIATIVE_ORDER', { order: ['goblin-1', 'goblin-1'] }), emptyEffects),
+      'SET_INITIATIVE_ORDER',
+      'Initiative order contains duplicate combatant goblin-1',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('SET_INITIATIVE_ORDER', { order: ['missing-1'] }), emptyEffects),
+      'SET_INITIATIVE_ORDER',
+      'Combatant missing-1 not found',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('SET_INITIATIVE_ORDER', { order: ['fallen-1'] }), emptyEffects),
+      'SET_INITIATIVE_ORDER',
+      'Combatant fallen-1 is not alive',
+      state
+    );
   });
 });
 
@@ -139,7 +83,7 @@ describe('applyCommand HP slice', () => {
 
     expect(result.newState.combatants['goblin-1'].currentHp).toBe(0);
     expect(result.newState.combatants['goblin-1'].tempHp).toBe(0);
-    expect(result.events).toEqual([
+    expectEvents(result, [
       {
         type: 'hp-changed',
         combatantId: 'goblin-1',
@@ -166,7 +110,7 @@ describe('applyCommand HP slice', () => {
 
     expect(healed.newState.combatants['fighter-1'].currentHp).toBe(20);
     expect(overridden.newState.combatants['fighter-1'].currentHp).toBe(30);
-    expect(overridden.events).toEqual([
+    expectEvents(overridden, [
       {
         type: 'hp-changed',
         combatantId: 'fighter-1',
@@ -190,7 +134,7 @@ describe('applyCommand HP slice', () => {
 
     expect(result.newState.combatants['fighter-1'].currentHp).toBe(12);
     expect(result.newState.combatants['fighter-1'].tempHp).toBe(5);
-    expect(result.events).toEqual([
+    expectEvents(result, [
       {
         type: 'hp-changed',
         combatantId: 'fighter-1',
