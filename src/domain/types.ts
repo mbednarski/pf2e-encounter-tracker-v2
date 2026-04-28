@@ -279,6 +279,7 @@ export type DomainEvent =
   | { type: 'initiative-changed'; combatantId: CombatantId; newIndex: number }
   | { type: 'turn-started'; combatantId: CombatantId; round: number }
   | { type: 'turn-ended'; combatantId: CombatantId }
+  | { type: 'reaction-reset'; combatantId: CombatantId; cause: 'auto' | 'manual' }
   | {
       type: 'hp-changed';
       combatantId: CombatantId;

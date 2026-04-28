@@ -62,6 +62,8 @@ export function applyCommand(state: EncounterState, command: Command, _effectLib
       return setInitiativeOrder(state, command.payload.order);
     case 'START_ENCOUNTER':
       return startEncounter(state);
+    case 'END_TURN':
+      return endTurn(state);
     case 'COMPLETE_ENCOUNTER':
       return completeEncounter(state);
     case 'RESET_ENCOUNTER':
@@ -196,6 +198,78 @@ function completeEncounter(state: EncounterState): CommandResult {
       { type: 'phase-changed', from: 'ACTIVE', to: 'COMPLETED' }
     ]
   };
+}
+
+function endTurn(state: EncounterState): CommandResult {
+  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
+  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
+    return reject(state, 'END_TURN', 'END_TURN requires a valid current combatant');
+  }
+
+  const nextTurn = findNextLiveTurn(state);
+  if (!nextTurn) {
+    return {
+      newState: state,
+      events: [
+        { type: 'turn-ended', combatantId: currentCombatantId },
+        { type: 'all-combatants-dead' }
+      ]
+    };
+  }
+
+  const nextCombatant = state.combatants[nextTurn.combatantId];
+  const events: DomainEvent[] = [
+    { type: 'turn-ended', combatantId: currentCombatantId },
+    { type: 'reaction-reset', combatantId: nextTurn.combatantId, cause: 'auto' }
+  ];
+
+  if (nextTurn.round !== state.round) {
+    events.push({ type: 'round-started', round: nextTurn.round });
+  }
+
+  events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
+
+  return {
+    newState: {
+      ...state,
+      round: nextTurn.round,
+      initiative: {
+        ...state.initiative,
+        currentIndex: nextTurn.index
+      },
+      combatants: {
+        ...state.combatants,
+        [nextTurn.combatantId]: {
+          ...nextCombatant,
+          reactionUsedThisRound: false
+        }
+      }
+    },
+    events
+  };
+}
+
+function findNextLiveTurn(
+  state: EncounterState
+): { combatantId: CombatantId; index: number; round: number } | undefined {
+  const { order, currentIndex } = state.initiative;
+
+  for (let offset = 1; offset <= order.length; offset += 1) {
+    const rawIndex = currentIndex + offset;
+    const index = rawIndex % order.length;
+    const combatantId = order[index];
+    const combatant = combatantId ? state.combatants[combatantId] : undefined;
+
+    if (combatant?.isAlive) {
+      return {
+        combatantId,
+        index,
+        round: rawIndex >= order.length ? state.round + 1 : state.round
+      };
+    }
+  }
+
+  return undefined;
 }
 
 function resetEncounter(state: EncounterState): CommandResult {
