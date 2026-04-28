@@ -12,10 +12,10 @@ This roadmap tracks implementation milestones. Canonical behavior still lives in
 
 ## M1 Encounter Setup
 
-- [ ] Implement creature-to-combatant factory.
-- [ ] Implement weak/elite template adjustments.
-- [ ] Add encounter preparation UI for adding, naming, and ordering combatants.
-- [ ] Add basic creature display data on combatants.
+- [x] Implement creature-to-combatant factory.
+- [x] Implement weak/elite template adjustments.
+- [x] Add encounter preparation UI for adding, naming, and ordering combatants.
+- [x] Add basic creature display data on combatants.
 
 ## M2 Initiative and Combat State
 
