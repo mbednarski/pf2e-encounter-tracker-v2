@@ -39,6 +39,10 @@ export function combatant(id: string, overrides: Partial<CombatantState> = {}): 
     appliedEffects: [],
     reactionUsedThisRound: false,
     isAlive: true,
+    attacks: [],
+    passiveAbilities: [],
+    reactiveAbilities: [],
+    activeAbilities: [],
     ...overrides
   };
 }
