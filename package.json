@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.domain.json --noEmit",
     "test:run": "vitest run",
-    "audit": "npm audit --audit-level=low",
+    "audit": "npm audit --audit-level=moderate",
+    "audit:low": "npm audit --audit-level=low",
     "deploy:pages": "npm run build && wrangler pages deploy build --project-name pf2e-tracker-v2"
   },
   "devDependencies": {
