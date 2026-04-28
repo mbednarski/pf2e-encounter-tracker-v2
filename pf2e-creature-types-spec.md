@@ -331,6 +331,7 @@ Applied at combatant creation time to the deep-cloned creature data. The creatur
 
 | Adjustment | Elite | Weak |
 |---|---|---|
+| Level | +1, or +2 if starting level is -1 or 0 | -1, or -2 if starting level is 1 |
 | AC | +2 | -2 |
 | Fortitude | +2 | -2 |
 | Reflex | +2 | -2 |
@@ -340,24 +341,31 @@ Applied at combatant creation time to the deep-cloned creature data. The creatur
 | Attack modifiers | +2 | -2 |
 | Spell DCs | +2 | -2 |
 | Spell attack modifiers | +2 | -2 |
-| All DCs (abilities) | +2 | -2 |
-| HP | +(level × 2) | -(level × 2) |
-| Damage (per Strike) | see §6.2 | see §6.2 |
+| Ability DCs embedded in descriptions | GM adjusts mentally | GM adjusts mentally |
+| Strike damage | +2 to the first structured damage component bonus | -2 to the first structured damage component bonus |
+| HP | see §6.2 | see §6.2 |
 
 **HP floor:** Weak adjustment cannot reduce HP below 1.
 
-### 6.2 Damage Adjustment Table
+### 6.2 Hit Point Adjustment Tables
 
-Damage adjustment per Strike varies by creature level.
+Hit Point adjustment uses the creature's starting level, before the weak/elite level change.
 
-| Creature Level | Elite (per Strike) | Weak (per Strike) |
-|---|---|---|
-| 1–2 | +2 | -2 |
-| 3–4 | +2 | -2 |
-| 5–19 | +4 | -4 |
-| 20–25 | +6 | -6 |
+| Starting Level | Elite HP Increase |
+|---|---|
+| 1 or lower | +10 |
+| 2-4 | +15 |
+| 5-19 | +20 |
+| 20+ | +30 |
 
-> **Verification note:** This table should be verified against *GM Core* (2023 remaster) before implementation. The numbers above are from the pre-remaster CRB. If the remaster changed them, update accordingly.
+| Starting Level | Weak HP Decrease |
+|---|---|
+| 1-2 | -10 |
+| 3-5 | -15 |
+| 6-20 | -20 |
+| 21+ | -30 |
+
+For starting levels below 1, use the 1-2 weak HP band and still apply the HP floor.
 
 ### 6.3 Where Adjustments Are Applied
 
@@ -370,9 +378,9 @@ function applyEliteWeak(
 
 The function modifies:
 
-1. **Numeric stats** — AC, saves, perception, skills, HP (on the top-level Creature fields)
+1. **Numeric stats** — level, AC, saves, perception, skills, HP (on the top-level Creature fields)
 2. **Attack modifiers** — each `Attack.modifier` adjusted
-3. **Attack damage** — each `DamageComponent.bonus` adjusted by level-based table. If no `bonus` exists on the primary component, add one.
+3. **Attack damage** — the first `DamageComponent.bonus` on each Strike adjusted by 2. If no `bonus` exists on the primary component, add one.
 4. **Spellcasting DCs and attack modifiers** — each `SpellcastingBlock.dc` and `.attackModifier` adjusted
 5. **Ability DCs** — not automatically parseable. DCs embedded in `Ability.description` text are not modified. The GM adjusts mentally (+2/-2). This is a known limitation — flagged in the UI when elite/weak is applied.
 

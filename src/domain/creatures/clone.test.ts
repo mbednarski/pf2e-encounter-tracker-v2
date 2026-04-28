@@ -126,6 +126,85 @@ describe('createCombatantFromCreature', () => {
     expect(creature.spellcasting?.[0].entries[0].name).toBe('Force Barrage');
   });
 
+  test('creates an elite combatant from adjusted creature data without mutating the creature template', () => {
+    const creature = creatureTemplate({
+      spellcasting: [
+        {
+          blockId: 'arcane-prepared',
+          name: 'Arcane Prepared Spells',
+          tradition: 'arcane',
+          type: 'prepared',
+          dc: 18,
+          attackModifier: 10,
+          slots: { 1: 3 },
+          entries: [{ spellSlug: 'force-barrage', name: 'Force Barrage', level: 1, count: 2 }]
+        }
+      ]
+    });
+
+    const combatant = createCombatantFromCreature({
+      creature,
+      combatantId: 'elite-goblin-1',
+      adjustment: 'elite'
+    });
+
+    expect(combatant).toMatchObject({
+      id: 'elite-goblin-1',
+      creatureId: 'goblin-warrior',
+      name: 'Goblin Warrior',
+      baseStats: {
+        hp: 28,
+        ac: 18,
+        fortitude: 8,
+        reflex: 10,
+        will: 7,
+        perception: 9,
+        speed: 25,
+        skills: { acrobatics: 10, stealth: 12 }
+      },
+      currentHp: 28,
+      level: 2,
+      templateAdjustment: 'elite'
+    });
+    expect(combatant.attacks[0]).toMatchObject({
+      modifier: 10,
+      damage: [{ dice: 1, dieSize: 6, bonus: 4, type: 'slashing' }]
+    });
+    expect(combatant.spellcasting?.[0]).toMatchObject({ dc: 20, attackModifier: 12, usedSlots: {} });
+    expect(creature.hp).toBe(18);
+    expect(creature.attacks[0].damage[0].bonus).toBe(2);
+    expect(creature.spellcasting?.[0].dc).toBe(18);
+    expectSerializable(combatant);
+  });
+
+  test('creates a weak combatant with adjusted current HP, display data, and template marker', () => {
+    const combatant = createCombatantFromCreature({
+      creature: creatureTemplate({ level: 3, hp: 30 }),
+      combatantId: 'weak-goblin-1',
+      adjustment: 'weak'
+    });
+
+    expect(combatant).toMatchObject({
+      baseStats: {
+        hp: 15,
+        ac: 14,
+        fortitude: 4,
+        reflex: 6,
+        will: 3,
+        perception: 5,
+        speed: 25,
+        skills: { acrobatics: 6, stealth: 8 }
+      },
+      currentHp: 15,
+      level: 2,
+      templateAdjustment: 'weak'
+    });
+    expect(combatant.attacks[0]).toMatchObject({
+      modifier: 6,
+      damage: [{ dice: 1, dieSize: 6, bonus: 0, type: 'slashing' }]
+    });
+  });
+
   test('falls back to the first available speed when land speed is absent', () => {
     const combatant = createCombatantFromCreature({
       creature: creatureTemplate({ speed: { fly: 40, swim: 20 } }),
