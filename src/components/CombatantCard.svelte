@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CombatantState, EncounterState } from '../domain';
-  import type { CombatantCardActionAvailability } from '$lib/encounter-app';
+  import { combatantVisualState, type CombatantCardActionAvailability } from '$lib/encounter-app';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
@@ -25,6 +25,8 @@
     0,
     Math.min(100, (combatant.currentHp / combatant.baseStats.hp) * 100)
   );
+
+  $: visualState = combatantVisualState(combatant);
 
   $: endTurnTitle = actions.canEndTurn
     ? 'End this combatant’s turn'
@@ -53,7 +55,12 @@
       : 'Revive is unavailable in this phase';
 </script>
 
-<article class:current-card={isCurrent} class="combatant-card">
+<article
+  class:current-card={isCurrent}
+  class:dimmed={visualState !== 'alive'}
+  data-visual-state={visualState}
+  class="combatant-card"
+>
   <div class="card-heading">
     <div>
       <div class="card-title">
@@ -61,8 +68,10 @@
         {#if combatant.templateAdjustment}
           <span class="template-badge {combatant.templateAdjustment}">{templateLabel(combatant.templateAdjustment)}</span>
         {/if}
-        {#if !combatant.isAlive}
+        {#if visualState === 'dead'}
           <span class="status-badge dead" aria-label="Combatant is dead">Dead</span>
+        {:else if visualState === 'unconscious'}
+          <span class="status-badge unconscious" aria-label="Combatant is unconscious">Unconscious</span>
         {/if}
       </div>
       <p>AC {combatant.baseStats.ac} · Fort +{combatant.baseStats.fortitude} · Ref +{combatant.baseStats.reflex} · Will +{combatant.baseStats.will}</p>
@@ -215,6 +224,20 @@
   .status-badge.dead {
     background: #f4d7d7;
     color: #7a1f1f;
+  }
+
+  .status-badge.unconscious {
+    background: #f4ead7;
+    color: #7a5a1f;
+  }
+
+  .combatant-card.dimmed {
+    background: #f1f2ef;
+    opacity: 0.72;
+  }
+
+  .combatant-card.dimmed .hp-fill {
+    background: #8a9a92;
   }
 
   .hp-row {

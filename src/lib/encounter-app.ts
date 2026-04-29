@@ -117,6 +117,14 @@ export function currentCombatant(state: EncounterState): CombatantState | undefi
   return currentId ? state.combatants[currentId] : undefined;
 }
 
+export type CombatantVisualState = 'alive' | 'unconscious' | 'dead';
+
+export function combatantVisualState(combatant: CombatantState): CombatantVisualState {
+  if (!combatant.isAlive) return 'dead';
+  if (combatant.currentHp === 0) return 'unconscious';
+  return 'alive';
+}
+
 export interface CombatantCardActionAvailability {
   canEndTurn: boolean;
   canMarkReactionUsed: boolean;
