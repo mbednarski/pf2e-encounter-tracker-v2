@@ -6,6 +6,7 @@
   import CombatantCard from '../components/CombatantCard.svelte';
   import SetupPanel from '../components/SetupPanel.svelte';
   import {
+    combatantCardActions,
     currentCombatant,
     dispatchEncounterCommand,
     makeCombatant,
@@ -115,6 +116,22 @@
     runCommand(toCommand('SET_HP', { combatantId, amount }, nextCommandId()));
   }
 
+  function endTurn(_combatantId: string) {
+    runCommand(toCommand('END_TURN', undefined, nextCommandId()));
+  }
+
+  function markReactionUsed(combatantId: string) {
+    runCommand(toCommand('MARK_REACTION_USED', { combatantId }, nextCommandId()));
+  }
+
+  function markDead(combatantId: string) {
+    runCommand(toCommand('MARK_DEAD', { combatantId }, nextCommandId()));
+  }
+
+  function revive(combatantId: string) {
+    runCommand(toCommand('REVIVE', { combatantId }, nextCommandId()));
+  }
+
   function resetLocal() {
     encounter = newEncounterState();
     feedback = [];
@@ -169,10 +186,15 @@
             {combatant}
             isCurrent={combatant.id === activeCombatant?.id}
             phase={encounter.phase}
+            actions={combatantCardActions(encounter, combatant.id)}
             onDamage={applyDamage}
             onHeal={applyHealing}
             onSetTemp={setTempHp}
             onSetZero={(id) => setHp(id, 0)}
+            onEndTurn={endTurn}
+            onMarkReactionUsed={markReactionUsed}
+            onMarkDead={markDead}
+            onRevive={revive}
           />
         {/each}
       </div>
