@@ -2,9 +2,11 @@ export { applyCommand } from './reducer';
 export { createCombatantFromCreature } from './creatures/clone';
 export { applyEliteWeak } from './creatures/templates';
 export { effectLibrary } from './effects/library';
+export { deriveStats } from './effects/derivation';
 export type { CreatureTemplateAdjustment } from './creatures/templates';
 export type {
   Ability,
+  AppliedModifier,
   AppliedEffect,
   Attack,
   AttackType,
@@ -17,6 +19,9 @@ export type {
   Command,
   CommandResult,
   CommandType,
+  ComputedModifierBucket,
+  ComputedStat,
+  ComputedStats,
   Creature,
   CreatureBaseStats,
   CreatureRarity,

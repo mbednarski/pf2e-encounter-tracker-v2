@@ -394,7 +394,40 @@ export type StatTarget =
 export interface Modifier {
   stat: StatTarget;
   bonusType: BonusType;
-  value: number | 'effectValue' | '-effectValue';
+  value: ModifierValue;
+}
+
+export type ModifierValue = number | { kind: 'effectValue'; sign: 1 | -1 };
+
+export interface AppliedModifier {
+  effectId: string;
+  instanceId: string;
+  sourceName: string;
+  bonusType: BonusType;
+  value: number;
+  suppressed: boolean;
+}
+
+export interface ComputedStat {
+  base: number;
+  final: number;
+  modifiers: AppliedModifier[];
+}
+
+export interface ComputedModifierBucket {
+  total: number;
+  modifiers: AppliedModifier[];
+}
+
+export interface ComputedStats {
+  ac: ComputedStat;
+  fortitude: ComputedStat;
+  reflex: ComputedStat;
+  will: ComputedStat;
+  perception: ComputedStat;
+  skills: Record<string, ComputedStat>;
+  attackRolls: ComputedModifierBucket;
+  allDCs: ComputedModifierBucket;
 }
 
 export type TurnBoundarySuggestion =

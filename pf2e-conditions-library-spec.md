@@ -44,12 +44,12 @@ Conditions gated on ability scores (Clumsy → Dex, Enfeebled → Str, Stupefied
 |---|---|
 | `strSkills` | Athletics |
 | `dexSkills` | Acrobatics, Stealth, Thievery |
-| `intSkills` | Arcana, Crafting, Society |
+| `intSkills` | Arcana, Crafting, Occultism, Society |
 | `wisSkills` | Medicine, Nature, Religion, Survival |
 | `chaSkills` | Deception, Diplomacy, Intimidation, Performance |
 | `mentalSkills` | All of intSkills + wisSkills + chaSkills |
 
-Lore skills are excluded — they have no combat relevance. They are stored and displayed but never targeted by ability-gated modifiers.
+Lore skills are excluded from ability-score meta-targets. They are stored and displayed, and `allSkills` still targets them when a condition affects every skill the creature actually has.
 
 These are added to the `StatTarget` type:
 
@@ -88,8 +88,8 @@ Each condition entry specifies:
 - **description**: rules text for GM reference — especially important when modifiers can't capture the full effect
 
 Modifier `value` field uses:
-- `"-effectValue"` → resolves to negative of the condition's current value (penalty)
-- `"effectValue"` → resolves to the condition's current value (bonus)
+- `{ kind: "effectValue", sign: -1 }` → resolves to negative of the condition's current value (penalty)
+- `{ kind: "effectValue", sign: 1 }` → resolves to the condition's current value (bonus)
 - A literal number for fixed modifiers (e.g., Off-Guard is always -2)
 
 ---
@@ -108,12 +108,12 @@ Status penalty equal to value on **all** checks and DCs.
   hasValue: true,
   maxValue: 4,
   modifiers: [
-    { stat: "ac",           bonusType: "status", value: "-effectValue" },
-    { stat: "allSaves",     bonusType: "status", value: "-effectValue" },
-    { stat: "perception",   bonusType: "status", value: "-effectValue" },
-    { stat: "attackRolls",  bonusType: "status", value: "-effectValue" },
-    { stat: "allSkills",    bonusType: "status", value: "-effectValue" },
-    { stat: "allDCs",       bonusType: "status", value: "-effectValue" },
+    { stat: "ac",           bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "allSaves",     bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "perception",   bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "attackRolls",  bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "allSkills",    bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "allDCs",       bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
   turnEndSuggestion: { type: "suggestDecrement", amount: 1 },
   description: "Decreases by 1 at end of your turn.",
@@ -132,12 +132,12 @@ Status penalty equal to value on **all** checks and DCs. Persists until removed.
   hasValue: true,
   maxValue: 4,
   modifiers: [
-    { stat: "ac",           bonusType: "status", value: "-effectValue" },
-    { stat: "allSaves",     bonusType: "status", value: "-effectValue" },
-    { stat: "perception",   bonusType: "status", value: "-effectValue" },
-    { stat: "attackRolls",  bonusType: "status", value: "-effectValue" },
-    { stat: "allSkills",    bonusType: "status", value: "-effectValue" },
-    { stat: "allDCs",       bonusType: "status", value: "-effectValue" },
+    { stat: "ac",           bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "allSaves",     bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "perception",   bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "attackRolls",  bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "allSkills",    bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "allDCs",       bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
   description: "Can spend an action to retch (Fortitude save vs source DC to reduce by 1, or 0 on critical success). Can't willingly ingest anything.",
 }
@@ -157,9 +157,9 @@ Status penalty equal to value on Dexterity-based checks and DCs.
   hasValue: true,
   maxValue: 4,
   modifiers: [
-    { stat: "ac",        bonusType: "status", value: "-effectValue" },
-    { stat: "reflex",    bonusType: "status", value: "-effectValue" },
-    { stat: "dexSkills", bonusType: "status", value: "-effectValue" },
+    { stat: "ac",        bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "reflex",    bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "dexSkills", bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
   description: "Also applies to Dex-based attack rolls (not automated — creature attacks don't tag their ability).",
 }
@@ -177,13 +177,13 @@ Status penalty equal to value on Strength-based checks and DCs, including melee 
   hasValue: true,
   maxValue: 4,
   modifiers: [
-    { stat: "strSkills", bonusType: "status", value: "-effectValue" },
+    { stat: "strSkills", bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
   description: "Also applies to Str-based melee attack rolls and damage rolls (not automated — creature attacks don't tag their ability).",
 }
 ```
 
-No automated modifiers — can't distinguish Str-based vs Dex-based attacks from statblock data.
+No automated attack or damage modifiers — can't distinguish Str-based vs Dex-based attacks from statblock data.
 
 #### Stupefied (1–4)
 
@@ -197,14 +197,14 @@ Status penalty equal to value on mental checks, spell attack rolls, and spell DC
   hasValue: true,
   maxValue: 4,
   modifiers: [
-    { stat: "mentalSkills", bonusType: "status", value: "-effectValue" },
-    { stat: "will",         bonusType: "status", value: "-effectValue" },
+    { stat: "mentalSkills", bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "will",         bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
   description: "Also applies to spell attack rolls and spell DCs (not in stat model). When casting a spell, DC 5 + value flat check or spell is lost.",
 }
 ```
 
-No automated modifiers — can't identify mental skills or spell stats from creature data.
+No automated spell attack or spell DC modifiers — those spell stats are outside the current combatant stat model.
 
 #### Drained (1–4)
 
@@ -218,7 +218,7 @@ Status penalty equal to value on Constitution-based checks. Reduces max HP.
   hasValue: true,
   maxValue: 4,
   modifiers: [
-    { stat: "fortitude", bonusType: "status", value: "-effectValue" },
+    { stat: "fortitude", bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
   description: "Reduces max HP by level × value (reduce current HP to new max if needed). Also applies to Con-based checks beyond Fortitude. Decreases by 1 after full night's rest.",
 }
@@ -813,12 +813,12 @@ The orchestrator's combat log formatter should produce human-readable entries th
 
 | Condition | Stat | Type | Value |
 |---|---|---|---|
-| Frightened | ac, allSaves, perception, attackRolls, allSkills, allDCs | status | -effectValue |
-| Sickened | ac, allSaves, perception, attackRolls, allSkills, allDCs | status | -effectValue |
-| Clumsy | ac, reflex, dexSkills | status | -effectValue |
-| Drained | fortitude | status | -effectValue |
-| Enfeebled | strSkills | status | -effectValue |
-| Stupefied | mentalSkills, will | status | -effectValue |
+| Frightened | ac, allSaves, perception, attackRolls, allSkills, allDCs | status | `{ kind: "effectValue", sign: -1 }` |
+| Sickened | ac, allSaves, perception, attackRolls, allSkills, allDCs | status | `{ kind: "effectValue", sign: -1 }` |
+| Clumsy | ac, reflex, dexSkills | status | `{ kind: "effectValue", sign: -1 }` |
+| Drained | fortitude | status | `{ kind: "effectValue", sign: -1 }` |
+| Enfeebled | strSkills | status | `{ kind: "effectValue", sign: -1 }` |
+| Stupefied | mentalSkills, will | status | `{ kind: "effectValue", sign: -1 }` |
 | Off-Guard | ac | circumstance | -2 |
 | Blinded | perception | status | -4 |
 | Prone | attackRolls | circumstance | -2 |

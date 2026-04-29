@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { effectLibrary } from './library';
-import type { BonusType, Modifier, StatTarget, TurnBoundarySuggestion } from '../types';
+import type { BonusType, Modifier, ModifierValue, StatTarget, TurnBoundarySuggestion } from '../types';
 
 const supportedBonusTypes = new Set<BonusType>(['status', 'circumstance', 'item', 'untyped']);
 
@@ -33,9 +33,14 @@ const supportedSuggestionTypes = new Set<TurnBoundarySuggestion['type']>([
 function expectModifierShape(modifier: Modifier): void {
   expect(supportedStatTargets.has(modifier.stat)).toBe(true);
   expect(supportedBonusTypes.has(modifier.bonusType)).toBe(true);
-  expect(
-    typeof modifier.value === 'number' || modifier.value === 'effectValue' || modifier.value === '-effectValue'
-  ).toBe(true);
+  expect(isSupportedModifierValue(modifier.value)).toBe(true);
+}
+
+function isSupportedModifierValue(value: ModifierValue): boolean {
+  return (
+    typeof value === 'number' ||
+    (value.kind === 'effectValue' && (value.sign === 1 || value.sign === -1))
+  );
 }
 
 function expectSuggestionShape(suggestion: TurnBoundarySuggestion): void {
@@ -103,7 +108,7 @@ describe('effectLibrary', () => {
     expect(effectLibrary.frightened.modifiers).toContainEqual({
       stat: 'attackRolls',
       bonusType: 'status',
-      value: '-effectValue'
+      value: { kind: 'effectValue', sign: -1 }
     });
 
     expect(effectLibrary['off-guard']).toMatchObject({
