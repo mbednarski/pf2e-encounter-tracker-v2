@@ -279,7 +279,11 @@ export type DomainEvent =
   | { type: 'initiative-changed'; combatantId: CombatantId; newIndex: number }
   | { type: 'turn-started'; combatantId: CombatantId; round: number }
   | { type: 'turn-ended'; combatantId: CombatantId }
+  | { type: 'combatant-died'; combatantId: CombatantId; cause: 'marked-dead' | 'dying-threshold' }
+  | { type: 'combatant-revived'; combatantId: CombatantId }
+  | { type: 'reaction-used'; combatantId: CombatantId }
   | { type: 'reaction-reset'; combatantId: CombatantId; cause: 'auto' | 'manual' }
+  | { type: 'note-changed'; combatantId: CombatantId }
   | {
       type: 'hp-changed';
       combatantId: CombatantId;

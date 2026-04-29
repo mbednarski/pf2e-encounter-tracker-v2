@@ -241,3 +241,206 @@ describe('applyCommand turn advancement slice', () => {
     expectRejected(result, 'END_TURN', 'END_TURN requires a valid current combatant', state);
   });
 });
+
+describe('applyCommand combat state slice', () => {
+  test('marks and manually resets a combatant reaction', () => {
+    const state = activeEncounter();
+
+    const marked = applyCommand(state, command('MARK_REACTION_USED', { combatantId: 'fighter-1' }), emptyEffects);
+    const reset = applyCommand(marked.newState, command('RESET_REACTION', { combatantId: 'fighter-1' }), emptyEffects);
+
+    expect(marked.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(true);
+    expectEvents(marked, [{ type: 'reaction-used', combatantId: 'fighter-1' }]);
+    expect(reset.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(reset, [{ type: 'reaction-reset', combatantId: 'fighter-1', cause: 'manual' }]);
+  });
+
+  test('rejects reaction commands for invalid targets', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'fallen-1': combatant('fallen-1', { isAlive: false })
+      }
+    });
+
+    expectRejected(
+      applyCommand(state, command('MARK_REACTION_USED', { combatantId: 'fallen-1' }), emptyEffects),
+      'MARK_REACTION_USED',
+      'Combatant fallen-1 is not alive',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('RESET_REACTION', { combatantId: 'missing-1' }), emptyEffects),
+      'RESET_REACTION',
+      'Combatant missing-1 not found',
+      state
+    );
+  });
+
+  test('sets and clears combatant notes', () => {
+    const state = activeEncounter();
+
+    const noted = applyCommand(state, command('SET_NOTE', { combatantId: 'goblin-1', note: 'Grabbed by the bridge.' }), emptyEffects);
+    const cleared = applyCommand(noted.newState, command('SET_NOTE', { combatantId: 'goblin-1', note: null }), emptyEffects);
+
+    expect(noted.newState.combatants['goblin-1'].notes).toBe('Grabbed by the bridge.');
+    expectEvents(noted, [{ type: 'note-changed', combatantId: 'goblin-1' }]);
+    expect(cleared.newState.combatants['goblin-1']).not.toHaveProperty('notes');
+    expectEvents(cleared, [{ type: 'note-changed', combatantId: 'goblin-1' }]);
+  });
+
+  test('rejects setting a note for an unknown combatant', () => {
+    const state = activeEncounter();
+
+    const result = applyCommand(state, command('SET_NOTE', { combatantId: 'missing-1', note: 'Hidden' }), emptyEffects);
+
+    expectRejected(result, 'SET_NOTE', 'Combatant missing-1 not found', state);
+  });
+
+  test('marks a non-current combatant dead without advancing the turn', () => {
+    const state = activeEncounter();
+
+    const result = applyCommand(state, command('MARK_DEAD', { combatantId: 'fighter-1' }), emptyEffects);
+
+    expect(result.newState.combatants['fighter-1'].isAlive).toBe(false);
+    expect(result.newState.initiative.currentIndex).toBe(0);
+    expect(result.newState.round).toBe(1);
+    expectEvents(result, [{ type: 'combatant-died', combatantId: 'fighter-1', cause: 'marked-dead' }]);
+  });
+
+  test('marks the current combatant dead and advances to the next live combatant', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fallen-1', 'fighter-1'],
+        currentIndex: 0,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fallen-1': combatant('fallen-1', { isAlive: false }),
+        'fighter-1': combatant('fighter-1', { reactionUsedThisRound: true })
+      }
+    });
+
+    const result = applyCommand(state, command('MARK_DEAD', { combatantId: 'goblin-1' }), emptyEffects);
+
+    expect(result.newState.combatants['goblin-1'].isAlive).toBe(false);
+    expect(result.newState.initiative.currentIndex).toBe(2);
+    expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'combatant-died', combatantId: 'goblin-1', cause: 'marked-dead' },
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 }
+    ]);
+  });
+
+  test('marks the current combatant dead and wraps to the next round', () => {
+    const state = activeEncounter({
+      round: 2,
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: 1,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
+        'fighter-1': combatant('fighter-1')
+      }
+    });
+
+    const result = applyCommand(state, command('MARK_DEAD', { combatantId: 'fighter-1' }), emptyEffects);
+
+    expect(result.newState.combatants['fighter-1'].isAlive).toBe(false);
+    expect(result.newState.initiative.currentIndex).toBe(0);
+    expect(result.newState.round).toBe(3);
+    expect(result.newState.combatants['goblin-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'combatant-died', combatantId: 'fighter-1', cause: 'marked-dead' },
+      { type: 'turn-ended', combatantId: 'fighter-1' },
+      { type: 'reaction-reset', combatantId: 'goblin-1', cause: 'auto' },
+      { type: 'round-started', round: 3 },
+      { type: 'turn-started', combatantId: 'goblin-1', round: 3 }
+    ]);
+  });
+
+  test('emits all-combatants-dead when marking the final live combatant dead', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: 0,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1', { isAlive: false })
+      }
+    });
+
+    const result = applyCommand(state, command('MARK_DEAD', { combatantId: 'goblin-1' }), emptyEffects);
+
+    expect(result.newState.combatants['goblin-1'].isAlive).toBe(false);
+    expect(result.newState.phase).toBe('ACTIVE');
+    expectEvents(result, [
+      { type: 'combatant-died', combatantId: 'goblin-1', cause: 'marked-dead' },
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'all-combatants-dead' }
+    ]);
+  });
+
+  test('rejects invalid mark dead commands', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'fallen-1': combatant('fallen-1', { isAlive: false })
+      }
+    });
+
+    expectRejected(
+      applyCommand(state, command('MARK_DEAD', { combatantId: 'missing-1' }), emptyEffects),
+      'MARK_DEAD',
+      'Combatant missing-1 not found',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('MARK_DEAD', { combatantId: 'fallen-1' }), emptyEffects),
+      'MARK_DEAD',
+      'Combatant fallen-1 is not alive',
+      state
+    );
+  });
+
+  test('revives a dead combatant without changing HP', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1', { currentHp: 0, isAlive: false })
+      }
+    });
+
+    const result = applyCommand(state, command('REVIVE', { combatantId: 'fighter-1' }), emptyEffects);
+
+    expect(result.newState.combatants['fighter-1'].isAlive).toBe(true);
+    expect(result.newState.combatants['fighter-1'].currentHp).toBe(0);
+    expectEvents(result, [{ type: 'combatant-revived', combatantId: 'fighter-1' }]);
+  });
+
+  test('rejects invalid revive commands', () => {
+    const state = activeEncounter();
+
+    expectRejected(
+      applyCommand(state, command('REVIVE', { combatantId: 'missing-1' }), emptyEffects),
+      'REVIVE',
+      'Combatant missing-1 not found',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('REVIVE', { combatantId: 'fighter-1' }), emptyEffects),
+      'REVIVE',
+      'Combatant fighter-1 is already alive',
+      state
+    );
+  });
+});
