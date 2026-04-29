@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { dispatchEncounterCommand, makeCombatant, makeCreatureCombatant, newEncounterState, toCommand } from './encounter-app';
+import {
+  combatantCardActions,
+  dispatchEncounterCommand,
+  makeCombatant,
+  makeCreatureCombatant,
+  newEncounterState,
+  toCommand
+} from './encounter-app';
 import type { Creature } from '../domain';
 
 describe('encounter app boundary', () => {
@@ -141,6 +148,180 @@ describe('encounter app boundary', () => {
     ]);
   });
 });
+
+describe('combatantCardActions', () => {
+  test('returns all-false for an unknown combatant', () => {
+    const state = newEncounterState();
+
+    expect(combatantCardActions(state, 'missing')).toEqual({
+      canEndTurn: false,
+      canMarkReactionUsed: false,
+      canMarkDead: false,
+      canRevive: false
+    });
+  });
+
+  test('in PREPARING phase only mark-dead is enabled for living combatants', () => {
+    const state = stateWithTwoCombatants();
+
+    expect(combatantCardActions(state, 'goblin-1')).toEqual({
+      canEndTurn: false,
+      canMarkReactionUsed: false,
+      canMarkDead: true,
+      canRevive: false
+    });
+  });
+
+  test('in ACTIVE phase enables end-turn only for the current combatant', () => {
+    const state = startedState();
+
+    expect(state.initiative.order[state.initiative.currentIndex]).toBe('goblin-1');
+    expect(combatantCardActions(state, 'goblin-1').canEndTurn).toBe(true);
+    expect(combatantCardActions(state, 'fighter-1').canEndTurn).toBe(false);
+  });
+
+  test('in ACTIVE phase enables mark-reaction-used until used, then disables it', () => {
+    const started = startedState();
+
+    expect(combatantCardActions(started, 'goblin-1').canMarkReactionUsed).toBe(true);
+
+    const reacted = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('MARK_REACTION_USED', { combatantId: 'goblin-1' }, 'cmd-react')
+    );
+
+    expect(reacted.state.combatants['goblin-1'].reactionUsedThisRound).toBe(true);
+    expect(combatantCardActions(reacted.state, 'goblin-1').canMarkReactionUsed).toBe(false);
+    expect(combatantCardActions(reacted.state, 'fighter-1').canMarkReactionUsed).toBe(true);
+  });
+
+  test('mark-dead and revive are mutually exclusive and toggle on isAlive', () => {
+    const started = startedState();
+    const before = combatantCardActions(started, 'fighter-1');
+
+    expect(before.canMarkDead).toBe(true);
+    expect(before.canRevive).toBe(false);
+
+    const killed = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('MARK_DEAD', { combatantId: 'fighter-1' }, 'cmd-kill')
+    );
+    const after = combatantCardActions(killed.state, 'fighter-1');
+
+    expect(killed.state.combatants['fighter-1'].isAlive).toBe(false);
+    expect(after.canMarkDead).toBe(false);
+    expect(after.canRevive).toBe(true);
+    expect(after.canEndTurn).toBe(false);
+    expect(after.canMarkReactionUsed).toBe(false);
+  });
+
+  test('all actions are disabled in COMPLETED phase', () => {
+    const state = { ...startedState(), phase: 'COMPLETED' as const };
+
+    expect(combatantCardActions(state, 'goblin-1')).toEqual({
+      canEndTurn: false,
+      canMarkReactionUsed: false,
+      canMarkDead: false,
+      canRevive: false
+    });
+  });
+});
+
+describe('end-to-end turn-control dispatches', () => {
+  test('dispatches END_TURN, MARK_REACTION_USED, MARK_DEAD, and REVIVE through the orchestrator', () => {
+    const started = startedState();
+
+    const reacted = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('MARK_REACTION_USED', { combatantId: 'goblin-1' }, 'cmd-react')
+    );
+    expect(reacted.state.combatants['goblin-1'].reactionUsedThisRound).toBe(true);
+
+    const ended = dispatchEncounterCommand(
+      reacted.state,
+      reacted.feedback,
+      toCommand('END_TURN', undefined, 'cmd-end')
+    );
+    expect(ended.state.initiative.order[ended.state.initiative.currentIndex]).toBe('fighter-1');
+
+    const killed = dispatchEncounterCommand(
+      ended.state,
+      ended.feedback,
+      toCommand('MARK_DEAD', { combatantId: 'fighter-1' }, 'cmd-kill')
+    );
+    expect(killed.state.combatants['fighter-1'].isAlive).toBe(false);
+
+    const revived = dispatchEncounterCommand(
+      killed.state,
+      killed.feedback,
+      toCommand('REVIVE', { combatantId: 'fighter-1' }, 'cmd-revive')
+    );
+    expect(revived.state.combatants['fighter-1'].isAlive).toBe(true);
+
+    const allFeedback = revived.feedback.map((entry) => entry.message).join(' | ');
+    expect(allFeedback).toContain('reaction-used');
+    expect(allFeedback).toContain('turn-ended');
+    expect(allFeedback).toContain('combatant-died');
+    expect(allFeedback).toContain('combatant-revived');
+    expect(revived.feedback.every((entry) => entry.severity === 'info')).toBe(true);
+  });
+});
+
+function stateWithTwoCombatants() {
+  const goblin = makeCombatant({
+    id: 'goblin-1',
+    name: 'Goblin Warrior',
+    maxHp: 18,
+    ac: 16,
+    fortitude: 6,
+    reflex: 8,
+    will: 5,
+    perception: 7,
+    speed: 25
+  });
+  const fighter = makeCombatant({
+    id: 'fighter-1',
+    name: 'Fighter',
+    maxHp: 26,
+    ac: 18,
+    fortitude: 9,
+    reflex: 7,
+    will: 6,
+    perception: 8,
+    speed: 25
+  });
+
+  const withGoblin = dispatchEncounterCommand(
+    newEncounterState(),
+    [],
+    toCommand('ADD_COMBATANT', { combatant: goblin }, 'setup-1')
+  );
+  const withFighter = dispatchEncounterCommand(
+    withGoblin.state,
+    withGoblin.feedback,
+    toCommand('ADD_COMBATANT', { combatant: fighter }, 'setup-2')
+  );
+  const ordered = dispatchEncounterCommand(
+    withFighter.state,
+    withFighter.feedback,
+    toCommand('SET_INITIATIVE_ORDER', { order: ['goblin-1', 'fighter-1'] }, 'setup-3')
+  );
+
+  return ordered.state;
+}
+
+function startedState() {
+  const prepared = stateWithTwoCombatants();
+  const started = dispatchEncounterCommand(
+    prepared,
+    [],
+    toCommand('START_ENCOUNTER', undefined, 'setup-4')
+  );
+  return started.state;
+}
 
 function creatureTemplate(overrides: Partial<Creature> = {}): Creature {
   return {

@@ -1,13 +1,19 @@
 <script lang="ts">
   import type { CombatantState, EncounterState } from '../domain';
+  import type { CombatantCardActionAvailability } from '$lib/encounter-app';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
   export let phase: EncounterState['phase'];
+  export let actions: CombatantCardActionAvailability;
   export let onDamage: (id: string) => void;
   export let onHeal: (id: string) => void;
   export let onSetTemp: (id: string) => void;
   export let onSetZero: (id: string) => void;
+  export let onEndTurn: (id: string) => void;
+  export let onMarkReactionUsed: (id: string) => void;
+  export let onMarkDead: (id: string) => void;
+  export let onRevive: (id: string) => void;
 
   function templateLabel(adjustment: CombatantState['templateAdjustment']) {
     if (adjustment === 'elite') return 'Elite';
@@ -19,6 +25,32 @@
     0,
     Math.min(100, (combatant.currentHp / combatant.baseStats.hp) * 100)
   );
+
+  $: endTurnTitle = actions.canEndTurn
+    ? 'End this combatant’s turn'
+    : isCurrent
+      ? 'End Turn is only available during the active phase'
+      : 'Only the current combatant can end their turn';
+
+  $: reactionTitle = actions.canMarkReactionUsed
+    ? 'Mark reaction used this round'
+    : combatant.reactionUsedThisRound
+      ? 'Reaction already used this round'
+      : !combatant.isAlive
+        ? 'Combatant is dead'
+        : 'Reactions are only tracked during combat';
+
+  $: markDeadTitle = actions.canMarkDead
+    ? 'Mark this combatant dead'
+    : !combatant.isAlive
+      ? 'Combatant is already dead'
+      : 'Mark Dead is unavailable in this phase';
+
+  $: reviveTitle = actions.canRevive
+    ? 'Revive this combatant'
+    : combatant.isAlive
+      ? 'Combatant is already alive'
+      : 'Revive is unavailable in this phase';
 </script>
 
 <article class:current-card={isCurrent} class="combatant-card">
@@ -28,6 +60,9 @@
         <h2>{combatant.name}</h2>
         {#if combatant.templateAdjustment}
           <span class="template-badge {combatant.templateAdjustment}">{templateLabel(combatant.templateAdjustment)}</span>
+        {/if}
+        {#if !combatant.isAlive}
+          <span class="status-badge dead" aria-label="Combatant is dead">Dead</span>
         {/if}
       </div>
       <p>AC {combatant.baseStats.ac} · Fort +{combatant.baseStats.fortitude} · Ref +{combatant.baseStats.reflex} · Will +{combatant.baseStats.will}</p>
@@ -54,6 +89,45 @@
     <button type="button" onclick={() => onHeal(combatant.id)}>Heal</button>
     <button type="button" onclick={() => onSetTemp(combatant.id)}>Set Temp</button>
     <button type="button" class="secondary" onclick={() => onSetZero(combatant.id)}>Set 0</button>
+  </div>
+
+  <div class="card-turn-actions" aria-label="Turn and lifecycle controls">
+    <button
+      type="button"
+      class="turn"
+      disabled={!actions.canEndTurn}
+      title={endTurnTitle}
+      onclick={() => onEndTurn(combatant.id)}
+    >
+      End Turn
+    </button>
+    <button
+      type="button"
+      class="turn secondary"
+      disabled={!actions.canMarkReactionUsed}
+      title={reactionTitle}
+      onclick={() => onMarkReactionUsed(combatant.id)}
+    >
+      Reaction Used
+    </button>
+    <button
+      type="button"
+      class="turn secondary"
+      disabled={!actions.canMarkDead}
+      title={markDeadTitle}
+      onclick={() => onMarkDead(combatant.id)}
+    >
+      Mark Dead
+    </button>
+    <button
+      type="button"
+      class="turn secondary"
+      disabled={!actions.canRevive}
+      title={reviveTitle}
+      onclick={() => onRevive(combatant.id)}
+    >
+      Revive
+    </button>
   </div>
 </article>
 
@@ -128,6 +202,21 @@
     color: #275171;
   }
 
+  .status-badge {
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 5px 7px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .status-badge.dead {
+    background: #f4d7d7;
+    color: #7a1f1f;
+  }
+
   .hp-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -190,13 +279,48 @@
     background: #ffffff;
   }
 
+  .card-turn-actions {
+    display: flex;
+    align-items: center;
+    justify-content: start;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #cfd6d1;
+  }
+
+  .card-turn-actions button.turn {
+    min-height: 36px;
+    border: 1px solid #28494c;
+    border-radius: 6px;
+    background: #28494c;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: 7px 11px;
+  }
+
+  .card-turn-actions button.turn.secondary {
+    border-color: #9aa7a3;
+    color: #263235;
+    background: #ffffff;
+  }
+
+  .card-turn-actions button.turn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
   @media (max-width: 760px) {
     .card-heading {
       align-items: stretch;
       flex-direction: column;
     }
 
-    .card-actions button {
+    .card-actions button,
+    .card-turn-actions button.turn {
       width: 100%;
     }
   }

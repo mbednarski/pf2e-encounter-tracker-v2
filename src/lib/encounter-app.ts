@@ -117,6 +117,35 @@ export function currentCombatant(state: EncounterState): CombatantState | undefi
   return currentId ? state.combatants[currentId] : undefined;
 }
 
+export interface CombatantCardActionAvailability {
+  canEndTurn: boolean;
+  canMarkReactionUsed: boolean;
+  canMarkDead: boolean;
+  canRevive: boolean;
+}
+
+export function combatantCardActions(
+  state: EncounterState,
+  combatantId: string
+): CombatantCardActionAvailability {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return { canEndTurn: false, canMarkReactionUsed: false, canMarkDead: false, canRevive: false };
+  }
+
+  const phase = state.phase;
+  const isCurrent = state.initiative.order[state.initiative.currentIndex] === combatantId;
+  const inCombatPhase = phase === 'ACTIVE' || phase === 'RESOLVING';
+  const inEditablePhase = phase === 'PREPARING' || inCombatPhase;
+
+  return {
+    canEndTurn: phase === 'ACTIVE' && isCurrent && combatant.isAlive,
+    canMarkReactionUsed: inCombatPhase && combatant.isAlive && !combatant.reactionUsedThisRound,
+    canMarkDead: inEditablePhase && combatant.isAlive,
+    canRevive: inEditablePhase && !combatant.isAlive
+  };
+}
+
 function formatFeedbackEntry(events: DomainEvent[], state: EncounterState, command: Command): FeedbackEntry | undefined {
   if (events.length === 0) {
     return undefined;
