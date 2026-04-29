@@ -100,7 +100,7 @@ type Duration =
 ```
 
 **Amendments vs arch §8.4:**
-- `sustained` removed from union. Sustained spells are modeled as `untilTurnEnd { combatantId: casterId }` + `turnEndSuggestion: { type: "confirmSustained" }`. On confirm, the orchestrator dispatches a `SET_EFFECT_DURATION` command (see §8) to push the end to the caster's next turn end. On dismiss, the hard clock removes it.
+- `sustained` removed from union. Sustained spells are intended to use `turnEndSuggestion: { type: "confirmSustained" }`, and confirm resolution can dispatch `SET_EFFECT_DURATION` (see §8) to push the end to the caster's next turn end. The generic prompt generator does not yet generate sustained prompts from hard-clock duration instances because hard-clock expirations run before prompts; sustained prompt generation needs a dedicated follow-up rule.
 - `rounds` simplified to `{ type: "rounds"; count: number }`. No anchor combatant, no auto-decrement. It's a display-only counter the GM ticks down manually via `SET_EFFECT_DURATION`. If the GM wants automatic behavior, they use `untilTurnEnd`.
 - `conditional` retained — distinguishes "ends on a trigger" from `unlimited` ("lasts forever"). Both are uncomputable; the type difference is purely semantic for UI.
 
@@ -123,7 +123,9 @@ Template variables resolved by the prompt generator:
 - `{value}` → current `AppliedEffect.value`
 - `{note}` → current `AppliedEffect.note`
 
-(Restated from conditions spec §5.3, no changes.)
+Prompt generation runs after the relevant hard-clock expiry pass. Remaining effects with `untilTurnEnd` or `untilTurnStart` durations are not prompted by the generic generator; those durations are resolved only by their matching automatic expiry boundary.
+
+(Restated from conditions spec §5.3, with the hard-clock prompt boundary clarified.)
 
 ---
 
@@ -285,7 +287,7 @@ None. This spec resolves all flagged ambiguities for V2.
 1. **Hydration round-trip** — PartyMember with persistentEffects → encounter → modify → COMPLETE → sync-back. Verify sourceLabel preserved, sourceId undefined throughout, parent/child chain intact.
 2. **Multi-instance stacking** — apply Frightened 2 from Drow, Frightened 3 from Goblin, verify both AppliedEffects exist, derived stats use -3 status (the higher), UI breakdown shows both with the lower marked suppressed.
 3. **Source removal** — apply effect from A to B, REMOVE_COMBATANT A, verify effect on B remains active, `sourceId` is cleared, `sourceLabel` is preserved, and no effect event is emitted.
-4. **Sustained pattern** — caster ends turn, confirmSustained prompt fires, "Yes" dispatches SET_EFFECT_DURATION pushing duration to next turn end, hard clock doesn't expire it.
+4. **Sustained pattern** — deferred follow-up. Confirm resolution can push duration to the next caster turn end, but generic prompt generation does not yet create sustained prompts from hard-clock duration instances.
 5. **Implied cascade** — apply Grabbed (implies Off-Guard, Immobilized), apply separate Off-Guard from another source. Remove Grabbed. Verify implied Off-Guard removed but standalone Off-Guard remains.
 6. **maxValue non-enforcement** — APPLY_EFFECT with Frightened value 7 succeeds. SET_EFFECT_VALUE to 10 succeeds. UI should still cap stepper at maxValue but nothing blocks higher values via direct dispatch.
 

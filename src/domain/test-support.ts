@@ -98,8 +98,12 @@ export function resolvingEncounter(overrides: Partial<EncounterState> = {}): Enc
     pendingPrompts: [
       {
         id: 'prompt-1',
+        boundary: { type: 'turnStart', combatantId: 'goblin-1' },
         combatantId: 'goblin-1',
-        description: 'Resolve pending save'
+        effectInstanceId: 'effect-1',
+        effectName: 'Test Effect',
+        description: 'Resolve pending save',
+        suggestionType: { type: 'reminder', description: 'Resolve pending save' }
       }
     ],
     ...overrides
