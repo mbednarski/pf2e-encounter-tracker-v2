@@ -193,6 +193,10 @@ export interface ApplyEffectPayload {
   effectId: string;
   targetId: CombatantId;
   sourceId?: CombatantId;
+  /**
+   * Only allowed for value effects. Omitted value effects default to 1;
+   * provided values must be integers >= 1.
+   */
   value?: number;
   duration?: Duration;
   note?: string;
@@ -216,7 +220,7 @@ export interface ModifyEffectValuePayload {
 }
 
 export interface SetEffectDurationPayload {
-  combatantId: CombatantId;
+  targetId: CombatantId;
   instanceId: string;
   newDuration: Duration;
 }

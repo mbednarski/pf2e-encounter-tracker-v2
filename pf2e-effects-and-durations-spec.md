@@ -240,15 +240,15 @@ Used by orchestrator when GM confirms a sustained spell, ticks down a `rounds` c
 
 ```typescript
 interface SetEffectDurationPayload {
-  combatantId: CombatantId
+  targetId: CombatantId
   instanceId: string
   newDuration: Duration
 }
 ```
 
 **Validation:**
-- Combatant must exist
-- Instance must exist on combatant
+- Target combatant must exist
+- Instance must exist on target combatant
 
 **State changes:**
 - `appliedEffects[instance].duration → newDuration`

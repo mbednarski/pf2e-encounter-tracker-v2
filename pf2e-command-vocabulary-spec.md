@@ -535,7 +535,7 @@ interface ApplyEffectPayload {
   effectId: string              // references EffectDefinition
   targetId: CombatantId
   sourceId?: CombatantId        // who caused this effect, if attributed
-  value?: number                // for value conditions; defaults to 1 if hasValue
+  value?: number                // only for value effects; defaults to 1 if hasValue; must be >= 1 when provided
   duration?: Duration           // defaults to { type: "unlimited" }
   note?: string                 // free text (e.g., "2d6" for persistent damage)
 }
@@ -641,15 +641,15 @@ Overwrites an effect's duration. Used for sustained effects, manually ticking `r
 
 ```typescript
 interface SetEffectDurationPayload {
-  combatantId: CombatantId
+  targetId: CombatantId
   instanceId: string
   newDuration: Duration
 }
 ```
 
 **Validation:**
-- Combatant must exist
-- Instance must exist on combatant
+- Target combatant must exist
+- Instance must exist on target combatant
 
 **State changes:**
 - `appliedEffects[instance].duration → newDuration`
