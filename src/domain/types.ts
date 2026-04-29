@@ -299,7 +299,57 @@ export type DomainEvent =
   | { type: 'hp-reached-zero'; combatantId: CombatantId }
   | { type: 'command-rejected'; commandType: CommandType; reason: string };
 
-export type EffectLibrary = Record<string, unknown>;
+export type EffectCategory = 'condition' | 'spell' | 'affliction' | 'persistent-damage' | 'custom';
+
+export type BonusType = 'status' | 'circumstance' | 'item' | 'untyped';
+
+export type StatTarget =
+  | 'ac'
+  | 'fortitude'
+  | 'reflex'
+  | 'will'
+  | 'allSaves'
+  | 'perception'
+  | 'attackRolls'
+  | 'allDCs'
+  | 'allSkills'
+  | 'strSkills'
+  | 'dexSkills'
+  | 'intSkills'
+  | 'wisSkills'
+  | 'chaSkills'
+  | 'mentalSkills'
+  | (string & {});
+
+export interface Modifier {
+  stat: StatTarget;
+  bonusType: BonusType;
+  value: number | 'effectValue' | '-effectValue';
+}
+
+export type TurnBoundarySuggestion =
+  | { type: 'suggestDecrement'; amount: number; description?: string }
+  | { type: 'suggestRemove'; description: string }
+  | { type: 'confirmSustained'; description?: string }
+  | { type: 'promptResolution'; description: string }
+  | { type: 'reminder'; description: string };
+
+export interface EffectDefinition {
+  id: string;
+  name: string;
+  category: EffectCategory;
+  description?: string;
+  modifiers: Modifier[];
+  hasValue: boolean;
+  maxValue?: number;
+  impliedEffects?: string[];
+  turnStartSuggestion?: TurnBoundarySuggestion;
+  turnEndSuggestion?: TurnBoundarySuggestion;
+  persistAfterEncounter?: boolean;
+  traits?: string[];
+}
+
+export type EffectLibrary = Record<string, EffectDefinition>;
 
 export interface CommandResult {
   newState: EncounterState;
