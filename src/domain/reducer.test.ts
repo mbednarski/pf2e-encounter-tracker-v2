@@ -242,6 +242,256 @@ describe('applyCommand turn advancement slice', () => {
   });
 });
 
+describe('applyCommand delay and resume slice', () => {
+  test('delays the middle combatant and starts the next live turn', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1', 'cleric-1'],
+        currentIndex: 1,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'cleric-1': combatant('cleric-1', { reactionUsedThisRound: true })
+      }
+    });
+
+    const result = applyCommand(state, command('DELAY'), emptyEffects);
+
+    expect(result.newState.initiative).toEqual({
+      order: ['goblin-1', 'cleric-1'],
+      currentIndex: 1,
+      delaying: ['fighter-1']
+    });
+    expect(result.newState.round).toBe(1);
+    expect(result.newState.combatants['cleric-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'fighter-1' },
+      { type: 'combatant-delayed', combatantId: 'fighter-1' },
+      { type: 'reaction-reset', combatantId: 'cleric-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'cleric-1', round: 1 }
+    ]);
+  });
+
+  test('delays the first combatant without advancing the round', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1', 'cleric-1'],
+        currentIndex: 0,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'cleric-1': combatant('cleric-1')
+      }
+    });
+
+    const result = applyCommand(state, command('DELAY'), emptyEffects);
+
+    expect(result.newState.initiative).toEqual({
+      order: ['fighter-1', 'cleric-1'],
+      currentIndex: 0,
+      delaying: ['goblin-1']
+    });
+    expect(result.newState.round).toBe(1);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'combatant-delayed', combatantId: 'goblin-1' },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 }
+    ]);
+  });
+
+  test('delays the final combatant and wraps to the next round', () => {
+    const state = activeEncounter({
+      round: 4,
+      initiative: {
+        order: ['goblin-1', 'fighter-1', 'cleric-1'],
+        currentIndex: 2,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
+        'fighter-1': combatant('fighter-1'),
+        'cleric-1': combatant('cleric-1')
+      }
+    });
+
+    const result = applyCommand(state, command('DELAY'), emptyEffects);
+
+    expect(result.newState.initiative).toEqual({
+      order: ['goblin-1', 'fighter-1'],
+      currentIndex: 0,
+      delaying: ['cleric-1']
+    });
+    expect(result.newState.round).toBe(5);
+    expect(result.newState.combatants['goblin-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'cleric-1' },
+      { type: 'combatant-delayed', combatantId: 'cleric-1' },
+      { type: 'reaction-reset', combatantId: 'goblin-1', cause: 'auto' },
+      { type: 'round-started', round: 5 },
+      { type: 'turn-started', combatantId: 'goblin-1', round: 5 }
+    ]);
+  });
+
+  test('delay skips dead combatants after removing the current combatant', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fallen-1', 'fighter-1'],
+        currentIndex: 0,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fallen-1': combatant('fallen-1', { isAlive: false }),
+        'fighter-1': combatant('fighter-1', { reactionUsedThisRound: true })
+      }
+    });
+
+    const result = applyCommand(state, command('DELAY'), emptyEffects);
+
+    expect(result.newState.initiative).toEqual({
+      order: ['fallen-1', 'fighter-1'],
+      currentIndex: 1,
+      delaying: ['goblin-1']
+    });
+    expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'combatant-delayed', combatantId: 'goblin-1' },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 }
+    ]);
+  });
+
+  test('rejects delay when the current initiative pointer is invalid', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: -1,
+        delaying: []
+      }
+    });
+
+    const result = applyCommand(state, command('DELAY'), emptyEffects);
+
+    expectRejected(result, 'DELAY', 'DELAY requires a valid current combatant', state);
+  });
+
+  test('resumes a delaying combatant at the requested index and starts their turn', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'cleric-1'],
+        currentIndex: 0,
+        delaying: ['fighter-1']
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1', { reactionUsedThisRound: true }),
+        'cleric-1': combatant('cleric-1')
+      }
+    });
+
+    const result = applyCommand(
+      state,
+      command('RESUME_FROM_DELAY', { combatantId: 'fighter-1', insertIndex: 1 }),
+      emptyEffects
+    );
+
+    expect(result.newState.initiative).toEqual({
+      order: ['goblin-1', 'fighter-1', 'cleric-1'],
+      currentIndex: 1,
+      delaying: []
+    });
+    expect(result.newState.round).toBe(1);
+    expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      { type: 'combatant-resumed-from-delay', combatantId: 'fighter-1', insertIndex: 1 },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 }
+    ]);
+  });
+
+  test('resumes at the end of initiative with deterministic insertion', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'cleric-1'],
+        currentIndex: 1,
+        delaying: ['fighter-1', 'ranger-1']
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'cleric-1': combatant('cleric-1'),
+        'ranger-1': combatant('ranger-1')
+      }
+    });
+
+    const result = applyCommand(
+      state,
+      command('RESUME_FROM_DELAY', { combatantId: 'fighter-1', insertIndex: 2 }),
+      emptyEffects
+    );
+
+    expect(result.newState.initiative).toEqual({
+      order: ['goblin-1', 'cleric-1', 'fighter-1'],
+      currentIndex: 2,
+      delaying: ['ranger-1']
+    });
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'cleric-1' },
+      { type: 'combatant-resumed-from-delay', combatantId: 'fighter-1', insertIndex: 2 },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 }
+    ]);
+  });
+
+  test('rejects resume for combatants that are not delaying', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: 0,
+        delaying: []
+      }
+    });
+
+    const result = applyCommand(
+      state,
+      command('RESUME_FROM_DELAY', { combatantId: 'fighter-1', insertIndex: 1 }),
+      emptyEffects
+    );
+
+    expectRejected(result, 'RESUME_FROM_DELAY', 'Combatant fighter-1 is not delaying', state);
+  });
+
+  test('rejects resume when the insert index is out of range', () => {
+    const state = activeEncounter({
+      initiative: {
+        order: ['goblin-1', 'cleric-1'],
+        currentIndex: 0,
+        delaying: ['fighter-1']
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'cleric-1': combatant('cleric-1')
+      }
+    });
+
+    const result = applyCommand(
+      state,
+      command('RESUME_FROM_DELAY', { combatantId: 'fighter-1', insertIndex: 3 }),
+      emptyEffects
+    );
+
+    expectRejected(result, 'RESUME_FROM_DELAY', 'RESUME_FROM_DELAY insertIndex must be between 0 and 2', state);
+  });
+});
+
 describe('applyCommand combat state slice', () => {
   test('marks and manually resets a combatant reaction', () => {
     const state = activeEncounter();

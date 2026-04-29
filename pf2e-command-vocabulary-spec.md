@@ -387,10 +387,13 @@ interface DelayPayload {
 - Remove current combatant from `initiative.order`
 - Add to `initiative.delaying`
 - Advance `initiative.currentIndex` to next combatant (wrapping and incrementing round if needed)
+- Auto-reset reaction for the new current combatant
 - Emit turn-started for the new current combatant
 
 **Events:**
+- `{ type: "turn-ended", combatantId }`
 - `{ type: "combatant-delayed", combatantId }`
+- `{ type: "reaction-reset", combatantId: nextCombatant, cause: "auto" }`
 - `{ type: "turn-started", combatantId: nextCombatant, round }`
 - Start-of-turn effects processing for next combatant
 
@@ -412,7 +415,7 @@ interface ResumeFromDelayPayload {
 - Cannot resume during another combatant's RESOLVING phase
 
 **State changes:**
-- END_TURN must be dispatched for the currently active combatant first (their turn is interrupted by the delaying combatant's re-entry). The orchestrator handles this — RESUME_FROM_DELAY itself assumes the current turn has been properly ended.
+- End the currently active combatant's turn. `RESUME_FROM_DELAY` is self-contained in the reducer; the orchestrator must not dispatch a separate `END_TURN` first.
 - Remove from `initiative.delaying`
 - Insert into `initiative.order` at `insertIndex`
 - Set `initiative.currentIndex → insertIndex`
@@ -421,7 +424,9 @@ interface ResumeFromDelayPayload {
 - Generate start-of-turn prompts (if any → phase → RESOLVING)
 
 **Events:**
+- `{ type: "turn-ended", combatantId: interruptedCombatant }`
 - `{ type: "combatant-resumed-from-delay", combatantId, insertIndex }`
+- `{ type: "reaction-reset", combatantId, cause: "auto" }`
 - `{ type: "turn-started", combatantId, round }`
 - Start-of-turn effect events (if any)
 

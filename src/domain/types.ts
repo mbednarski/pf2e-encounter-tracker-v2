@@ -277,6 +277,8 @@ export type DomainEvent =
   | { type: 'combatant-renamed'; combatantId: CombatantId; oldName: string; newName: string }
   | { type: 'initiative-set'; order: CombatantId[] }
   | { type: 'initiative-changed'; combatantId: CombatantId; newIndex: number }
+  | { type: 'combatant-delayed'; combatantId: CombatantId }
+  | { type: 'combatant-resumed-from-delay'; combatantId: CombatantId; insertIndex: number }
   | { type: 'turn-started'; combatantId: CombatantId; round: number }
   | { type: 'turn-ended'; combatantId: CombatantId }
   | { type: 'combatant-died'; combatantId: CombatantId; cause: 'marked-dead' | 'dying-threshold' }

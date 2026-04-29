@@ -64,6 +64,10 @@ export function applyCommand(state: EncounterState, command: Command, _effectLib
       return startEncounter(state);
     case 'END_TURN':
       return endTurn(state);
+    case 'DELAY':
+      return delayTurn(state);
+    case 'RESUME_FROM_DELAY':
+      return resumeFromDelay(state, command.payload.combatantId, command.payload.insertIndex);
     case 'COMPLETE_ENCOUNTER':
       return completeEncounter(state);
     case 'RESET_ENCOUNTER':
@@ -266,10 +270,17 @@ function advanceTurn(state: EncounterState, currentCombatantId: CombatantId): Co
 function findNextLiveTurn(
   state: EncounterState
 ): { combatantId: CombatantId; index: number; round: number } | undefined {
-  const { order, currentIndex } = state.initiative;
+  return findNextLiveTurnFrom(state, state.initiative.currentIndex + 1);
+}
 
-  for (let offset = 1; offset <= order.length; offset += 1) {
-    const rawIndex = currentIndex + offset;
+function findNextLiveTurnFrom(
+  state: EncounterState,
+  startIndex: number
+): { combatantId: CombatantId; index: number; round: number } | undefined {
+  const { order } = state.initiative;
+
+  for (let offset = 0; offset < order.length; offset += 1) {
+    const rawIndex = startIndex + offset;
     const index = rawIndex % order.length;
     const combatantId = order[index];
     const combatant = combatantId ? state.combatants[combatantId] : undefined;
@@ -284,6 +295,123 @@ function findNextLiveTurn(
   }
 
   return undefined;
+}
+
+function delayTurn(state: EncounterState): CommandResult {
+  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
+  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
+    return reject(state, 'DELAY', 'DELAY requires a valid current combatant');
+  }
+
+  const nextOrder = state.initiative.order.filter((combatantId) => combatantId !== currentCombatantId);
+  const stateWithDelay: EncounterState = {
+    ...state,
+    initiative: {
+      ...state.initiative,
+      order: nextOrder,
+      delaying: [...state.initiative.delaying, currentCombatantId]
+    }
+  };
+  const nextTurn = findNextLiveTurnFrom(stateWithDelay, state.initiative.currentIndex);
+
+  if (!nextTurn) {
+    return {
+      newState: stateWithDelay,
+      events: [
+        { type: 'turn-ended', combatantId: currentCombatantId },
+        { type: 'combatant-delayed', combatantId: currentCombatantId },
+        { type: 'all-combatants-dead' }
+      ]
+    };
+  }
+
+  const nextCombatant = state.combatants[nextTurn.combatantId];
+  const events: DomainEvent[] = [
+    { type: 'turn-ended', combatantId: currentCombatantId },
+    { type: 'combatant-delayed', combatantId: currentCombatantId },
+    { type: 'reaction-reset', combatantId: nextTurn.combatantId, cause: 'auto' }
+  ];
+
+  if (nextTurn.round !== state.round) {
+    events.push({ type: 'round-started', round: nextTurn.round });
+  }
+
+  events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
+
+  return {
+    newState: {
+      ...stateWithDelay,
+      round: nextTurn.round,
+      initiative: {
+        ...stateWithDelay.initiative,
+        currentIndex: nextTurn.index
+      },
+      combatants: {
+        ...state.combatants,
+        [nextTurn.combatantId]: {
+          ...nextCombatant,
+          reactionUsedThisRound: false
+        }
+      }
+    },
+    events
+  };
+}
+
+function resumeFromDelay(state: EncounterState, combatantId: CombatantId, insertIndex: number): CommandResult {
+  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
+  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
+    return reject(state, 'RESUME_FROM_DELAY', 'RESUME_FROM_DELAY requires a valid current combatant');
+  }
+
+  const resumingCombatant = state.combatants[combatantId];
+  if (!resumingCombatant) {
+    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} not found`);
+  }
+
+  if (!state.initiative.delaying.includes(combatantId)) {
+    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} is not delaying`);
+  }
+
+  if (!resumingCombatant.isAlive) {
+    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} is not alive`);
+  }
+
+  if (!Number.isInteger(insertIndex) || insertIndex < 0 || insertIndex > state.initiative.order.length) {
+    return reject(
+      state,
+      'RESUME_FROM_DELAY',
+      `RESUME_FROM_DELAY insertIndex must be between 0 and ${state.initiative.order.length}`
+    );
+  }
+
+  const nextOrder = [...state.initiative.order];
+  nextOrder.splice(insertIndex, 0, combatantId);
+
+  return {
+    newState: {
+      ...state,
+      initiative: {
+        ...state.initiative,
+        order: nextOrder,
+        currentIndex: insertIndex,
+        delaying: state.initiative.delaying.filter((delayingCombatantId) => delayingCombatantId !== combatantId)
+      },
+      combatants: {
+        ...state.combatants,
+        [combatantId]: {
+          ...resumingCombatant,
+          reactionUsedThisRound: false
+        }
+      }
+    },
+    events: [
+      { type: 'turn-ended', combatantId: currentCombatantId },
+      { type: 'combatant-resumed-from-delay', combatantId, insertIndex },
+      { type: 'reaction-reset', combatantId, cause: 'auto' },
+      { type: 'turn-started', combatantId, round: state.round }
+    ]
+  };
 }
 
 function resetEncounter(state: EncounterState): CommandResult {
