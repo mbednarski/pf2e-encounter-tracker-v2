@@ -44,7 +44,7 @@ Conditions gated on ability scores (Clumsy → Dex, Enfeebled → Str, Stupefied
 |---|---|
 | `strSkills` | Athletics |
 | `dexSkills` | Acrobatics, Stealth, Thievery |
-| `intSkills` | Arcana, Crafting, Society |
+| `intSkills` | Arcana, Crafting, Occultism, Society |
 | `wisSkills` | Medicine, Nature, Religion, Survival |
 | `chaSkills` | Deception, Diplomacy, Intimidation, Performance |
 | `mentalSkills` | All of intSkills + wisSkills + chaSkills |
@@ -183,7 +183,7 @@ Status penalty equal to value on Strength-based checks and DCs, including melee 
 }
 ```
 
-No automated modifiers — can't distinguish Str-based vs Dex-based attacks from statblock data.
+No automated attack or damage modifiers — can't distinguish Str-based vs Dex-based attacks from statblock data.
 
 #### Stupefied (1–4)
 
@@ -204,7 +204,7 @@ Status penalty equal to value on mental checks, spell attack rolls, and spell DC
 }
 ```
 
-No automated modifiers — can't identify mental skills or spell stats from creature data.
+No automated spell attack or spell DC modifiers — those spell stats are outside the current combatant stat model.
 
 #### Drained (1–4)
 

@@ -397,6 +397,37 @@ export interface Modifier {
   value: number | 'effectValue' | '-effectValue';
 }
 
+export interface AppliedModifier {
+  effectId: string;
+  instanceId: string;
+  sourceName: string;
+  bonusType: BonusType;
+  value: number;
+  suppressed: boolean;
+}
+
+export interface ComputedStat {
+  base: number;
+  final: number;
+  modifiers: AppliedModifier[];
+}
+
+export interface ComputedModifierBucket {
+  total: number;
+  modifiers: AppliedModifier[];
+}
+
+export interface ComputedStats {
+  ac: ComputedStat;
+  fortitude: ComputedStat;
+  reflex: ComputedStat;
+  will: ComputedStat;
+  perception: ComputedStat;
+  skills: Record<string, ComputedStat>;
+  attackRolls: ComputedModifierBucket;
+  allDCs: ComputedModifierBucket;
+}
+
 export type TurnBoundarySuggestion =
   | { type: 'suggestDecrement'; amount: number; description?: string }
   | { type: 'suggestRemove'; description: string }
