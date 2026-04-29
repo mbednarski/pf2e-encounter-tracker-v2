@@ -189,6 +189,38 @@ interface BaseCommand<TType extends CommandType, TPayload> {
   payload: TPayload;
 }
 
+export interface ApplyEffectPayload {
+  effectId: string;
+  targetId: CombatantId;
+  sourceId?: CombatantId;
+  value?: number;
+  duration?: Duration;
+  note?: string;
+}
+
+export interface RemoveEffectPayload {
+  targetId: CombatantId;
+  instanceId: string;
+}
+
+export interface SetEffectValuePayload {
+  targetId: CombatantId;
+  instanceId: string;
+  newValue: number;
+}
+
+export interface ModifyEffectValuePayload {
+  targetId: CombatantId;
+  instanceId: string;
+  delta: number;
+}
+
+export interface SetEffectDurationPayload {
+  combatantId: CombatantId;
+  instanceId: string;
+  newDuration: Duration;
+}
+
 export type Command =
   | BaseCommand<'START_ENCOUNTER', Record<string, never>>
   | BaseCommand<'COMPLETE_ENCOUNTER', Record<string, never>>
@@ -205,11 +237,11 @@ export type Command =
   | BaseCommand<'APPLY_HEALING', { combatantId: CombatantId; amount: number }>
   | BaseCommand<'SET_TEMP_HP', { combatantId: CombatantId; amount: number }>
   | BaseCommand<'SET_HP', { combatantId: CombatantId; amount: number }>
-  | BaseCommand<'APPLY_EFFECT', Record<string, unknown>>
-  | BaseCommand<'REMOVE_EFFECT', Record<string, unknown>>
-  | BaseCommand<'SET_EFFECT_VALUE', Record<string, unknown>>
-  | BaseCommand<'MODIFY_EFFECT_VALUE', Record<string, unknown>>
-  | BaseCommand<'SET_EFFECT_DURATION', Record<string, unknown>>
+  | BaseCommand<'APPLY_EFFECT', ApplyEffectPayload>
+  | BaseCommand<'REMOVE_EFFECT', RemoveEffectPayload>
+  | BaseCommand<'SET_EFFECT_VALUE', SetEffectValuePayload>
+  | BaseCommand<'MODIFY_EFFECT_VALUE', ModifyEffectValuePayload>
+  | BaseCommand<'SET_EFFECT_DURATION', SetEffectDurationPayload>
   | BaseCommand<'USE_SPELL_SLOT', Record<string, unknown>>
   | BaseCommand<'RESTORE_SPELL_SLOT', Record<string, unknown>>
   | BaseCommand<'USE_FOCUS_POINT', Record<string, unknown>>
@@ -286,6 +318,40 @@ export type DomainEvent =
   | { type: 'reaction-used'; combatantId: CombatantId }
   | { type: 'reaction-reset'; combatantId: CombatantId; cause: 'auto' | 'manual' }
   | { type: 'note-changed'; combatantId: CombatantId }
+  | {
+      type: 'effect-applied';
+      combatantId: CombatantId;
+      effectId: string;
+      effectName: string;
+      instanceId: string;
+      value?: number;
+      parentInstanceId?: string;
+    }
+  | {
+      type: 'effect-removed';
+      combatantId: CombatantId;
+      effectId: string;
+      effectName: string;
+      instanceId: string;
+      reason: 'removed' | 'expired' | 'cascade' | 'auto-decremented';
+      parentInstanceId?: string;
+    }
+  | {
+      type: 'effect-value-changed';
+      combatantId: CombatantId;
+      effectId: string;
+      effectName: string;
+      instanceId: string;
+      from: number;
+      to: number;
+    }
+  | {
+      type: 'effect-duration-changed';
+      combatantId: CombatantId;
+      effectId: string;
+      effectName: string;
+      instanceId: string;
+    }
   | {
       type: 'hp-changed';
       combatantId: CombatantId;

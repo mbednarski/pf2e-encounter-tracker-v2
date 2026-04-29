@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { effectLibrary } from './effects/library';
 import { applyCommand } from './reducer';
 import { activeEncounter, combatant, command, emptyEffects, encounter, expectEvents, expectRejected } from './test-support';
 
@@ -692,5 +693,306 @@ describe('applyCommand combat state slice', () => {
       'Combatant fighter-1 is already alive',
       state
     );
+  });
+});
+
+describe('applyCommand effect slice', () => {
+  test('applies a value effect with defaults and freezes the source label', () => {
+    const state = activeEncounter();
+
+    const result = applyCommand(
+      state,
+      command('APPLY_EFFECT', {
+        effectId: 'frightened',
+        targetId: 'fighter-1',
+        sourceId: 'goblin-1'
+      }),
+      effectLibrary
+    );
+
+    const applied = result.newState.combatants['fighter-1'].appliedEffects;
+    expect(applied).toEqual([
+      {
+        instanceId: 'cmd-APPLY_EFFECT:effect-1',
+        effectId: 'frightened',
+        value: 1,
+        sourceId: 'goblin-1',
+        sourceLabel: 'Goblin Warrior',
+        duration: { type: 'unlimited' }
+      }
+    ]);
+    expect(result.events).toEqual([
+      {
+        type: 'effect-applied',
+        combatantId: 'fighter-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId: 'cmd-APPLY_EFFECT:effect-1',
+        value: 1
+      }
+    ]);
+  });
+
+  test('rejects invalid effect application payloads', () => {
+    const state = activeEncounter();
+
+    expectRejected(
+      applyCommand(state, command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'missing-1' }), effectLibrary),
+      'APPLY_EFFECT',
+      'Combatant missing-1 not found',
+      state
+    );
+    expectRejected(
+      applyCommand(
+        state,
+        command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1', sourceId: 'missing-1' }),
+        effectLibrary
+      ),
+      'APPLY_EFFECT',
+      'Source combatant missing-1 not found',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('APPLY_EFFECT', { effectId: 'missing-effect', targetId: 'fighter-1' }), effectLibrary),
+      'APPLY_EFFECT',
+      'Effect missing-effect not found',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1', value: 0 }), effectLibrary),
+      'APPLY_EFFECT',
+      'APPLY_EFFECT value must be >= 1 for Frightened',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('APPLY_EFFECT', { effectId: 'off-guard', targetId: 'fighter-1', value: 1 }), effectLibrary),
+      'APPLY_EFFECT',
+      'APPLY_EFFECT value is not allowed for Off-Guard',
+      state
+    );
+  });
+
+  test('creates duplicate same-effect instances and does not enforce maxValue', () => {
+    const state = activeEncounter();
+    const first = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1', value: 7 }),
+      effectLibrary
+    );
+    const second = applyCommand(
+      first.newState,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1', value: 10 }),
+      effectLibrary
+    );
+
+    expect(second.newState.combatants['fighter-1'].appliedEffects).toMatchObject([
+      { instanceId: 'cmd-APPLY_EFFECT:effect-1', effectId: 'frightened', value: 7 },
+      { instanceId: 'cmd-APPLY_EFFECT:effect-2', effectId: 'frightened', value: 10 }
+    ]);
+  });
+
+  test('sets, modifies, and auto-removes effect values', () => {
+    const state = applyCommand(
+      activeEncounter(),
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1', value: 2 }),
+      effectLibrary
+    ).newState;
+    const instanceId = state.combatants['fighter-1'].appliedEffects[0].instanceId;
+
+    const set = applyCommand(
+      state,
+      command('SET_EFFECT_VALUE', { targetId: 'fighter-1', instanceId, newValue: 10 }),
+      effectLibrary
+    );
+    const modified = applyCommand(
+      set.newState,
+      command('MODIFY_EFFECT_VALUE', { targetId: 'fighter-1', instanceId, delta: -3 }),
+      effectLibrary
+    );
+    const removed = applyCommand(
+      modified.newState,
+      command('MODIFY_EFFECT_VALUE', { targetId: 'fighter-1', instanceId, delta: -7 }),
+      effectLibrary
+    );
+
+    expect(set.newState.combatants['fighter-1'].appliedEffects[0].value).toBe(10);
+    expectEvents(set, [
+      {
+        type: 'effect-value-changed',
+        combatantId: 'fighter-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId,
+        from: 2,
+        to: 10
+      }
+    ]);
+    expect(modified.newState.combatants['fighter-1'].appliedEffects[0].value).toBe(7);
+    expectEvents(modified, [
+      {
+        type: 'effect-value-changed',
+        combatantId: 'fighter-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId,
+        from: 10,
+        to: 7
+      }
+    ]);
+    expect(removed.newState.combatants['fighter-1'].appliedEffects).toEqual([]);
+    expectEvents(removed, [
+      {
+        type: 'effect-removed',
+        combatantId: 'fighter-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId,
+        reason: 'auto-decremented'
+      }
+    ]);
+  });
+
+  test('rejects invalid value and duration changes', () => {
+    const state = applyCommand(
+      activeEncounter(),
+      command('APPLY_EFFECT', { effectId: 'off-guard', targetId: 'fighter-1' }),
+      effectLibrary
+    ).newState;
+    const instanceId = state.combatants['fighter-1'].appliedEffects[0].instanceId;
+
+    expectRejected(
+      applyCommand(state, command('SET_EFFECT_VALUE', { targetId: 'fighter-1', instanceId, newValue: 1 }), effectLibrary),
+      'SET_EFFECT_VALUE',
+      'SET_EFFECT_VALUE requires a value effect',
+      state
+    );
+    expectRejected(
+      applyCommand(state, command('SET_EFFECT_DURATION', { combatantId: 'fighter-1', instanceId, newDuration: { type: 'rounds', count: 0 } }), effectLibrary),
+      'SET_EFFECT_DURATION',
+      'SET_EFFECT_DURATION duration is invalid',
+      state
+    );
+  });
+
+  test('updates effect duration', () => {
+    const state = applyCommand(
+      activeEncounter(),
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1', value: 2 }),
+      effectLibrary
+    ).newState;
+    const instanceId = state.combatants['fighter-1'].appliedEffects[0].instanceId;
+
+    const result = applyCommand(
+      state,
+      command('SET_EFFECT_DURATION', {
+        combatantId: 'fighter-1',
+        instanceId,
+        newDuration: { type: 'rounds', count: 3 }
+      }),
+      effectLibrary
+    );
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects[0].duration).toEqual({ type: 'rounds', count: 3 });
+    expectEvents(result, [
+      {
+        type: 'effect-duration-changed',
+        combatantId: 'fighter-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId
+      }
+    ]);
+  });
+
+  test('creates implied children and removal cascades only through the parent chain', () => {
+    const withStandalone = applyCommand(
+      activeEncounter(),
+      command('APPLY_EFFECT', { effectId: 'off-guard', targetId: 'fighter-1' }),
+      effectLibrary
+    ).newState;
+    const standaloneId = withStandalone.combatants['fighter-1'].appliedEffects[0].instanceId;
+
+    const grabbed = applyCommand(
+      withStandalone,
+      command('APPLY_EFFECT', { effectId: 'grabbed', targetId: 'fighter-1', sourceId: 'goblin-1' }),
+      effectLibrary
+    );
+
+    const effects = grabbed.newState.combatants['fighter-1'].appliedEffects;
+    const grabbedInstance = effects.find((effect) => effect.effectId === 'grabbed');
+    expect(grabbedInstance).toBeDefined();
+    expect(effects).toMatchObject([
+      { instanceId: standaloneId, effectId: 'off-guard' },
+      { instanceId: 'cmd-APPLY_EFFECT:effect-2', effectId: 'grabbed' },
+      { instanceId: 'cmd-APPLY_EFFECT:effect-3', effectId: 'off-guard', parentInstanceId: 'cmd-APPLY_EFFECT:effect-2' },
+      { instanceId: 'cmd-APPLY_EFFECT:effect-4', effectId: 'immobilized', parentInstanceId: 'cmd-APPLY_EFFECT:effect-2' }
+    ]);
+    expectEvents(grabbed, [
+      {
+        type: 'effect-applied',
+        combatantId: 'fighter-1',
+        effectId: 'grabbed',
+        effectName: 'Grabbed',
+        instanceId: 'cmd-APPLY_EFFECT:effect-2'
+      },
+      {
+        type: 'effect-applied',
+        combatantId: 'fighter-1',
+        effectId: 'off-guard',
+        effectName: 'Off-Guard',
+        instanceId: 'cmd-APPLY_EFFECT:effect-3',
+        parentInstanceId: 'cmd-APPLY_EFFECT:effect-2'
+      },
+      {
+        type: 'effect-applied',
+        combatantId: 'fighter-1',
+        effectId: 'immobilized',
+        effectName: 'Immobilized',
+        instanceId: 'cmd-APPLY_EFFECT:effect-4',
+        parentInstanceId: 'cmd-APPLY_EFFECT:effect-2'
+      }
+    ]);
+
+    const removed = applyCommand(
+      grabbed.newState,
+      command('REMOVE_EFFECT', { targetId: 'fighter-1', instanceId: grabbedInstance!.instanceId }),
+      effectLibrary
+    );
+
+    expect(removed.newState.combatants['fighter-1'].appliedEffects).toEqual([
+      {
+        instanceId: standaloneId,
+        effectId: 'off-guard',
+        duration: { type: 'unlimited' }
+      }
+    ]);
+    expectEvents(removed, [
+      {
+        type: 'effect-removed',
+        combatantId: 'fighter-1',
+        effectId: 'grabbed',
+        effectName: 'Grabbed',
+        instanceId: 'cmd-APPLY_EFFECT:effect-2',
+        reason: 'removed'
+      },
+      {
+        type: 'effect-removed',
+        combatantId: 'fighter-1',
+        effectId: 'off-guard',
+        effectName: 'Off-Guard',
+        instanceId: 'cmd-APPLY_EFFECT:effect-3',
+        parentInstanceId: 'cmd-APPLY_EFFECT:effect-2',
+        reason: 'cascade'
+      },
+      {
+        type: 'effect-removed',
+        combatantId: 'fighter-1',
+        effectId: 'immobilized',
+        effectName: 'Immobilized',
+        instanceId: 'cmd-APPLY_EFFECT:effect-4',
+        parentInstanceId: 'cmd-APPLY_EFFECT:effect-2',
+        reason: 'cascade'
+      }
+    ]);
   });
 });
