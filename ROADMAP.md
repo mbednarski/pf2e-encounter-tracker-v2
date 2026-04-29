@@ -2,6 +2,8 @@
 
 This roadmap tracks implementation milestones. Canonical behavior still lives in the `pf2e-*-spec.md` files; roadmap items should link back to those specs when they become GitHub issues.
 
+The live, ordered backlog is the GitHub Project: [PF2e Tracker v2 backlog](https://github.com/users/mbednarski/projects/3). Issues there carry a **Track** field (A/B/C/Deferred) and an **Order** field that matches the next-up sequence; the deferred filter (`-track:Deferred`) hides tracking issues from the active view.
+
 Active work is grouped into three parallel tracks. Within each track items are dependency-ordered; across tracks they are independent and can ship in any order.
 
 - **Track A — close M3 (effects engine):** #10 → #11 → #12.
