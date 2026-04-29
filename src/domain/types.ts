@@ -394,8 +394,10 @@ export type StatTarget =
 export interface Modifier {
   stat: StatTarget;
   bonusType: BonusType;
-  value: number | 'effectValue' | '-effectValue';
+  value: ModifierValue;
 }
+
+export type ModifierValue = number | { kind: 'effectValue'; sign: 1 | -1 };
 
 export interface AppliedModifier {
   effectId: string;

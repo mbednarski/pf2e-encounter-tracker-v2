@@ -311,10 +311,12 @@ This function is stateless, has no side effects, and is called on every render. 
 ### 9.2 Modifier Shape
 
 ```typescript
+type ModifierValue = number | { kind: "effectValue"; sign: 1 | -1 }
+
 interface Modifier {
   stat: StatTarget
   bonusType: BonusType
-  value: number | "effectValue" | "-effectValue"
+  value: ModifierValue
 }
 
 type BonusType = "status" | "circumstance" | "item" | "untyped"
@@ -329,9 +331,9 @@ type StatTarget =
   | string    // specific skill: "athletics", "stealth", etc.
 ```
 
-`"effectValue"` resolves to the current value of the parent `AppliedEffect`. Frightened 2 with modifier `{ stat: "attackRolls", bonusType: "status", value: "-effectValue" }` resolves to a -2 status penalty to attack rolls.
+`{ kind: "effectValue", sign: 1 }` resolves to the current value of the parent `AppliedEffect`; `sign: -1` resolves to the negative of that value. Frightened 2 with modifier `{ stat: "attackRolls", bonusType: "status", value: { kind: "effectValue", sign: -1 } }` resolves to a -2 status penalty to attack rolls.
 
-**"All" variant expansion:** `allSaves` expands to `[fortitude, reflex, will]`. `allSkills` expands against the creature's actual skill list (creature-dependent). Both explicit targets and "all" variants are supported — explicit takes precedence if both exist.
+**"All" variant expansion:** `allSaves` expands to `[fortitude, reflex, will]`. `allSkills` expands against the creature's actual skill list (creature-dependent). Both explicit targets and "all" variants are supported; expanded and explicit modifiers are collected together, then PF2e stacking decides which same-type value remains active.
 
 ### 9.3 PF2e Stacking Rules
 
@@ -355,9 +357,9 @@ interface ComputedStats {
   reflex: { final: number; base: number; modifiers: AppliedModifier[] }
   will: { final: number; base: number; modifiers: AppliedModifier[] }
   perception: { final: number; base: number; modifiers: AppliedModifier[] }
-  attackRolls: { final: number; base: number; modifiers: AppliedModifier[] }
+  attackRolls: { total: number; modifiers: AppliedModifier[] }
+  allDCs: { total: number; modifiers: AppliedModifier[] }
   skills: Record<string, { final: number; base: number; modifiers: AppliedModifier[] }>
-  // ... other derivable stats
 }
 
 interface AppliedModifier {

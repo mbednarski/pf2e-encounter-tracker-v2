@@ -129,14 +129,14 @@ function applyStacking(modifiers: AppliedModifier[]): AppliedModifier[] {
     const bonuses = typedModifiers.filter((modifier) => modifier.value > 0);
     const penalties = typedModifiers.filter((modifier) => modifier.value < 0);
 
-    keepStrongest(bonuses, active);
+    keepSelected(bonuses, active, (modifier, selected) => modifier.value > selected.value);
 
     if (bonusType === 'untyped') {
       for (const penalty of penalties) {
         active.add(penalty);
       }
     } else {
-      keepWorstPenalty(penalties, active);
+      keepSelected(penalties, active, (modifier, selected) => modifier.value < selected.value);
     }
 
     for (const zero of typedModifiers.filter((modifier) => modifier.value === 0)) {
@@ -151,25 +151,18 @@ function uniqueBonusTypes(modifiers: AppliedModifier[]): BonusType[] {
   return Array.from(new Set(modifiers.map((modifier) => modifier.bonusType)));
 }
 
-function keepStrongest(modifiers: AppliedModifier[], active: Set<AppliedModifier>): void {
-  const strongest = modifiers.reduce<AppliedModifier | undefined>(
-    (current, modifier) => (!current || modifier.value > current.value ? modifier : current),
+function keepSelected(
+  modifiers: AppliedModifier[],
+  active: Set<AppliedModifier>,
+  isBetterSelection: (modifier: AppliedModifier, selected: AppliedModifier) => boolean
+): void {
+  const selected = modifiers.reduce<AppliedModifier | undefined>(
+    (current, modifier) => (!current || isBetterSelection(modifier, current) ? modifier : current),
     undefined
   );
 
-  if (strongest) {
-    active.add(strongest);
-  }
-}
-
-function keepWorstPenalty(modifiers: AppliedModifier[], active: Set<AppliedModifier>): void {
-  const worst = modifiers.reduce<AppliedModifier | undefined>(
-    (current, modifier) => (!current || modifier.value < current.value ? modifier : current),
-    undefined
-  );
-
-  if (worst) {
-    active.add(worst);
+  if (selected) {
+    active.add(selected);
   }
 }
 
@@ -182,9 +175,11 @@ function resolveModifierValue(modifier: Modifier, appliedEffect: AppliedEffect):
     return modifier.value;
   }
 
-  const effectValue = appliedEffect.value ?? 1;
+  return modifier.value.sign * resolveAppliedEffectValue(appliedEffect);
+}
 
-  return modifier.value === 'effectValue' ? effectValue : -effectValue;
+function resolveAppliedEffectValue(appliedEffect: AppliedEffect): number {
+  return appliedEffect.value ?? 1;
 }
 
 function toAppliedModifier(
@@ -196,7 +191,7 @@ function toAppliedModifier(
   return {
     effectId: appliedEffect.effectId,
     instanceId: appliedEffect.instanceId,
-    sourceName: definition.hasValue ? `${definition.name} ${appliedEffect.value ?? 1}` : definition.name,
+    sourceName: definition.hasValue ? `${definition.name} ${resolveAppliedEffectValue(appliedEffect)}` : definition.name,
     bonusType,
     value,
     suppressed: false

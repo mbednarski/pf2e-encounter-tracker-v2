@@ -1,13 +1,15 @@
 import type { EffectDefinition, EffectLibrary, Modifier } from '../types';
 
+const negativeEffectValue = { kind: 'effectValue', sign: -1 } as const;
+
 function allChecksAndDcsModifiers(): Modifier[] {
   return [
-    { stat: 'ac', bonusType: 'status', value: '-effectValue' },
-    { stat: 'allSaves', bonusType: 'status', value: '-effectValue' },
-    { stat: 'perception', bonusType: 'status', value: '-effectValue' },
-    { stat: 'attackRolls', bonusType: 'status', value: '-effectValue' },
-    { stat: 'allSkills', bonusType: 'status', value: '-effectValue' },
-    { stat: 'allDCs', bonusType: 'status', value: '-effectValue' }
+    { stat: 'ac', bonusType: 'status', value: negativeEffectValue },
+    { stat: 'allSaves', bonusType: 'status', value: negativeEffectValue },
+    { stat: 'perception', bonusType: 'status', value: negativeEffectValue },
+    { stat: 'attackRolls', bonusType: 'status', value: negativeEffectValue },
+    { stat: 'allSkills', bonusType: 'status', value: negativeEffectValue },
+    { stat: 'allDCs', bonusType: 'status', value: negativeEffectValue }
   ];
 }
 
@@ -56,9 +58,9 @@ export const effectLibrary: EffectLibrary = {
     hasValue: true,
     maxValue: 4,
     modifiers: [
-      { stat: 'ac', bonusType: 'status', value: '-effectValue' },
-      { stat: 'reflex', bonusType: 'status', value: '-effectValue' },
-      { stat: 'dexSkills', bonusType: 'status', value: '-effectValue' }
+      { stat: 'ac', bonusType: 'status', value: negativeEffectValue },
+      { stat: 'reflex', bonusType: 'status', value: negativeEffectValue },
+      { stat: 'dexSkills', bonusType: 'status', value: negativeEffectValue }
     ],
     description: "Also applies to Dex-based attack rolls, which are not automated because creature attacks don't tag ability."
   }),
@@ -67,7 +69,7 @@ export const effectLibrary: EffectLibrary = {
     name: 'Enfeebled',
     hasValue: true,
     maxValue: 4,
-    modifiers: [{ stat: 'strSkills', bonusType: 'status', value: '-effectValue' }],
+    modifiers: [{ stat: 'strSkills', bonusType: 'status', value: negativeEffectValue }],
     description:
       "Also applies to Str-based melee attack rolls and damage rolls, which are not automated because creature attacks don't tag ability."
   }),
@@ -77,8 +79,8 @@ export const effectLibrary: EffectLibrary = {
     hasValue: true,
     maxValue: 4,
     modifiers: [
-      { stat: 'mentalSkills', bonusType: 'status', value: '-effectValue' },
-      { stat: 'will', bonusType: 'status', value: '-effectValue' }
+      { stat: 'mentalSkills', bonusType: 'status', value: negativeEffectValue },
+      { stat: 'will', bonusType: 'status', value: negativeEffectValue }
     ],
     description:
       'Also applies to spell attack rolls and spell DCs. When casting a spell, DC 5 + value flat check or spell is lost.'
@@ -88,7 +90,7 @@ export const effectLibrary: EffectLibrary = {
     name: 'Drained',
     hasValue: true,
     maxValue: 4,
-    modifiers: [{ stat: 'fortitude', bonusType: 'status', value: '-effectValue' }],
+    modifiers: [{ stat: 'fortitude', bonusType: 'status', value: negativeEffectValue }],
     persistAfterEncounter: true,
     description:
       "Reduces max HP by level times value. Also applies to Con-based checks beyond Fortitude. Decreases by 1 after a full night's rest."

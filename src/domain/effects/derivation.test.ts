@@ -39,13 +39,6 @@ function applied(effectId: string, value?: number, instanceId = `${effectId}-${v
 }
 
 const customLibrary: EffectLibrary = {
-  statusBoost: {
-    id: 'statusBoost',
-    name: 'Status Boost',
-    category: 'custom',
-    hasValue: false,
-    modifiers: [{ stat: 'ac', bonusType: 'status', value: 1 }]
-  },
   lowerStatusBoost: {
     id: 'lowerStatusBoost',
     name: 'Lower Status Boost',
@@ -124,9 +117,23 @@ const customLibrary: EffectLibrary = {
     category: 'custom',
     hasValue: true,
     modifiers: [
-      { stat: 'attackRolls', bonusType: 'status', value: 'effectValue' },
-      { stat: 'allDCs', bonusType: 'status', value: '-effectValue' }
+      { stat: 'attackRolls', bonusType: 'status', value: { kind: 'effectValue', sign: 1 } },
+      { stat: 'allDCs', bonusType: 'status', value: { kind: 'effectValue', sign: -1 } }
     ]
+  },
+  stealthStatusPenalty: {
+    id: 'stealthStatusPenalty',
+    name: 'Stealth Status Penalty',
+    category: 'custom',
+    hasValue: false,
+    modifiers: [{ stat: 'stealth', bonusType: 'status', value: -1 }]
+  },
+  savePenalty: {
+    id: 'savePenalty',
+    name: 'Save Penalty',
+    category: 'custom',
+    hasValue: false,
+    modifiers: [{ stat: 'allSaves', bonusType: 'circumstance', value: -2 }]
   }
 };
 
@@ -258,5 +265,61 @@ describe('deriveStats', () => {
       total: -3,
       modifiers: [expect.objectContaining({ effectId: 'valuePenalty', value: -3, suppressed: false })]
     });
+  });
+
+  test('defaults missing value effects to 1 in resolved values and source names', () => {
+    const computed = deriveStats(baseStats, [applied('valuePenalty')], customLibrary);
+
+    expect(computed.attackRolls).toEqual({
+      total: 1,
+      modifiers: [
+        expect.objectContaining({
+          effectId: 'valuePenalty',
+          sourceName: 'Value Penalty 1',
+          value: 1,
+          suppressed: false
+        })
+      ]
+    });
+    expect(computed.allDCs).toEqual({
+      total: -1,
+      modifiers: [
+        expect.objectContaining({
+          effectId: 'valuePenalty',
+          sourceName: 'Value Penalty 1',
+          value: -1,
+          suppressed: false
+        })
+      ]
+    });
+  });
+
+  test('suppresses exactly one lower same-type stealth modifier from explicit and ability meta-targets', () => {
+    const computed = deriveStats(baseStats, [applied('stealthStatusPenalty'), applied('abilityMetaPenalty')], customLibrary);
+
+    expect(computed.skills.stealth.final).toBe(9);
+    expect(computed.skills.stealth.modifiers).toEqual([
+      expect.objectContaining({ effectId: 'stealthStatusPenalty', value: -1, suppressed: true }),
+      expect.objectContaining({ effectId: 'abilityMetaPenalty', value: -2, suppressed: false })
+    ]);
+    expect(computed.skills.stealth.modifiers.filter((modifier) => modifier.suppressed)).toHaveLength(1);
+  });
+
+  test('applies standalone Fascinated to all actual creature skills', () => {
+    const computed = deriveStats(baseStats, [applied('fascinated')], effectLibrary);
+
+    expect(computed.perception.final).toBe(4);
+    expect(computed.skills.stealth.final).toBe(9);
+    expect(computed.skills.warfareLore.final).toBe(10);
+    expect(Object.keys(computed.skills)).toHaveLength(Object.keys(baseStats.skills).length);
+  });
+
+  test('applies standalone custom allSaves modifier to all saves', () => {
+    const computed = deriveStats(baseStats, [applied('savePenalty')], customLibrary);
+
+    expect(computed.fortitude.final).toBe(7);
+    expect(computed.reflex.final).toBe(6);
+    expect(computed.will.final).toBe(5);
+    expect(computed.ac.final).toBe(18);
   });
 });
