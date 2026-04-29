@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   combatantCardActions,
+  combatantVisualState,
   dispatchEncounterCommand,
   makeCombatant,
   makeCreatureCombatant,
@@ -226,6 +227,57 @@ describe('combatantCardActions', () => {
       canMarkDead: false,
       canRevive: false
     });
+  });
+});
+
+describe('combatantVisualState', () => {
+  test('returns "alive" for a living combatant above 0 HP', () => {
+    const state = stateWithTwoCombatants();
+
+    expect(combatantVisualState(state.combatants['goblin-1'])).toBe('alive');
+  });
+
+  test('returns "unconscious" when a living combatant is at 0 HP', () => {
+    const state = stateWithTwoCombatants();
+    const downed = dispatchEncounterCommand(
+      state,
+      [],
+      toCommand('APPLY_DAMAGE', { combatantId: 'goblin-1', amount: 999 }, 'cmd-down')
+    );
+
+    expect(downed.state.combatants['goblin-1'].currentHp).toBe(0);
+    expect(downed.state.combatants['goblin-1'].isAlive).toBe(true);
+    expect(combatantVisualState(downed.state.combatants['goblin-1'])).toBe('unconscious');
+  });
+
+  test('returns "dead" once the combatant is marked dead, regardless of HP', () => {
+    const state = stateWithTwoCombatants();
+    const killed = dispatchEncounterCommand(
+      state,
+      [],
+      toCommand('MARK_DEAD', { combatantId: 'goblin-1' }, 'cmd-kill')
+    );
+
+    expect(killed.state.combatants['goblin-1'].isAlive).toBe(false);
+    expect(combatantVisualState(killed.state.combatants['goblin-1'])).toBe('dead');
+  });
+
+  test('reviving a dead combatant restores the "alive" visual state', () => {
+    const state = stateWithTwoCombatants();
+    const killed = dispatchEncounterCommand(
+      state,
+      [],
+      toCommand('MARK_DEAD', { combatantId: 'goblin-1' }, 'cmd-kill')
+    );
+    const revived = dispatchEncounterCommand(
+      killed.state,
+      killed.feedback,
+      toCommand('REVIVE', { combatantId: 'goblin-1' }, 'cmd-revive')
+    );
+
+    expect(revived.state.combatants['goblin-1'].isAlive).toBe(true);
+    expect(revived.state.combatants['goblin-1'].currentHp).toBeGreaterThan(0);
+    expect(combatantVisualState(revived.state.combatants['goblin-1'])).toBe('alive');
   });
 });
 
