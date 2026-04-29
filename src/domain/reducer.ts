@@ -76,6 +76,16 @@ export function applyCommand(state: EncounterState, command: Command, _effectLib
       return setTempHp(state, command.payload.combatantId, command.payload.amount);
     case 'SET_HP':
       return setHp(state, command.payload.combatantId, command.payload.amount);
+    case 'MARK_REACTION_USED':
+      return markReactionUsed(state, command.payload.combatantId);
+    case 'RESET_REACTION':
+      return resetReaction(state, command.payload.combatantId);
+    case 'SET_NOTE':
+      return setNote(state, command.payload.combatantId, command.payload.note);
+    case 'MARK_DEAD':
+      return markDead(state, command.payload.combatantId);
+    case 'REVIVE':
+      return revive(state, command.payload.combatantId);
     default:
       return reject(state, command.type, `${command.type} is not implemented in the first domain slice`);
   }
@@ -206,6 +216,10 @@ function endTurn(state: EncounterState): CommandResult {
     return reject(state, 'END_TURN', 'END_TURN requires a valid current combatant');
   }
 
+  return advanceTurn(state, currentCombatantId);
+}
+
+function advanceTurn(state: EncounterState, currentCombatantId: CombatantId): CommandResult {
   const nextTurn = findNextLiveTurn(state);
   if (!nextTurn) {
     return {
@@ -395,6 +409,94 @@ function setHp(state: EncounterState, combatantId: CombatantId, amount: number):
   });
 }
 
+function markReactionUsed(state: EncounterState, combatantId: CombatantId): CommandResult {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return reject(state, 'MARK_REACTION_USED', `Combatant ${combatantId} not found`);
+  }
+
+  if (!combatant.isAlive) {
+    return reject(state, 'MARK_REACTION_USED', `Combatant ${combatantId} is not alive`);
+  }
+
+  return updateCombatant(state, { ...combatant, reactionUsedThisRound: true }, [
+    { type: 'reaction-used', combatantId }
+  ]);
+}
+
+function resetReaction(state: EncounterState, combatantId: CombatantId): CommandResult {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return reject(state, 'RESET_REACTION', `Combatant ${combatantId} not found`);
+  }
+
+  return updateCombatant(state, { ...combatant, reactionUsedThisRound: false }, [
+    { type: 'reaction-reset', combatantId, cause: 'manual' }
+  ]);
+}
+
+function setNote(state: EncounterState, combatantId: CombatantId, note: string | null): CommandResult {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return reject(state, 'SET_NOTE', `Combatant ${combatantId} not found`);
+  }
+
+  const updatedCombatant = { ...combatant };
+  if (note === null) {
+    delete updatedCombatant.notes;
+  } else {
+    updatedCombatant.notes = note;
+  }
+
+  return updateCombatant(state, updatedCombatant, [{ type: 'note-changed', combatantId }]);
+}
+
+function markDead(state: EncounterState, combatantId: CombatantId): CommandResult {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return reject(state, 'MARK_DEAD', `Combatant ${combatantId} not found`);
+  }
+
+  if (!combatant.isAlive) {
+    return reject(state, 'MARK_DEAD', `Combatant ${combatantId} is not alive`);
+  }
+
+  const stateWithDeadCombatant: EncounterState = {
+    ...state,
+    combatants: {
+      ...state.combatants,
+      [combatantId]: {
+        ...combatant,
+        isAlive: false
+      }
+    }
+  };
+  const events: DomainEvent[] = [{ type: 'combatant-died', combatantId, cause: 'marked-dead' }];
+
+  if (state.phase !== 'ACTIVE' || state.initiative.order[state.initiative.currentIndex] !== combatantId) {
+    return { newState: stateWithDeadCombatant, events };
+  }
+
+  const advancement = advanceTurn(stateWithDeadCombatant, combatantId);
+  return {
+    newState: advancement.newState,
+    events: [...events, ...advancement.events]
+  };
+}
+
+function revive(state: EncounterState, combatantId: CombatantId): CommandResult {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return reject(state, 'REVIVE', `Combatant ${combatantId} not found`);
+  }
+
+  if (combatant.isAlive) {
+    return reject(state, 'REVIVE', `Combatant ${combatantId} is already alive`);
+  }
+
+  return updateCombatant(state, { ...combatant, isAlive: true }, [{ type: 'combatant-revived', combatantId }]);
+}
+
 function updateHp(
   state: EncounterState,
   combatant: CombatantState,
@@ -415,6 +517,19 @@ function updateHp(
       combatants: {
         ...state.combatants,
         [combatant.id]: updatedCombatant
+      }
+    },
+    events
+  };
+}
+
+function updateCombatant(state: EncounterState, combatant: CombatantState, events: DomainEvent[]): CommandResult {
+  return {
+    newState: {
+      ...state,
+      combatants: {
+        ...state.combatants,
+        [combatant.id]: combatant
       }
     },
     events
