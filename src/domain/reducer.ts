@@ -1,10 +1,13 @@
 import type {
+  AppliedEffect,
   CombatantId,
   CombatantState,
   Command,
   CommandResult,
   CommandType,
   DomainEvent,
+  Duration,
+  EffectDefinition,
   EffectLibrary,
   EncounterPhase,
   EncounterState
@@ -49,7 +52,7 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING']
 };
 
-export function applyCommand(state: EncounterState, command: Command, _effectLibrary: EffectLibrary): CommandResult {
+export function applyCommand(state: EncounterState, command: Command, effectLibrary: EffectLibrary): CommandResult {
   const phaseError = validatePhase(state, command.type);
   if (phaseError) {
     return reject(state, command.type, phaseError);
@@ -61,13 +64,13 @@ export function applyCommand(state: EncounterState, command: Command, _effectLib
     case 'SET_INITIATIVE_ORDER':
       return setInitiativeOrder(state, command.payload.order);
     case 'START_ENCOUNTER':
-      return startEncounter(state);
+      return startEncounter(state, effectLibrary);
     case 'END_TURN':
-      return endTurn(state);
+      return endTurn(state, effectLibrary);
     case 'DELAY':
-      return delayTurn(state);
+      return delayTurn(state, effectLibrary);
     case 'RESUME_FROM_DELAY':
-      return resumeFromDelay(state, command.payload.combatantId, command.payload.insertIndex);
+      return resumeFromDelay(state, command.payload.combatantId, command.payload.insertIndex, effectLibrary);
     case 'COMPLETE_ENCOUNTER':
       return completeEncounter(state);
     case 'RESET_ENCOUNTER':
@@ -80,6 +83,22 @@ export function applyCommand(state: EncounterState, command: Command, _effectLib
       return setTempHp(state, command.payload.combatantId, command.payload.amount);
     case 'SET_HP':
       return setHp(state, command.payload.combatantId, command.payload.amount);
+    case 'APPLY_EFFECT':
+      return applyEffect(state, command, effectLibrary);
+    case 'REMOVE_EFFECT':
+      return removeEffect(state, command.payload.targetId, command.payload.instanceId, effectLibrary, 'removed');
+    case 'SET_EFFECT_VALUE':
+      return setEffectValue(state, command.payload.targetId, command.payload.instanceId, command.payload.newValue, effectLibrary);
+    case 'MODIFY_EFFECT_VALUE':
+      return modifyEffectValue(state, command.payload.targetId, command.payload.instanceId, command.payload.delta, effectLibrary);
+    case 'SET_EFFECT_DURATION':
+      return setEffectDuration(
+        state,
+        command.payload.targetId,
+        command.payload.instanceId,
+        command.payload.newDuration,
+        effectLibrary
+      );
     case 'MARK_REACTION_USED':
       return markReactionUsed(state, command.payload.combatantId);
     case 'RESET_REACTION':
@@ -87,7 +106,7 @@ export function applyCommand(state: EncounterState, command: Command, _effectLib
     case 'SET_NOTE':
       return setNote(state, command.payload.combatantId, command.payload.note);
     case 'MARK_DEAD':
-      return markDead(state, command.payload.combatantId);
+      return markDead(state, command.payload.combatantId, effectLibrary);
     case 'REVIVE':
       return revive(state, command.payload.combatantId);
     default:
@@ -170,7 +189,7 @@ function setInitiativeOrder(state: EncounterState, order: CombatantId[]): Comman
   };
 }
 
-function startEncounter(state: EncounterState): CommandResult {
+function startEncounter(state: EncounterState, effectLibrary: EffectLibrary): CommandResult {
   if (Object.keys(state.combatants).length < 2) {
     return reject(state, 'START_ENCOUNTER', 'START_ENCOUNTER requires at least 2 combatants');
   }
@@ -194,11 +213,17 @@ function startEncounter(state: EncounterState): CommandResult {
     }
   };
 
+  const startExpiry = expireEffectsForBoundary(newState, 'untilTurnStart', firstCombatantId, effectLibrary, 'START_ENCOUNTER');
+  if (startExpiry.kind === 'rejected') {
+    return startExpiry.result;
+  }
+
   return {
-    newState,
+    newState: startExpiry.state,
     events: [
       { type: 'encounter-started' },
       { type: 'phase-changed', from: 'PREPARING', to: 'ACTIVE' },
+      ...startExpiry.events,
       { type: 'turn-started', combatantId: firstCombatantId, round: 1 }
     ]
   };
@@ -214,55 +239,85 @@ function completeEncounter(state: EncounterState): CommandResult {
   };
 }
 
-function endTurn(state: EncounterState): CommandResult {
+function endTurn(state: EncounterState, effectLibrary: EffectLibrary): CommandResult {
   const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
   if (!currentCombatantId || !state.combatants[currentCombatantId]) {
     return reject(state, 'END_TURN', 'END_TURN requires a valid current combatant');
   }
 
-  return advanceTurn(state, currentCombatantId);
+  return advanceTurn(state, currentCombatantId, effectLibrary, 'END_TURN');
 }
 
-function advanceTurn(state: EncounterState, currentCombatantId: CombatantId): CommandResult {
-  const nextTurn = findNextLiveTurn(state);
+function advanceTurn(
+  state: EncounterState,
+  currentCombatantId: CombatantId,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): CommandResult {
+  return advanceAfterTurnEnd(state, currentCombatantId, [{ type: 'turn-ended', combatantId: currentCombatantId }], effectLibrary, commandType);
+}
+
+function advanceAfterTurnEnd(
+  state: EncounterState,
+  currentCombatantId: CombatantId,
+  initialEvents: DomainEvent[],
+  effectLibrary: EffectLibrary,
+  commandType: CommandType,
+  startIndex = state.initiative.currentIndex + 1
+): CommandResult {
+  const endExpiry = expireEffectsForBoundary(state, 'untilTurnEnd', currentCombatantId, effectLibrary, commandType);
+  if (endExpiry.kind === 'rejected') {
+    return endExpiry.result;
+  }
+
+  const events: DomainEvent[] = [...initialEvents, ...endExpiry.events];
+  const stateAfterEndExpiry = endExpiry.state;
+  const nextTurn = findNextLiveTurnFrom(stateAfterEndExpiry, startIndex);
   if (!nextTurn) {
     return {
-      newState: state,
-      events: [
-        { type: 'turn-ended', combatantId: currentCombatantId },
-        { type: 'all-combatants-dead' }
-      ]
+      newState: stateAfterEndExpiry,
+      events: [...events, { type: 'all-combatants-dead' }]
     };
   }
 
-  const nextCombatant = state.combatants[nextTurn.combatantId];
-  const events: DomainEvent[] = [
-    { type: 'turn-ended', combatantId: currentCombatantId },
-    { type: 'reaction-reset', combatantId: nextTurn.combatantId, cause: 'auto' }
-  ];
+  const nextCombatant = stateAfterEndExpiry.combatants[nextTurn.combatantId];
+  events.push({ type: 'reaction-reset', combatantId: nextTurn.combatantId, cause: 'auto' });
 
-  if (nextTurn.round !== state.round) {
+  if (nextTurn.round !== stateAfterEndExpiry.round) {
     events.push({ type: 'round-started', round: nextTurn.round });
   }
 
+  const stateBeforeTurnStart: EncounterState = {
+    ...stateAfterEndExpiry,
+    round: nextTurn.round,
+    initiative: {
+      ...stateAfterEndExpiry.initiative,
+      currentIndex: nextTurn.index
+    },
+    combatants: {
+      ...stateAfterEndExpiry.combatants,
+      [nextTurn.combatantId]: {
+        ...nextCombatant,
+        reactionUsedThisRound: false
+      }
+    }
+  };
+  const startExpiry = expireEffectsForBoundary(
+    stateBeforeTurnStart,
+    'untilTurnStart',
+    nextTurn.combatantId,
+    effectLibrary,
+    commandType
+  );
+  if (startExpiry.kind === 'rejected') {
+    return startExpiry.result;
+  }
+
+  events.push(...startExpiry.events);
   events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
 
   return {
-    newState: {
-      ...state,
-      round: nextTurn.round,
-      initiative: {
-        ...state.initiative,
-        currentIndex: nextTurn.index
-      },
-      combatants: {
-        ...state.combatants,
-        [nextTurn.combatantId]: {
-          ...nextCombatant,
-          reactionUsedThisRound: false
-        }
-      }
-    },
+    newState: startExpiry.state,
     events
   };
 }
@@ -297,7 +352,7 @@ function findNextLiveTurnFrom(
   return undefined;
 }
 
-function delayTurn(state: EncounterState): CommandResult {
+function delayTurn(state: EncounterState, effectLibrary: EffectLibrary): CommandResult {
   const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
   if (!currentCombatantId || !state.combatants[currentCombatantId]) {
     return reject(state, 'DELAY', 'DELAY requires a valid current combatant');
@@ -312,53 +367,25 @@ function delayTurn(state: EncounterState): CommandResult {
       delaying: [...state.initiative.delaying, currentCombatantId]
     }
   };
-  const nextTurn = findNextLiveTurnFrom(stateWithDelay, state.initiative.currentIndex);
-
-  if (!nextTurn) {
-    return {
-      newState: stateWithDelay,
-      events: [
-        { type: 'turn-ended', combatantId: currentCombatantId },
-        { type: 'combatant-delayed', combatantId: currentCombatantId },
-        { type: 'all-combatants-dead' }
-      ]
-    };
-  }
-
-  const nextCombatant = state.combatants[nextTurn.combatantId];
-  const events: DomainEvent[] = [
-    { type: 'turn-ended', combatantId: currentCombatantId },
-    { type: 'combatant-delayed', combatantId: currentCombatantId },
-    { type: 'reaction-reset', combatantId: nextTurn.combatantId, cause: 'auto' }
-  ];
-
-  if (nextTurn.round !== state.round) {
-    events.push({ type: 'round-started', round: nextTurn.round });
-  }
-
-  events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
-
-  return {
-    newState: {
-      ...stateWithDelay,
-      round: nextTurn.round,
-      initiative: {
-        ...stateWithDelay.initiative,
-        currentIndex: nextTurn.index
-      },
-      combatants: {
-        ...state.combatants,
-        [nextTurn.combatantId]: {
-          ...nextCombatant,
-          reactionUsedThisRound: false
-        }
-      }
-    },
-    events
-  };
+  return advanceAfterTurnEnd(
+    stateWithDelay,
+    currentCombatantId,
+    [
+      { type: 'turn-ended', combatantId: currentCombatantId },
+      { type: 'combatant-delayed', combatantId: currentCombatantId }
+    ],
+    effectLibrary,
+    'DELAY',
+    state.initiative.currentIndex
+  );
 }
 
-function resumeFromDelay(state: EncounterState, combatantId: CombatantId, insertIndex: number): CommandResult {
+function resumeFromDelay(
+  state: EncounterState,
+  combatantId: CombatantId,
+  insertIndex: number,
+  effectLibrary: EffectLibrary
+): CommandResult {
   const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
   if (!currentCombatantId || !state.combatants[currentCombatantId]) {
     return reject(state, 'RESUME_FROM_DELAY', 'RESUME_FROM_DELAY requires a valid current combatant');
@@ -388,30 +415,26 @@ function resumeFromDelay(state: EncounterState, combatantId: CombatantId, insert
   const nextOrder = [...state.initiative.order];
   nextOrder.splice(insertIndex, 0, combatantId);
 
-  return {
-    newState: {
-      ...state,
-      initiative: {
-        ...state.initiative,
-        order: nextOrder,
-        currentIndex: insertIndex,
-        delaying: state.initiative.delaying.filter((delayingCombatantId) => delayingCombatantId !== combatantId)
-      },
-      combatants: {
-        ...state.combatants,
-        [combatantId]: {
-          ...resumingCombatant,
-          reactionUsedThisRound: false
-        }
-      }
-    },
-    events: [
-      { type: 'turn-ended', combatantId: currentCombatantId },
-      { type: 'combatant-resumed-from-delay', combatantId, insertIndex },
-      { type: 'reaction-reset', combatantId, cause: 'auto' },
-      { type: 'turn-started', combatantId, round: state.round }
-    ]
+  const stateWithResume: EncounterState = {
+    ...state,
+    initiative: {
+      ...state.initiative,
+      order: nextOrder,
+      delaying: state.initiative.delaying.filter((delayingCombatantId) => delayingCombatantId !== combatantId)
+    }
   };
+
+  return advanceAfterTurnEnd(
+    stateWithResume,
+    currentCombatantId,
+    [
+      { type: 'turn-ended', combatantId: currentCombatantId },
+      { type: 'combatant-resumed-from-delay', combatantId, insertIndex }
+    ],
+    effectLibrary,
+    'RESUME_FROM_DELAY',
+    insertIndex
+  );
 }
 
 function resetEncounter(state: EncounterState): CommandResult {
@@ -537,6 +560,464 @@ function setHp(state: EncounterState, combatantId: CombatantId, amount: number):
   });
 }
 
+function applyEffect(
+  state: EncounterState,
+  command: Extract<Command, { type: 'APPLY_EFFECT' }>,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  const target = state.combatants[command.payload.targetId];
+  if (!target) {
+    return reject(state, 'APPLY_EFFECT', `Combatant ${command.payload.targetId} not found`);
+  }
+
+  const source = command.payload.sourceId ? state.combatants[command.payload.sourceId] : undefined;
+  if (command.payload.sourceId && !source) {
+    return reject(state, 'APPLY_EFFECT', `Source combatant ${command.payload.sourceId} not found`);
+  }
+
+  const effect = effectLibrary[command.payload.effectId];
+  if (!effect) {
+    return reject(state, 'APPLY_EFFECT', `Effect ${command.payload.effectId} not found`);
+  }
+
+  const duration = command.payload.duration ?? { type: 'unlimited' };
+  if (!isValidDuration(state, duration)) {
+    return reject(state, 'APPLY_EFFECT', 'APPLY_EFFECT duration is invalid');
+  }
+
+  const appliedEffects = [...target.appliedEffects];
+  const events: DomainEvent[] = [];
+  const created = appendAppliedEffect({
+    target,
+    effectLibrary,
+    appliedEffects,
+    events,
+    commandId: command.id,
+    effect,
+    sourceId: command.payload.sourceId,
+    sourceLabel: source?.name,
+    value: command.payload.value,
+    duration,
+    note: command.payload.note,
+    seenEffectIds: new Set()
+  });
+
+  if (created.error) {
+    return reject(state, 'APPLY_EFFECT', created.error);
+  }
+
+  return updateCombatant(state, { ...target, appliedEffects }, events);
+}
+
+interface AppendAppliedEffectInput {
+  target: CombatantState;
+  effectLibrary: EffectLibrary;
+  appliedEffects: AppliedEffect[];
+  events: DomainEvent[];
+  commandId: string;
+  effect: EffectDefinition;
+  sourceId?: CombatantId;
+  sourceLabel?: string;
+  parentInstanceId?: string;
+  value?: number;
+  duration: Duration;
+  note?: string;
+  seenEffectIds: Set<string>;
+}
+
+function appendAppliedEffect(input: AppendAppliedEffectInput): { error?: string } {
+  const {
+    target,
+    effectLibrary,
+    appliedEffects,
+    events,
+    commandId,
+    effect,
+    sourceId,
+    sourceLabel,
+    parentInstanceId,
+    value,
+    duration,
+    note,
+    seenEffectIds
+  } = input;
+
+  if (seenEffectIds.has(effect.id)) {
+    return { error: `Effect ${effect.id} implied effect cycle detected` };
+  }
+
+  let resolvedValue: number | undefined;
+  if (effect.hasValue) {
+    resolvedValue = value ?? 1;
+    if (!isPositive(resolvedValue)) {
+      return { error: `APPLY_EFFECT value must be >= 1 for ${effect.name}` };
+    }
+  } else if (value !== undefined) {
+    return { error: `APPLY_EFFECT value is not allowed for ${effect.name}` };
+  }
+
+  const instanceId = nextEffectInstanceId(commandId, appliedEffects);
+  const appliedEffect: AppliedEffect = {
+    instanceId,
+    effectId: effect.id,
+    ...(resolvedValue !== undefined ? { value: resolvedValue } : {}),
+    ...(sourceId ? { sourceId } : {}),
+    ...(sourceLabel ? { sourceLabel } : {}),
+    ...(parentInstanceId ? { parentInstanceId } : {}),
+    duration: cloneDuration(duration),
+    ...(note ? { note } : {})
+  };
+
+  appliedEffects.push(appliedEffect);
+  events.push({
+    type: 'effect-applied',
+    combatantId: target.id,
+    effectId: effect.id,
+    effectName: effect.name,
+    instanceId,
+    ...(resolvedValue !== undefined ? { value: resolvedValue } : {}),
+    ...(parentInstanceId ? { parentInstanceId } : {})
+  });
+
+  const childSeenEffectIds = new Set(seenEffectIds);
+  childSeenEffectIds.add(effect.id);
+
+  for (const impliedEffectId of effect.impliedEffects ?? []) {
+    const impliedEffect = effectLibrary[impliedEffectId];
+    if (!impliedEffect) {
+      return { error: `Effect ${impliedEffectId} not found` };
+    }
+
+    const child = appendAppliedEffect({
+      target,
+      effectLibrary,
+      appliedEffects,
+      events,
+      commandId,
+      effect: impliedEffect,
+      sourceId,
+      sourceLabel,
+      parentInstanceId: instanceId,
+      duration: { type: 'unlimited' },
+      seenEffectIds: childSeenEffectIds
+    });
+
+    if (child.error) {
+      return child;
+    }
+  }
+
+  return {};
+}
+
+function removeEffect(
+  state: EncounterState,
+  targetId: CombatantId,
+  instanceId: string,
+  effectLibrary: EffectLibrary,
+  reason: Extract<DomainEvent, { type: 'effect-removed' }>['reason']
+): CommandResult {
+  const target = state.combatants[targetId];
+  if (!target) {
+    return reject(state, 'REMOVE_EFFECT', `Combatant ${targetId} not found`);
+  }
+
+  const effect = target.appliedEffects.find((appliedEffect) => appliedEffect.instanceId === instanceId);
+  if (!effect) {
+    return reject(state, 'REMOVE_EFFECT', `Effect instance ${instanceId} not found on ${targetId}`);
+  }
+
+  return removeExistingEffect(state, target, instanceId, effectLibrary, reason, 'REMOVE_EFFECT');
+}
+
+function removeExistingEffect(
+  state: EncounterState,
+  target: CombatantState,
+  instanceId: string,
+  effectLibrary: EffectLibrary,
+  reason: Extract<DomainEvent, { type: 'effect-removed' }>['reason'],
+  commandType: CommandType
+): CommandResult {
+  const removedIds = collectEffectRemovalIds(target.appliedEffects, instanceId);
+  const removedIdSet = new Set(removedIds);
+  const removedEffects = removedIds
+    .map((removedId) => target.appliedEffects.find((effect) => effect.instanceId === removedId))
+    .filter((effect): effect is AppliedEffect => effect !== undefined);
+  const missingDefinitionEffect = removedEffects.find((effect) => !effectLibrary[effect.effectId]);
+  if (missingDefinitionEffect) {
+    return reject(state, commandType, `Effect ${missingDefinitionEffect.effectId} not found`);
+  }
+
+  const events = removedEffects.map((effect, index): DomainEvent => {
+    const definition = effectLibrary[effect.effectId];
+    return {
+      type: 'effect-removed',
+      combatantId: target.id,
+      effectId: effect.effectId,
+      effectName: definition.name,
+      instanceId: effect.instanceId,
+      reason: index === 0 ? reason : 'cascade',
+      ...(effect.parentInstanceId ? { parentInstanceId: effect.parentInstanceId } : {})
+    };
+  });
+
+  return updateCombatant(
+    state,
+    {
+      ...target,
+      appliedEffects: target.appliedEffects.filter((effect) => !removedIdSet.has(effect.instanceId))
+    },
+    events
+  );
+}
+
+function collectEffectRemovalIds(effects: AppliedEffect[], rootInstanceId: string): string[] {
+  const ids = [rootInstanceId];
+
+  for (const child of effects.filter((effect) => effect.parentInstanceId === rootInstanceId)) {
+    ids.push(...collectEffectRemovalIds(effects, child.instanceId));
+  }
+
+  return ids;
+}
+
+type HardClockDurationType = Extract<Duration, { type: 'untilTurnEnd' | 'untilTurnStart' }>['type'];
+
+type BoundaryExpiryResult =
+  | { kind: 'expired'; state: EncounterState; events: DomainEvent[] }
+  | { kind: 'rejected'; result: CommandResult };
+
+function expireEffectsForBoundary(
+  state: EncounterState,
+  durationType: HardClockDurationType,
+  combatantId: CombatantId,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): BoundaryExpiryResult {
+  let combatants = state.combatants;
+  const events: DomainEvent[] = [];
+
+  for (const target of Object.values(state.combatants)) {
+    const removedIds: string[] = [];
+    const removedIdSet = new Set<string>();
+    const rootIdSet = new Set<string>();
+
+    for (const effect of target.appliedEffects) {
+      if (removedIdSet.has(effect.instanceId)) {
+        continue;
+      }
+
+      if (effect.duration.type !== durationType || effect.duration.combatantId !== combatantId) {
+        continue;
+      }
+
+      rootIdSet.add(effect.instanceId);
+      for (const removedId of collectEffectRemovalIds(target.appliedEffects, effect.instanceId)) {
+        if (!removedIdSet.has(removedId)) {
+          removedIdSet.add(removedId);
+          removedIds.push(removedId);
+        }
+      }
+    }
+
+    if (removedIds.length === 0) {
+      continue;
+    }
+
+    const removedEffects = removedIds
+      .map((removedId) => target.appliedEffects.find((effect) => effect.instanceId === removedId))
+      .filter((effect): effect is AppliedEffect => effect !== undefined);
+    const missingDefinitionEffect = removedEffects.find((effect) => !effectLibrary[effect.effectId]);
+    if (missingDefinitionEffect) {
+      return { kind: 'rejected', result: reject(state, commandType, `Effect ${missingDefinitionEffect.effectId} not found`) };
+    }
+
+    combatants = {
+      ...combatants,
+      [target.id]: {
+        ...target,
+        appliedEffects: target.appliedEffects.filter((effect) => !removedIdSet.has(effect.instanceId))
+      }
+    };
+    events.push(
+      ...removedEffects.map((effect): DomainEvent => {
+        const definition = effectLibrary[effect.effectId];
+        return {
+          type: 'effect-removed',
+          combatantId: target.id,
+          effectId: effect.effectId,
+          effectName: definition.name,
+          instanceId: effect.instanceId,
+          reason: rootIdSet.has(effect.instanceId) ? 'expired' : 'cascade',
+          ...(effect.parentInstanceId ? { parentInstanceId: effect.parentInstanceId } : {})
+        };
+      })
+    );
+  }
+
+  return {
+    kind: 'expired',
+    state: events.length > 0 ? { ...state, combatants } : state,
+    events
+  };
+}
+
+type EffectInstanceLookup =
+  | { kind: 'found'; target: CombatantState; effect: AppliedEffect; definition: EffectDefinition }
+  | { kind: 'rejected'; result: CommandResult };
+
+function setEffectValue(
+  state: EncounterState,
+  targetId: CombatantId,
+  instanceId: string,
+  newValue: number,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  const located = findEffectInstance(state, 'SET_EFFECT_VALUE', targetId, instanceId, effectLibrary);
+  if (located.kind === 'rejected') {
+    return located.result;
+  }
+
+  const { target, effect, definition } = located;
+  if (!definition.hasValue) {
+    return reject(state, 'SET_EFFECT_VALUE', 'SET_EFFECT_VALUE requires a value effect');
+  }
+
+  if (!isPositive(newValue)) {
+    return reject(state, 'SET_EFFECT_VALUE', 'SET_EFFECT_VALUE newValue must be >= 1');
+  }
+
+  const from = effect.value ?? 1;
+  const updatedEffect = { ...effect, value: newValue };
+
+  return updateCombatant(
+    state,
+    replaceEffect(target, updatedEffect),
+    [
+      {
+        type: 'effect-value-changed',
+        combatantId: target.id,
+        effectId: effect.effectId,
+        effectName: definition.name,
+        instanceId,
+        from,
+        to: newValue
+      }
+    ]
+  );
+}
+
+function modifyEffectValue(
+  state: EncounterState,
+  targetId: CombatantId,
+  instanceId: string,
+  delta: number,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  const located = findEffectInstance(state, 'MODIFY_EFFECT_VALUE', targetId, instanceId, effectLibrary);
+  if (located.kind === 'rejected') {
+    return located.result;
+  }
+
+  const { target, effect, definition } = located;
+  if (!definition.hasValue) {
+    return reject(state, 'MODIFY_EFFECT_VALUE', 'MODIFY_EFFECT_VALUE requires a value effect');
+  }
+
+  if (!Number.isInteger(delta)) {
+    return reject(state, 'MODIFY_EFFECT_VALUE', 'MODIFY_EFFECT_VALUE delta must be an integer');
+  }
+
+  const from = effect.value ?? 1;
+  const to = from + delta;
+  if (to <= 0) {
+    return removeExistingEffect(state, target, instanceId, effectLibrary, 'auto-decremented', 'MODIFY_EFFECT_VALUE');
+  }
+
+  const updatedEffect = { ...effect, value: to };
+  return updateCombatant(
+    state,
+    replaceEffect(target, updatedEffect),
+    [
+      {
+        type: 'effect-value-changed',
+        combatantId: target.id,
+        effectId: effect.effectId,
+        effectName: definition.name,
+        instanceId,
+        from,
+        to
+      }
+    ]
+  );
+}
+
+function setEffectDuration(
+  state: EncounterState,
+  targetId: CombatantId,
+  instanceId: string,
+  newDuration: Duration,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  const located = findEffectInstance(state, 'SET_EFFECT_DURATION', targetId, instanceId, effectLibrary);
+  if (located.kind === 'rejected') {
+    return located.result;
+  }
+
+  if (!isValidDuration(state, newDuration)) {
+    return reject(state, 'SET_EFFECT_DURATION', 'SET_EFFECT_DURATION duration is invalid');
+  }
+
+  const { target, effect, definition } = located;
+  return updateCombatant(
+    state,
+    replaceEffect(target, { ...effect, duration: cloneDuration(newDuration) }),
+    [
+      {
+        type: 'effect-duration-changed',
+        combatantId: targetId,
+        effectId: effect.effectId,
+        effectName: definition.name,
+        instanceId
+      }
+    ]
+  );
+}
+
+function findEffectInstance(
+  state: EncounterState,
+  commandType: 'SET_EFFECT_VALUE' | 'MODIFY_EFFECT_VALUE' | 'SET_EFFECT_DURATION',
+  combatantId: CombatantId,
+  instanceId: string,
+  effectLibrary: EffectLibrary
+): EffectInstanceLookup {
+  const target = state.combatants[combatantId];
+  if (!target) {
+    return { kind: 'rejected', result: reject(state, commandType, `Combatant ${combatantId} not found`) };
+  }
+
+  const effect = target.appliedEffects.find((appliedEffect) => appliedEffect.instanceId === instanceId);
+  if (!effect) {
+    return { kind: 'rejected', result: reject(state, commandType, `Effect instance ${instanceId} not found on ${combatantId}`) };
+  }
+
+  const definition = effectLibrary[effect.effectId];
+  if (!definition) {
+    return { kind: 'rejected', result: reject(state, commandType, `Effect ${effect.effectId} not found`) };
+  }
+
+  return { kind: 'found', target, effect, definition };
+}
+
+function replaceEffect(target: CombatantState, updatedEffect: AppliedEffect): CombatantState {
+  return {
+    ...target,
+    appliedEffects: target.appliedEffects.map((effect) =>
+      effect.instanceId === updatedEffect.instanceId ? updatedEffect : effect
+    )
+  };
+}
+
 function markReactionUsed(state: EncounterState, combatantId: CombatantId): CommandResult {
   const combatant = state.combatants[combatantId];
   if (!combatant) {
@@ -579,7 +1060,7 @@ function setNote(state: EncounterState, combatantId: CombatantId, note: string |
   return updateCombatant(state, updatedCombatant, [{ type: 'note-changed', combatantId }]);
 }
 
-function markDead(state: EncounterState, combatantId: CombatantId): CommandResult {
+function markDead(state: EncounterState, combatantId: CombatantId, effectLibrary: EffectLibrary): CommandResult {
   const combatant = state.combatants[combatantId];
   if (!combatant) {
     return reject(state, 'MARK_DEAD', `Combatant ${combatantId} not found`);
@@ -605,7 +1086,7 @@ function markDead(state: EncounterState, combatantId: CombatantId): CommandResul
     return { newState: stateWithDeadCombatant, events };
   }
 
-  const advancement = advanceTurn(stateWithDeadCombatant, combatantId);
+  const advancement = advanceTurn(stateWithDeadCombatant, combatantId, effectLibrary, 'MARK_DEAD');
   return {
     newState: advancement.newState,
     events: [...events, ...advancement.events]
@@ -670,4 +1151,41 @@ function isPositive(value: number): boolean {
 
 function isNonNegative(value: number): boolean {
   return Number.isInteger(value) && value >= 0;
+}
+
+function nextEffectInstanceId(commandId: string, effects: AppliedEffect[]): string {
+  const existing = new Set(effects.map((effect) => effect.instanceId));
+  let index = effects.length + 1;
+  let instanceId = `${commandId}:effect-${index}`;
+
+  while (existing.has(instanceId)) {
+    index += 1;
+    instanceId = `${commandId}:effect-${index}`;
+  }
+
+  return instanceId;
+}
+
+function isValidDuration(state: EncounterState, duration: Duration): boolean {
+  switch (duration.type) {
+    case 'unlimited':
+      return true;
+    case 'rounds':
+      return isPositive(duration.count);
+    case 'conditional':
+      return duration.description.trim().length > 0;
+    case 'untilTurnEnd':
+    case 'untilTurnStart':
+      return Boolean(state.combatants[duration.combatantId]);
+    default:
+      return assertNever(duration);
+  }
+}
+
+function cloneDuration(duration: Duration): Duration {
+  return structuredClone(duration);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled duration variant: ${JSON.stringify(value)}`);
 }

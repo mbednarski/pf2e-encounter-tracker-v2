@@ -1,4 +1,4 @@
-import { applyCommand, createCombatantFromCreature } from '../domain';
+import { applyCommand, createCombatantFromCreature, effectLibrary } from '../domain';
 import type { CombatantState, Command, CommandType, Creature, CreatureTemplateAdjustment, DomainEvent, EncounterState } from '../domain';
 
 export interface ManualCombatantInput {
@@ -34,8 +34,6 @@ export interface DispatchResult {
   feedback: FeedbackEntry[];
   events: DomainEvent[];
 }
-
-const emptyEffects = {};
 
 export function newEncounterState(): EncounterState {
   return {
@@ -104,7 +102,7 @@ export function dispatchEncounterCommand(
   feedback: FeedbackEntry[],
   command: Command
 ): DispatchResult {
-  const result = applyCommand(state, command, emptyEffects);
+  const result = applyCommand(state, command, effectLibrary);
   const entry = formatFeedbackEntry(result.events, result.newState, command);
 
   return {
