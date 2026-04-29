@@ -34,12 +34,13 @@ All four must pass before opening a PR.
 Strict unidirectional layering. Edits must respect this direction:
 
 ```
-src/routes/ (Svelte UI)  ──>  src/lib/ (orchestrator)  ──>  src/domain/ (pure TS)
+src/routes/ (Svelte routes)  ──>  src/components/ (Svelte UI)  ──>  src/lib/ (orchestrator)  ──>  src/domain/ (pure TS)
 ```
 
 - **`src/domain/`** — Pure reducer + types. Zero framework deps. State and events are JSON-serializable. Vitest covers this layer. Purity is enforced by `tsconfig.domain.json` via `tsc -p tsconfig.domain.json --noEmit` (run as part of `npm run check`).
-- **`src/lib/`** — Orchestrator glue: `dispatchEncounterCommand`, `newEncounterState`, the creature library. The only layer that bridges UI and domain.
-- **`src/routes/`** — SvelteKit file-based routes. The combat tracker UI currently lives in a single `+page.svelte`; `+layout.ts` enables prerender + SSR for static export.
+- **`src/lib/`** — Orchestrator glue: `dispatchEncounterCommand`, `newEncounterState`, the creature library. TS-only; no Svelte. The only layer that bridges UI and domain.
+- **`src/components/`** — Reusable Svelte components. Presentational: receive state via props, emit intentions via callback props. **Must not own encounter state** and must not call `dispatchEncounterCommand` directly. May import types and helpers from `$lib` and `../domain`.
+- **`src/routes/`** — SvelteKit file-based routes. Holds encounter state, owns command dispatch, composes components. `+layout.ts` enables prerender + SSR for static export.
 
 Command flow:
 
