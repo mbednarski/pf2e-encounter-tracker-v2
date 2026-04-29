@@ -21,7 +21,7 @@ User data remains in browser storage. Future LLM parsing calls should go directl
 Use these settings for Git-backed Pages deployment:
 
 - Framework preset: SvelteKit, or no preset with the values below
-- Build command: `npm run build`
+- Build command: `npm run check && npm run test:run && npm run audit && npm run build`
 - Build output directory: `build`
 - Root directory: repository root
 

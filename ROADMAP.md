@@ -26,7 +26,7 @@ This roadmap tracks implementation milestones. Canonical behavior still lives in
 
 ## M3 Effects and Conditions
 
-- [ ] Add built-in condition and persistent damage library.
+- [x] Add built-in condition and persistent damage library. (Implemented in PR #31.)
 - [ ] Implement `APPLY_EFFECT`, `REMOVE_EFFECT`, value changes, and duration changes.
 - [ ] Implement implied effects and removal cascades.
 - [ ] Implement PF2e stacking derivation.

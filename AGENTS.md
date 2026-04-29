@@ -12,7 +12,8 @@ Use npm for project tooling.
 - `npm run dev` starts the SvelteKit dev server.
 - `npm run check` runs Svelte/TypeScript checks, including the domain-only tsconfig.
 - `npm run test:run` runs Vitest.
-- `npm run audit` fails on any known dependency vulnerability at low severity or higher.
+- `npm run audit` fails on any known dependency vulnerability at moderate severity or higher.
+- `npm run audit:low` runs the stricter low-severity manual audit check.
 - `npm run build` creates the static Cloudflare Pages build in `build`.
 - `npm run deploy:pages` builds and uploads `build` to Cloudflare Pages with Wrangler.
 - `git status` verifies the intended files changed.
@@ -25,7 +26,7 @@ Write specs in Markdown with clear headings, short paragraphs, and fenced `types
 Vitest covers the domain layer. Review changes against the locked architectural rules: pure domain logic, GM-authority behavior, serializable command/event payloads, and strict separation between domain and UI concerns. For any substantial spec change, include at least one worked example or edge-case flow.
 
 ## Commit & Pull Request Guidelines
-The Git history is empty today, so set the convention now: use short imperative commit subjects such as `Add hazard subsystem spec` or `Refine command rejection rules`. Keep each commit focused on one subsystem or one decision set. Pull requests should summarize the affected spec, list newly locked decisions, and call out any unresolved questions. UI screenshots are only relevant once implementation files exist.
+Use short imperative commit subjects such as `Add hazard subsystem spec` or `Refine command rejection rules`. Keep each commit focused on one subsystem or one decision set. Pull requests should summarize the affected spec, list newly locked decisions, and call out any unresolved questions. UI screenshots are only relevant once implementation files exist.
 
 ## Contributor Notes
 Keep the app deployable to Cloudflare Pages using static assets and free services. Do not add Pages Functions, Workers, KV, D1, R2, or server-side endpoints unless the task explicitly calls for changing the architecture. Prefer updating authoritative `.md` specs instead of duplicating corrections across the transcript-style `.txt` files.
