@@ -19,10 +19,10 @@ This roadmap tracks implementation milestones. Canonical behavior still lives in
 
 ## M2 Initiative and Combat State
 
-- [ ] Implement `END_TURN`, round advancement, and reaction reset.
+- [x] Implement `END_TURN`, round advancement, and reaction reset.
 - [ ] Implement `DELAY` and `RESUME_FROM_DELAY`.
-- [ ] Implement `MARK_DEAD`, `REVIVE`, `MARK_REACTION_USED`, `RESET_REACTION`, and `SET_NOTE`.
-- [ ] Add all-dead edge case handling.
+- [x] Implement `MARK_DEAD`, `REVIVE`, `MARK_REACTION_USED`, `RESET_REACTION`, and `SET_NOTE`.
+- [x] Add all-dead edge case handling.
 
 ## M3 Effects and Conditions
 
