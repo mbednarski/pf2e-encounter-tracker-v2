@@ -1,0 +1,27 @@
+name: Strict dependency audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Mondays 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  audit-low:
+    name: npm audit (low)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies (low severity)
+        run: npm run audit:low
