@@ -189,7 +189,13 @@ interface EncounterState {
   initiative: InitiativeState
   combatants: Record<string, CombatantState>
   pendingPrompts: Prompt[]        // blocking turn-end resolution
+  turnResolution?: TurnResolutionContinuation // serializable continuation for blocked end-turn advancement
   combatLog: LogEntry[]
+}
+
+interface TurnResolutionContinuation {
+  type: "advanceAfterTurnEnd"
+  startIndex: number
 }
 ```
 
@@ -276,21 +282,21 @@ The architecture-level rules are:
 - `maxValue` is advisory only. The domain validates minimum values, not PF2e display caps.
 - Hard-clock durations (`untilTurnEnd`, `untilTurnStart`) are the only automatic expirations.
 - `rounds` is a manually adjusted display counter.
-- Sustained effects use `untilTurnEnd` plus a `confirmSustained` prompt.
+- The generic prompt generator skips remaining hard-clock duration instances; `confirmSustained` support can still resolve a prompt when one is present, but sustained-spell prompt generation needs a later dedicated rule.
 
 ### 8.3 Turn Boundary Resolution Flow (Blocking)
 
 When `END_TURN` is dispatched for combatant X:
 
-1. State transitions to `RESOLVING` phase.
-2. System collects all active effects on X (and sustained effects where X is the caster).
-3. **Hard clock expirations** are applied automatically: effects with matching `untilTurnEnd` duration are removed. Events emitted for combat log.
-4. **Suggestion prompts** are generated for remaining relevant effects and placed in `pendingPrompts`.
+1. The domain emits `turn-ended` for X.
+2. **Hard clock expirations** are applied automatically: effects with matching `untilTurnEnd` duration are removed. Events emitted for combat log.
+3. **Suggestion prompts** are generated for remaining non-hard-clock effects on X and placed in `pendingPrompts`.
+4. If prompts exist, state transitions to `RESOLVING` and stores `turnResolution` so initiative can continue after the final prompt.
 5. `RESOLVE_PROMPT` is the primary command in this phase. HP, effect, note, death-state, and spellcasting correction commands remain legal per command vocabulary phase restrictions.
 6. GM resolves each prompt (accept suggestion, modify, dismiss).
 7. When `pendingPrompts` is empty, state transitions back to `ACTIVE` and initiative advances to next combatant.
 
-`START_TURN` for the next combatant then fires, processing `untilTurnStart` expirations and generating any start-of-turn prompts.
+The next combatant's start boundary processes `untilTurnStart` expirations first, emits `turn-started`, and then generates start-of-turn prompts from remaining non-hard-clock effects. If prompts exist, phase stays or becomes `RESOLVING`; otherwise it is `ACTIVE`.
 
 ---
 

@@ -10,7 +10,11 @@ import type {
   EffectDefinition,
   EffectLibrary,
   EncounterPhase,
-  EncounterState
+  EncounterState,
+  Prompt,
+  PromptBoundary,
+  PromptResolution,
+  TurnBoundarySuggestion
 } from './types';
 
 const allowedPhases: Record<CommandType, EncounterPhase[]> = {
@@ -99,6 +103,8 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
         command.payload.newDuration,
         effectLibrary
       );
+    case 'RESOLVE_PROMPT':
+      return resolvePrompt(state, command.payload.promptId, command.payload.resolution, effectLibrary);
     case 'MARK_REACTION_USED':
       return markReactionUsed(state, command.payload.combatantId);
     case 'RESET_REACTION':
@@ -218,15 +224,14 @@ function startEncounter(state: EncounterState, effectLibrary: EffectLibrary): Co
     return startExpiry.result;
   }
 
-  return {
-    newState: startExpiry.state,
-    events: [
-      { type: 'encounter-started' },
-      { type: 'phase-changed', from: 'PREPARING', to: 'ACTIVE' },
-      ...startExpiry.events,
-      { type: 'turn-started', combatantId: firstCombatantId, round: 1 }
-    ]
-  };
+  const events: DomainEvent[] = [
+    { type: 'encounter-started' },
+    { type: 'phase-changed', from: 'PREPARING', to: 'ACTIVE' },
+    ...startExpiry.events,
+    { type: 'turn-started', combatantId: firstCombatantId, round: 1 }
+  ];
+
+  return finishTurnStartBoundary(startExpiry.state, firstCombatantId, 'turnStart', effectLibrary, 'START_ENCOUNTER', events);
 }
 
 function completeEncounter(state: EncounterState): CommandResult {
@@ -272,36 +277,86 @@ function advanceAfterTurnEnd(
 
   const events: DomainEvent[] = [...initialEvents, ...endExpiry.events];
   const stateAfterEndExpiry = endExpiry.state;
-  const nextTurn = findNextLiveTurnFrom(stateAfterEndExpiry, startIndex);
-  if (!nextTurn) {
+  const endPrompts = generatePromptsForBoundary(
+    stateAfterEndExpiry,
+    { type: 'turnEnd', combatantId: currentCombatantId },
+    effectLibrary,
+    commandType
+  );
+  if (endPrompts.kind === 'rejected') {
+    return endPrompts.result;
+  }
+
+  if (endPrompts.prompts.length > 0) {
     return {
-      newState: stateAfterEndExpiry,
-      events: [...events, { type: 'all-combatants-dead' }]
+      newState: {
+        ...stateAfterEndExpiry,
+        phase: 'RESOLVING',
+        pendingPrompts: endPrompts.prompts,
+        turnResolution: { type: 'advanceAfterTurnEnd', startIndex }
+      },
+      events: [
+        ...events,
+        ...endPrompts.events,
+        ...(stateAfterEndExpiry.phase !== 'RESOLVING'
+          ? [{ type: 'phase-changed', from: stateAfterEndExpiry.phase, to: 'RESOLVING' } as DomainEvent]
+          : [])
+      ]
     };
   }
 
-  const nextCombatant = stateAfterEndExpiry.combatants[nextTurn.combatantId];
+  return advanceToNextTurn(stateAfterEndExpiry, startIndex, events, effectLibrary, commandType);
+}
+
+function advanceToNextTurn(
+  state: EncounterState,
+  startIndex: number,
+  events: DomainEvent[],
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): CommandResult {
+  const nextTurn = findNextLiveTurnFrom(state, startIndex);
+  if (!nextTurn) {
+    const nextState = clearTurnResolution({
+      ...state,
+      phase: 'ACTIVE',
+      pendingPrompts: []
+    });
+
+    return {
+      newState: nextState,
+      events: [
+        ...events,
+        { type: 'all-combatants-dead' },
+        ...(state.phase === 'RESOLVING'
+          ? [{ type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' } as DomainEvent]
+          : [])
+      ]
+    };
+  }
+
+  const nextCombatant = state.combatants[nextTurn.combatantId];
   events.push({ type: 'reaction-reset', combatantId: nextTurn.combatantId, cause: 'auto' });
 
-  if (nextTurn.round !== stateAfterEndExpiry.round) {
+  if (nextTurn.round !== state.round) {
     events.push({ type: 'round-started', round: nextTurn.round });
   }
 
-  const stateBeforeTurnStart: EncounterState = {
-    ...stateAfterEndExpiry,
+  const stateBeforeTurnStart: EncounterState = clearTurnResolution({
+    ...state,
     round: nextTurn.round,
     initiative: {
-      ...stateAfterEndExpiry.initiative,
+      ...state.initiative,
       currentIndex: nextTurn.index
     },
     combatants: {
-      ...stateAfterEndExpiry.combatants,
+      ...state.combatants,
       [nextTurn.combatantId]: {
         ...nextCombatant,
         reactionUsedThisRound: false
       }
     }
-  };
+  });
   const startExpiry = expireEffectsForBoundary(
     stateBeforeTurnStart,
     'untilTurnStart',
@@ -316,10 +371,150 @@ function advanceAfterTurnEnd(
   events.push(...startExpiry.events);
   events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
 
+  return finishTurnStartBoundary(startExpiry.state, nextTurn.combatantId, 'turnStart', effectLibrary, commandType, events);
+}
+
+type PromptGenerationResult =
+  | { kind: 'generated'; prompts: Prompt[]; events: DomainEvent[] }
+  | { kind: 'rejected'; result: CommandResult };
+
+function finishTurnStartBoundary(
+  state: EncounterState,
+  combatantId: CombatantId,
+  boundaryType: PromptBoundary['type'],
+  effectLibrary: EffectLibrary,
+  commandType: CommandType,
+  events: DomainEvent[]
+): CommandResult {
+  const generated = generatePromptsForBoundary(state, { type: boundaryType, combatantId }, effectLibrary, commandType);
+  if (generated.kind === 'rejected') {
+    return generated.result;
+  }
+
+  if (generated.prompts.length === 0) {
+    return {
+      newState: clearTurnResolution({
+        ...state,
+        phase: 'ACTIVE',
+        pendingPrompts: []
+      }),
+      events: [
+        ...events,
+        ...(state.phase === 'RESOLVING'
+          ? [{ type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' } as DomainEvent]
+          : [])
+      ]
+    };
+  }
+
   return {
-    newState: startExpiry.state,
-    events
+    newState: {
+      ...state,
+      phase: 'RESOLVING',
+      pendingPrompts: generated.prompts
+    },
+    events: [
+      ...events,
+      ...generated.events,
+      ...(state.phase !== 'RESOLVING'
+        ? [{ type: 'phase-changed', from: state.phase, to: 'RESOLVING' } as DomainEvent]
+        : [])
+    ]
   };
+}
+
+function clearTurnResolution(state: EncounterState): EncounterState {
+  const { turnResolution: _turnResolution, ...stateWithoutContinuation } = state;
+  return stateWithoutContinuation;
+}
+
+function generatePromptsForBoundary(
+  state: EncounterState,
+  boundary: PromptBoundary,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): PromptGenerationResult {
+  const target = state.combatants[boundary.combatantId];
+  if (!target) {
+    return { kind: 'rejected', result: reject(state, commandType, `Combatant ${boundary.combatantId} not found`) };
+  }
+
+  const prompts: Prompt[] = [];
+  const events: DomainEvent[] = [];
+
+  for (const effect of target.appliedEffects) {
+    if (effect.duration.type === 'untilTurnEnd' || effect.duration.type === 'untilTurnStart') {
+      continue;
+    }
+
+    const definition = effectLibrary[effect.effectId];
+    if (!definition) {
+      return { kind: 'rejected', result: reject(state, commandType, `Effect ${effect.effectId} not found`) };
+    }
+
+    const suggestion = boundary.type === 'turnStart' ? definition.turnStartSuggestion : definition.turnEndSuggestion;
+    if (!suggestion) {
+      continue;
+    }
+
+    const prompt = buildPrompt(boundary, target.id, effect, definition, suggestion);
+    prompts.push(prompt);
+    events.push({
+      type: 'prompt-generated',
+      promptId: prompt.id,
+      boundary: prompt.boundary,
+      combatantId: prompt.combatantId,
+      effectInstanceId: prompt.effectInstanceId,
+      effectName: prompt.effectName,
+      suggestionType: prompt.suggestionType.type,
+      description: prompt.description
+    });
+  }
+
+  return { kind: 'generated', prompts, events };
+}
+
+function buildPrompt(
+  boundary: PromptBoundary,
+  combatantId: CombatantId,
+  effect: AppliedEffect,
+  definition: EffectDefinition,
+  suggestion: TurnBoundarySuggestion
+): Prompt {
+  const currentValue = effect.value;
+  const suggestedValue =
+    suggestion.type === 'suggestDecrement' && currentValue !== undefined
+      ? Math.max(currentValue - suggestion.amount, 0)
+      : undefined;
+  const description = renderPromptDescription(definition, effect, suggestion);
+
+  return {
+    id: `prompt:${boundary.type}:${boundary.combatantId}:${combatantId}:${effect.instanceId}`,
+    boundary,
+    combatantId,
+    effectInstanceId: effect.instanceId,
+    effectName: definition.name,
+    description,
+    suggestionType: structuredClone(suggestion),
+    ...(currentValue !== undefined ? { currentValue } : {}),
+    ...(suggestedValue !== undefined ? { suggestedValue } : {})
+  };
+}
+
+function renderPromptDescription(
+  definition: EffectDefinition,
+  effect: AppliedEffect,
+  suggestion: TurnBoundarySuggestion
+): string {
+  const template =
+    'description' in suggestion && suggestion.description
+      ? suggestion.description
+      : `${definition.name}${effect.value !== undefined ? ` ${effect.value}` : ''}`;
+
+  return template
+    .replaceAll('{value}', String(effect.value ?? ''))
+    .replaceAll('{note}', effect.note ?? '')
+    .trim();
 }
 
 function findNextLiveTurn(
@@ -982,6 +1177,104 @@ function setEffectDuration(
       }
     ]
   );
+}
+
+function resolvePrompt(
+  state: EncounterState,
+  promptId: string,
+  resolution: PromptResolution,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  const prompt = state.pendingPrompts.find((pendingPrompt) => pendingPrompt.id === promptId);
+  if (!prompt) {
+    return reject(state, 'RESOLVE_PROMPT', `Prompt ${promptId} not found`);
+  }
+
+  const resolutionResult = applyPromptResolution(state, prompt, resolution, effectLibrary);
+  if (resolutionResult.events.some((event) => event.type === 'command-rejected')) {
+    return resolutionResult;
+  }
+
+  const pendingPrompts = resolutionResult.newState.pendingPrompts.filter((pendingPrompt) => pendingPrompt.id !== promptId);
+  const stateAfterPrompt = clearTurnResolution({
+    ...resolutionResult.newState,
+    pendingPrompts
+  });
+  const events: DomainEvent[] = [
+    ...resolutionResult.events,
+    { type: 'prompt-resolved', promptId, resolution: structuredClone(resolution) }
+  ];
+
+  if (pendingPrompts.length > 0) {
+    return {
+      newState: {
+        ...stateAfterPrompt,
+        phase: 'RESOLVING',
+        ...(state.turnResolution ? { turnResolution: state.turnResolution } : {})
+      },
+      events
+    };
+  }
+
+  if (state.turnResolution?.type === 'advanceAfterTurnEnd') {
+    return advanceToNextTurn(
+      {
+        ...stateAfterPrompt,
+        phase: 'RESOLVING',
+        pendingPrompts: []
+      },
+      state.turnResolution.startIndex,
+      events,
+      effectLibrary,
+      'RESOLVE_PROMPT'
+    );
+  }
+
+  return {
+    newState: {
+      ...stateAfterPrompt,
+      phase: 'ACTIVE',
+      pendingPrompts: []
+    },
+    events: [...events, { type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' }]
+  };
+}
+
+function applyPromptResolution(
+  state: EncounterState,
+  prompt: Prompt,
+  resolution: PromptResolution,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  if (resolution.type === 'dismiss' || prompt.suggestionType.type === 'reminder') {
+    return { newState: state, events: [] };
+  }
+
+  if (resolution.type === 'remove') {
+    return removeEffect(state, prompt.combatantId, prompt.effectInstanceId, effectLibrary, 'removed');
+  }
+
+  if (resolution.type === 'setValue') {
+    return setEffectValue(state, prompt.combatantId, prompt.effectInstanceId, resolution.value, effectLibrary);
+  }
+
+  switch (prompt.suggestionType.type) {
+    case 'suggestDecrement':
+      return modifyEffectValue(state, prompt.combatantId, prompt.effectInstanceId, -prompt.suggestionType.amount, effectLibrary);
+    case 'suggestRemove':
+    case 'promptResolution':
+      return removeEffect(state, prompt.combatantId, prompt.effectInstanceId, effectLibrary, 'removed');
+    case 'confirmSustained':
+      return setEffectDuration(
+        state,
+        prompt.combatantId,
+        prompt.effectInstanceId,
+        { type: 'untilTurnEnd', combatantId: prompt.boundary.combatantId },
+        effectLibrary
+      );
+    default:
+      return assertNever(prompt.suggestionType);
+  }
 }
 
 function findEffectInstance(

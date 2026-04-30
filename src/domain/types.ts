@@ -161,10 +161,18 @@ export interface CombatantState {
   templateAdjustment?: 'elite' | 'weak';
 }
 
+export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; combatantId: CombatantId };
+
 export interface Prompt {
   id: string;
+  boundary: PromptBoundary;
   combatantId: CombatantId;
+  effectInstanceId: string;
+  effectName: string;
   description: string;
+  suggestionType: TurnBoundarySuggestion;
+  currentValue?: number;
+  suggestedValue?: number;
 }
 
 export interface LogEntry {
@@ -180,6 +188,7 @@ export interface EncounterState {
   initiative: InitiativeState;
   combatants: Record<CombatantId, CombatantState>;
   pendingPrompts: Prompt[];
+  turnResolution?: TurnResolutionContinuation;
   combatLog: LogEntry[];
 }
 
@@ -225,6 +234,22 @@ export interface SetEffectDurationPayload {
   newDuration: Duration;
 }
 
+export type PromptResolution =
+  | { type: 'accept' }
+  | { type: 'setValue'; value: number }
+  | { type: 'dismiss' }
+  | { type: 'remove' };
+
+export interface ResolvePromptPayload {
+  promptId: string;
+  resolution: PromptResolution;
+}
+
+export interface TurnResolutionContinuation {
+  type: 'advanceAfterTurnEnd';
+  startIndex: number;
+}
+
 export type Command =
   | BaseCommand<'START_ENCOUNTER', Record<string, never>>
   | BaseCommand<'COMPLETE_ENCOUNTER', Record<string, never>>
@@ -256,7 +281,7 @@ export type Command =
   | BaseCommand<'SET_FOCUS_USAGE', Record<string, unknown>>
   | BaseCommand<'SET_INNATE_USAGE', Record<string, unknown>>
   | BaseCommand<'RESET_SPELL_BLOCK', Record<string, unknown>>
-  | BaseCommand<'RESOLVE_PROMPT', Record<string, unknown>>
+  | BaseCommand<'RESOLVE_PROMPT', ResolvePromptPayload>
   | BaseCommand<'MARK_REACTION_USED', { combatantId: CombatantId }>
   | BaseCommand<'RESET_REACTION', { combatantId: CombatantId }>
   | BaseCommand<'SET_NOTE', { combatantId: CombatantId; note: string | null }>
@@ -356,6 +381,17 @@ export type DomainEvent =
       effectName: string;
       instanceId: string;
     }
+  | {
+      type: 'prompt-generated';
+      promptId: string;
+      boundary: PromptBoundary;
+      combatantId: CombatantId;
+      effectInstanceId: string;
+      effectName: string;
+      suggestionType: TurnBoundarySuggestion['type'];
+      description: string;
+    }
+  | { type: 'prompt-resolved'; promptId: string; resolution: PromptResolution }
   | {
       type: 'hp-changed';
       combatantId: CombatantId;

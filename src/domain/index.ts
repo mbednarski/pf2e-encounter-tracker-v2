@@ -39,7 +39,10 @@ export type {
   Modifier,
   ModifyEffectValuePayload,
   Prompt,
+  PromptBoundary,
+  PromptResolution,
   RemoveEffectPayload,
+  ResolvePromptPayload,
   SetEffectDurationPayload,
   SetEffectValuePayload,
   SourceType,
@@ -49,5 +52,6 @@ export type {
   SpellListEntry,
   SpellTradition,
   StatTarget,
-  TurnBoundarySuggestion
+  TurnBoundarySuggestion,
+  TurnResolutionContinuation
 } from './types';

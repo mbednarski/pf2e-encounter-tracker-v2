@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'vitest';
-import type { EffectLibrary } from './types';
+import type { EffectLibrary, Prompt } from './types';
 import { effectLibrary } from './effects/library';
 import { applyCommand } from './reducer';
-import { activeEncounter, combatant, command, emptyEffects, encounter, expectEvents, expectRejected } from './test-support';
+import {
+  activeEncounter,
+  combatant,
+  command,
+  emptyEffects,
+  encounter,
+  expectEvents,
+  expectRejected,
+  expectSerializable
+} from './test-support';
 
 describe('applyCommand lifecycle and initiative slice', () => {
   test('adds combatants and starts an encounter with the first turn active', () => {
@@ -66,6 +75,262 @@ describe('applyCommand lifecycle and initiative slice', () => {
       'Combatant fallen-1 is not alive',
       state
     );
+  });
+});
+
+describe('applyCommand prompt resolution slice', () => {
+  test('accepts a decrement prompt and continues advancement after the last end-turn prompt', () => {
+    const resolving = applyCommand(
+      activeEncounter({
+        combatants: {
+          'goblin-1': combatant('goblin-1', {
+            appliedEffects: [
+              {
+                instanceId: 'frightened-1',
+                effectId: 'frightened',
+                value: 2,
+                duration: { type: 'unlimited' }
+              }
+            ]
+          }),
+          'fighter-1': combatant('fighter-1', { reactionUsedThisRound: true })
+        }
+      }),
+      command('END_TURN'),
+      effectLibrary
+    ).newState;
+
+    const result = applyCommand(
+      resolving,
+      command('RESOLVE_PROMPT', {
+        promptId: 'prompt:turnEnd:goblin-1:goblin-1:frightened-1',
+        resolution: { type: 'accept' }
+      }),
+      effectLibrary
+    );
+
+    expect(result.newState.phase).toBe('ACTIVE');
+    expect(result.newState.pendingPrompts).toEqual([]);
+    expect(result.newState.initiative.currentIndex).toBe(1);
+    expect(result.newState.combatants['goblin-1'].appliedEffects[0].value).toBe(1);
+    expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
+    expectEvents(result, [
+      {
+        type: 'effect-value-changed',
+        combatantId: 'goblin-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId: 'frightened-1',
+        from: 2,
+        to: 1
+      },
+      {
+        type: 'prompt-resolved',
+        promptId: 'prompt:turnEnd:goblin-1:goblin-1:frightened-1',
+        resolution: { type: 'accept' }
+      },
+      { type: 'reaction-reset', combatantId: 'fighter-1', cause: 'auto' },
+      { type: 'turn-started', combatantId: 'fighter-1', round: 1 },
+      { type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' }
+    ]);
+    expectSerializable(result.newState);
+  });
+
+  test('resolves setValue, dismiss, and remove prompts without advancing while prompts remain', () => {
+    const state = activeEncounter({
+      phase: 'RESOLVING',
+      pendingPrompts: [
+        {
+          id: 'prompt-set',
+          boundary: { type: 'turnStart', combatantId: 'goblin-1' },
+          combatantId: 'goblin-1',
+          effectInstanceId: 'frightened-1',
+          effectName: 'Frightened',
+          description: 'Frightened 3',
+          suggestionType: { type: 'promptResolution', description: 'Adjust frightened.' },
+          currentValue: 3
+        },
+        {
+          id: 'prompt-dismiss',
+          boundary: { type: 'turnStart', combatantId: 'goblin-1' },
+          combatantId: 'goblin-1',
+          effectInstanceId: 'slowed-1',
+          effectName: 'Slowed',
+          description: 'Slowed reminder',
+          suggestionType: { type: 'reminder', description: 'Check actions.' },
+          currentValue: 1
+        },
+        {
+          id: 'prompt-remove',
+          boundary: { type: 'turnStart', combatantId: 'goblin-1' },
+          combatantId: 'goblin-1',
+          effectInstanceId: 'slowed-1',
+          effectName: 'Slowed',
+          description: 'Remove slowed',
+          suggestionType: { type: 'suggestRemove', description: 'Remove slowed.' },
+          currentValue: 1
+        }
+      ],
+      combatants: {
+        'goblin-1': combatant('goblin-1', {
+          appliedEffects: [
+            {
+              instanceId: 'frightened-1',
+              effectId: 'frightened',
+              value: 3,
+              duration: { type: 'unlimited' }
+            },
+            {
+              instanceId: 'slowed-1',
+              effectId: 'slowed',
+              value: 1,
+              duration: { type: 'unlimited' }
+            }
+          ]
+        }),
+        'fighter-1': combatant('fighter-1')
+      }
+    });
+
+    const set = applyCommand(
+      state,
+      command('RESOLVE_PROMPT', { promptId: 'prompt-set', resolution: { type: 'setValue', value: 1 } }),
+      effectLibrary
+    );
+    const dismissed = applyCommand(
+      set.newState,
+      command('RESOLVE_PROMPT', { promptId: 'prompt-dismiss', resolution: { type: 'dismiss' } }),
+      effectLibrary
+    );
+    const removed = applyCommand(
+      dismissed.newState,
+      command('RESOLVE_PROMPT', { promptId: 'prompt-remove', resolution: { type: 'remove' } }),
+      effectLibrary
+    );
+
+    expect(set.newState.phase).toBe('RESOLVING');
+    expect(set.newState.pendingPrompts.map((prompt) => prompt.id)).toEqual(['prompt-dismiss', 'prompt-remove']);
+    expect(set.newState.combatants['goblin-1'].appliedEffects[0].value).toBe(1);
+    expectEvents(set, [
+      {
+        type: 'effect-value-changed',
+        combatantId: 'goblin-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId: 'frightened-1',
+        from: 3,
+        to: 1
+      },
+      { type: 'prompt-resolved', promptId: 'prompt-set', resolution: { type: 'setValue', value: 1 } }
+    ]);
+
+    expect(dismissed.newState.phase).toBe('RESOLVING');
+    expect(dismissed.newState.pendingPrompts.map((prompt) => prompt.id)).toEqual(['prompt-remove']);
+    expectEvents(dismissed, [
+      { type: 'prompt-resolved', promptId: 'prompt-dismiss', resolution: { type: 'dismiss' } }
+    ]);
+
+    expect(removed.newState.phase).toBe('ACTIVE');
+    expect(removed.newState.pendingPrompts).toEqual([]);
+    expect(removed.newState.combatants['goblin-1'].appliedEffects).toEqual([
+      {
+        instanceId: 'frightened-1',
+        effectId: 'frightened',
+        value: 1,
+        duration: { type: 'unlimited' }
+      }
+    ]);
+    expectEvents(removed, [
+      {
+        type: 'effect-removed',
+        combatantId: 'goblin-1',
+        effectId: 'slowed',
+        effectName: 'Slowed',
+        instanceId: 'slowed-1',
+        reason: 'removed'
+      },
+      { type: 'prompt-resolved', promptId: 'prompt-remove', resolution: { type: 'remove' } },
+      { type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' }
+    ]);
+  });
+
+  test('resolves promptResolution accept by removing the effect', () => {
+    const state = activeEncounter({
+      phase: 'RESOLVING',
+      pendingPrompts: [
+        {
+          id: 'prompt-persistent',
+          boundary: { type: 'turnStart', combatantId: 'fighter-1' },
+          combatantId: 'fighter-1',
+          effectInstanceId: 'persistent-fire-1',
+          effectName: 'Persistent Fire',
+          description: 'Take 2d6 fire damage, then flat check DC 15 to remove.',
+          suggestionType: {
+            type: 'promptResolution',
+            description: 'Take {note} fire damage, then flat check DC 15 to remove.'
+          }
+        }
+      ],
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1', {
+          appliedEffects: [
+            {
+              instanceId: 'persistent-fire-1',
+              effectId: 'persistent-fire',
+              duration: { type: 'unlimited' },
+              note: '2d6'
+            }
+          ]
+        })
+      }
+    });
+
+    const result = applyCommand(
+      state,
+      command('RESOLVE_PROMPT', { promptId: 'prompt-persistent', resolution: { type: 'accept' } }),
+      effectLibrary
+    );
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects).toEqual([]);
+    expectEvents(result, [
+      {
+        type: 'effect-removed',
+        combatantId: 'fighter-1',
+        effectId: 'persistent-fire',
+        effectName: 'Persistent Fire',
+        instanceId: 'persistent-fire-1',
+        reason: 'removed'
+      },
+      { type: 'prompt-resolved', promptId: 'prompt-persistent', resolution: { type: 'accept' } },
+      { type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' }
+    ]);
+  });
+
+  test('rejects unknown prompt ids', () => {
+    const state = activeEncounter({
+      phase: 'RESOLVING',
+      pendingPrompts: [
+        {
+          id: 'prompt-known',
+          boundary: { type: 'turnStart', combatantId: 'goblin-1' },
+          combatantId: 'goblin-1',
+          effectInstanceId: 'slowed-1',
+          effectName: 'Slowed',
+          description: 'Check actions.',
+          suggestionType: { type: 'reminder', description: 'Check actions.' },
+          currentValue: 1
+        }
+      ]
+    });
+
+    const result = applyCommand(
+      state,
+      command('RESOLVE_PROMPT', { promptId: 'missing-prompt', resolution: { type: 'dismiss' } }),
+      effectLibrary
+    );
+
+    expectRejected(result, 'RESOLVE_PROMPT', 'Prompt missing-prompt not found', state);
   });
 });
 
@@ -241,6 +506,158 @@ describe('applyCommand turn advancement slice', () => {
     const result = applyCommand(state, command('END_TURN'), emptyEffects);
 
     expectRejected(result, 'END_TURN', 'END_TURN requires a valid current combatant', state);
+  });
+
+  test('generates end-turn prompts after hard-clock expiry and blocks advancement', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1', {
+          appliedEffects: [
+            {
+              instanceId: 'expired-frightened',
+              effectId: 'frightened',
+              value: 2,
+              duration: { type: 'untilTurnEnd', combatantId: 'goblin-1' }
+            },
+            {
+              instanceId: 'active-frightened',
+              effectId: 'frightened',
+              value: 3,
+              duration: { type: 'unlimited' }
+            }
+          ]
+        }),
+        'fighter-1': combatant('fighter-1', { reactionUsedThisRound: true })
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), effectLibrary);
+
+    expect(result.newState.phase).toBe('RESOLVING');
+    expect(result.newState.initiative.currentIndex).toBe(0);
+    expect(result.newState.combatants['goblin-1'].appliedEffects).toEqual([
+      {
+        instanceId: 'active-frightened',
+        effectId: 'frightened',
+        value: 3,
+        duration: { type: 'unlimited' }
+      }
+    ]);
+    expect(result.newState.pendingPrompts).toEqual<Prompt[]>([
+      {
+        id: 'prompt:turnEnd:goblin-1:goblin-1:active-frightened',
+        boundary: { type: 'turnEnd', combatantId: 'goblin-1' },
+        combatantId: 'goblin-1',
+        effectInstanceId: 'active-frightened',
+        effectName: 'Frightened',
+        description: 'Frightened 3',
+        suggestionType: { type: 'suggestDecrement', amount: 1 },
+        currentValue: 3,
+        suggestedValue: 2
+      }
+    ]);
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'goblin-1' },
+      {
+        type: 'effect-removed',
+        combatantId: 'goblin-1',
+        effectId: 'frightened',
+        effectName: 'Frightened',
+        instanceId: 'expired-frightened',
+        reason: 'expired'
+      },
+      {
+        type: 'prompt-generated',
+        promptId: 'prompt:turnEnd:goblin-1:goblin-1:active-frightened',
+        boundary: { type: 'turnEnd', combatantId: 'goblin-1' },
+        combatantId: 'goblin-1',
+        effectInstanceId: 'active-frightened',
+        effectName: 'Frightened',
+        suggestionType: 'suggestDecrement',
+        description: 'Frightened 3'
+      },
+      { type: 'phase-changed', from: 'ACTIVE', to: 'RESOLVING' }
+    ]);
+  });
+
+  test('generates start-turn prompts after hard-clock expiry and enters resolving', () => {
+    const state = activeEncounter({
+      round: 2,
+      initiative: {
+        order: ['goblin-1', 'fighter-1'],
+        currentIndex: 1,
+        delaying: []
+      },
+      combatants: {
+        'goblin-1': combatant('goblin-1', {
+          reactionUsedThisRound: true,
+          appliedEffects: [
+            {
+              instanceId: 'expired-slowed',
+              effectId: 'slowed',
+              value: 1,
+              duration: { type: 'untilTurnStart', combatantId: 'goblin-1' }
+            },
+            {
+              instanceId: 'active-slowed',
+              effectId: 'slowed',
+              value: 2,
+              duration: { type: 'unlimited' }
+            }
+          ]
+        }),
+        'fighter-1': combatant('fighter-1')
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), effectLibrary);
+
+    expect(result.newState.phase).toBe('RESOLVING');
+    expect(result.newState.initiative.currentIndex).toBe(0);
+    expect(result.newState.round).toBe(3);
+    expect(result.newState.combatants['goblin-1'].appliedEffects).toEqual([
+      {
+        instanceId: 'active-slowed',
+        effectId: 'slowed',
+        value: 2,
+        duration: { type: 'unlimited' }
+      }
+    ]);
+    expect(result.newState.pendingPrompts[0]).toMatchObject({
+      id: 'prompt:turnStart:goblin-1:goblin-1:active-slowed',
+      boundary: { type: 'turnStart', combatantId: 'goblin-1' },
+      combatantId: 'goblin-1',
+      effectInstanceId: 'active-slowed',
+      effectName: 'Slowed',
+      description: 'Loses 2 action(s) this turn.',
+      suggestionType: { type: 'reminder', description: 'Loses {value} action(s) this turn.' },
+      currentValue: 2
+    });
+    expectEvents(result, [
+      { type: 'turn-ended', combatantId: 'fighter-1' },
+      { type: 'reaction-reset', combatantId: 'goblin-1', cause: 'auto' },
+      { type: 'round-started', round: 3 },
+      {
+        type: 'effect-removed',
+        combatantId: 'goblin-1',
+        effectId: 'slowed',
+        effectName: 'Slowed',
+        instanceId: 'expired-slowed',
+        reason: 'expired'
+      },
+      { type: 'turn-started', combatantId: 'goblin-1', round: 3 },
+      {
+        type: 'prompt-generated',
+        promptId: 'prompt:turnStart:goblin-1:goblin-1:active-slowed',
+        boundary: { type: 'turnStart', combatantId: 'goblin-1' },
+        combatantId: 'goblin-1',
+        effectInstanceId: 'active-slowed',
+        effectName: 'Slowed',
+        suggestionType: 'reminder',
+        description: 'Loses 2 action(s) this turn.'
+      },
+      { type: 'phase-changed', from: 'ACTIVE', to: 'RESOLVING' }
+    ]);
   });
 });
 
