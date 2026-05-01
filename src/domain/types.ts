@@ -161,12 +161,12 @@ export interface CombatantState {
   templateAdjustment?: 'elite' | 'weak';
 }
 
-export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; combatantId: CombatantId };
+export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; ownerId: CombatantId };
 
 export interface Prompt {
   id: string;
   boundary: PromptBoundary;
-  combatantId: CombatantId;
+  targetId: CombatantId;
   effectInstanceId: string;
   effectName: string;
   description: string;
@@ -385,7 +385,7 @@ export type DomainEvent =
       type: 'prompt-generated';
       promptId: string;
       boundary: PromptBoundary;
-      combatantId: CombatantId;
+      targetId: CombatantId;
       effectInstanceId: string;
       effectName: string;
       suggestionType: TurnBoundarySuggestion['type'];

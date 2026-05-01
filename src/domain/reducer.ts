@@ -279,12 +279,12 @@ function advanceAfterTurnEnd(
   const stateAfterEndExpiry = endExpiry.state;
   const endPrompts = generatePromptsForBoundary(
     stateAfterEndExpiry,
-    { type: 'turnEnd', combatantId: currentCombatantId },
+    { type: 'turnEnd', ownerId: currentCombatantId },
     effectLibrary,
     commandType
   );
   if (endPrompts.kind === 'rejected') {
-    return endPrompts.result;
+    return appendRejectedEvents(stateAfterEndExpiry, events, endPrompts.result);
   }
 
   if (endPrompts.prompts.length > 0) {
@@ -328,9 +328,6 @@ function advanceToNextTurn(
       events: [
         ...events,
         { type: 'all-combatants-dead' },
-        ...(state.phase === 'RESOLVING'
-          ? [{ type: 'phase-changed', from: 'RESOLVING', to: 'ACTIVE' } as DomainEvent]
-          : [])
       ]
     };
   }
@@ -386,9 +383,9 @@ function finishTurnStartBoundary(
   commandType: CommandType,
   events: DomainEvent[]
 ): CommandResult {
-  const generated = generatePromptsForBoundary(state, { type: boundaryType, combatantId }, effectLibrary, commandType);
+  const generated = generatePromptsForBoundary(state, { type: boundaryType, ownerId: combatantId }, effectLibrary, commandType);
   if (generated.kind === 'rejected') {
-    return generated.result;
+    return appendRejectedEvents(state, events, generated.result);
   }
 
   if (generated.prompts.length === 0) {
@@ -428,15 +425,22 @@ function clearTurnResolution(state: EncounterState): EncounterState {
   return stateWithoutContinuation;
 }
 
+function appendRejectedEvents(state: EncounterState, priorEvents: DomainEvent[], rejected: CommandResult): CommandResult {
+  return {
+    newState: state,
+    events: [...priorEvents, ...rejected.events]
+  };
+}
+
 function generatePromptsForBoundary(
   state: EncounterState,
   boundary: PromptBoundary,
   effectLibrary: EffectLibrary,
   commandType: CommandType
 ): PromptGenerationResult {
-  const target = state.combatants[boundary.combatantId];
+  const target = state.combatants[boundary.ownerId];
   if (!target) {
-    return { kind: 'rejected', result: reject(state, commandType, `Combatant ${boundary.combatantId} not found`) };
+    return { kind: 'rejected', result: reject(state, commandType, `Combatant ${boundary.ownerId} not found`) };
   }
 
   const prompts: Prompt[] = [];
@@ -457,13 +461,18 @@ function generatePromptsForBoundary(
       continue;
     }
 
-    const prompt = buildPrompt(boundary, target.id, effect, definition, suggestion);
+    const builtPrompt = buildPrompt(boundary, target.id, effect, definition, suggestion);
+    if (builtPrompt.kind === 'rejected') {
+      return { kind: 'rejected', result: reject(state, commandType, builtPrompt.reason) };
+    }
+
+    const { prompt } = builtPrompt;
     prompts.push(prompt);
     events.push({
       type: 'prompt-generated',
       promptId: prompt.id,
       boundary: prompt.boundary,
-      combatantId: prompt.combatantId,
+      targetId: prompt.targetId,
       effectInstanceId: prompt.effectInstanceId,
       effectName: prompt.effectName,
       suggestionType: prompt.suggestionType.type,
@@ -476,28 +485,36 @@ function generatePromptsForBoundary(
 
 function buildPrompt(
   boundary: PromptBoundary,
-  combatantId: CombatantId,
+  targetId: CombatantId,
   effect: AppliedEffect,
   definition: EffectDefinition,
   suggestion: TurnBoundarySuggestion
-): Prompt {
+): { kind: 'built'; prompt: Prompt } | { kind: 'rejected'; reason: string } {
+  const clonedSuggestion = cloneTurnBoundarySuggestion(suggestion);
+  if (clonedSuggestion.kind === 'rejected') {
+    return clonedSuggestion;
+  }
+
   const currentValue = effect.value;
   const suggestedValue =
-    suggestion.type === 'suggestDecrement' && currentValue !== undefined
-      ? Math.max(currentValue - suggestion.amount, 0)
+    clonedSuggestion.suggestion.type === 'suggestDecrement' && currentValue !== undefined
+      ? Math.max(currentValue - clonedSuggestion.suggestion.amount, 0)
       : undefined;
-  const description = renderPromptDescription(definition, effect, suggestion);
+  const description = renderPromptDescription(definition, effect, clonedSuggestion.suggestion);
 
   return {
-    id: `prompt:${boundary.type}:${boundary.combatantId}:${combatantId}:${effect.instanceId}`,
-    boundary,
-    combatantId,
-    effectInstanceId: effect.instanceId,
-    effectName: definition.name,
-    description,
-    suggestionType: structuredClone(suggestion),
-    ...(currentValue !== undefined ? { currentValue } : {}),
-    ...(suggestedValue !== undefined ? { suggestedValue } : {})
+    kind: 'built',
+    prompt: {
+      id: `prompt:${boundary.type}:${boundary.ownerId}:${targetId}:${effect.instanceId}`,
+      boundary,
+      targetId,
+      effectInstanceId: effect.instanceId,
+      effectName: definition.name,
+      description,
+      suggestionType: clonedSuggestion.suggestion,
+      ...(currentValue !== undefined ? { currentValue } : {}),
+      ...(suggestedValue !== undefined ? { suggestedValue } : {})
+    }
   };
 }
 
@@ -517,10 +534,62 @@ function renderPromptDescription(
     .trim();
 }
 
-function findNextLiveTurn(
-  state: EncounterState
-): { combatantId: CombatantId; index: number; round: number } | undefined {
-  return findNextLiveTurnFrom(state, state.initiative.currentIndex + 1);
+function cloneTurnBoundarySuggestion(
+  suggestion: TurnBoundarySuggestion
+): { kind: 'valid'; suggestion: TurnBoundarySuggestion } | { kind: 'rejected'; reason: string } {
+  const candidate = suggestion as {
+    type?: unknown;
+    amount?: unknown;
+    description?: unknown;
+  };
+
+  switch (candidate.type) {
+    case 'suggestDecrement':
+      if (typeof candidate.amount !== 'number' || !isPositive(candidate.amount)) {
+        return { kind: 'rejected', reason: 'Turn boundary suggestion has an invalid decrement amount' };
+      }
+
+      if (candidate.description !== undefined && typeof candidate.description !== 'string') {
+        return { kind: 'rejected', reason: 'Turn boundary suggestion has an invalid description' };
+      }
+
+      return {
+        kind: 'valid',
+        suggestion: {
+          type: 'suggestDecrement',
+          amount: candidate.amount,
+          ...(candidate.description !== undefined ? { description: candidate.description } : {})
+        }
+      };
+    case 'suggestRemove':
+    case 'promptResolution':
+    case 'reminder':
+      if (!isNonEmptyString(candidate.description)) {
+        return { kind: 'rejected', reason: 'Turn boundary suggestion has an invalid description' };
+      }
+
+      return {
+        kind: 'valid',
+        suggestion: {
+          type: candidate.type,
+          description: candidate.description
+        }
+      };
+    case 'confirmSustained':
+      if (candidate.description !== undefined && typeof candidate.description !== 'string') {
+        return { kind: 'rejected', reason: 'Turn boundary suggestion has an invalid description' };
+      }
+
+      return {
+        kind: 'valid',
+        suggestion: {
+          type: 'confirmSustained',
+          ...(candidate.description !== undefined ? { description: candidate.description } : {})
+        }
+      };
+    default:
+      return { kind: 'rejected', reason: 'Turn boundary suggestion has an unknown type' };
+  }
 }
 
 function findNextLiveTurnFrom(
@@ -1185,16 +1254,32 @@ function resolvePrompt(
   resolution: PromptResolution,
   effectLibrary: EffectLibrary
 ): CommandResult {
-  const prompt = state.pendingPrompts.find((pendingPrompt) => pendingPrompt.id === promptId);
-  if (!prompt) {
+  const pendingPrompt = state.pendingPrompts.find((prompt) => prompt.id === promptId);
+  if (!pendingPrompt) {
     return reject(state, 'RESOLVE_PROMPT', `Prompt ${promptId} not found`);
   }
 
-  const resolutionResult = applyPromptResolution(state, prompt, resolution, effectLibrary);
-  if (resolutionResult.events.some((event) => event.type === 'command-rejected')) {
-    return resolutionResult;
+  const prompt = normalizePrompt(pendingPrompt);
+  if (prompt.kind === 'rejected') {
+    return reject(state, 'RESOLVE_PROMPT', prompt.reason);
   }
 
+  const promptResolution = clonePromptResolution(resolution);
+  if (promptResolution.kind === 'rejected') {
+    return reject(state, 'RESOLVE_PROMPT', promptResolution.reason);
+  }
+
+  const pairValidation = validatePromptResolutionPair(prompt.prompt, promptResolution.resolution);
+  if (pairValidation) {
+    return reject(state, 'RESOLVE_PROMPT', pairValidation);
+  }
+
+  const resolutionResult = applyPromptResolution(state, prompt.prompt, promptResolution.resolution, effectLibrary);
+  if (resolutionResult.events.some((event) => event.type === 'command-rejected')) {
+    return retagRejectedResolution(resolutionResult);
+  }
+
+  const continuation = resolutionResult.newState.turnResolution;
   const pendingPrompts = resolutionResult.newState.pendingPrompts.filter((pendingPrompt) => pendingPrompt.id !== promptId);
   const stateAfterPrompt = clearTurnResolution({
     ...resolutionResult.newState,
@@ -1202,7 +1287,7 @@ function resolvePrompt(
   });
   const events: DomainEvent[] = [
     ...resolutionResult.events,
-    { type: 'prompt-resolved', promptId, resolution: structuredClone(resolution) }
+    { type: 'prompt-resolved', promptId, resolution: promptResolution.resolution }
   ];
 
   if (pendingPrompts.length > 0) {
@@ -1210,20 +1295,20 @@ function resolvePrompt(
       newState: {
         ...stateAfterPrompt,
         phase: 'RESOLVING',
-        ...(state.turnResolution ? { turnResolution: state.turnResolution } : {})
+        ...(continuation ? { turnResolution: continuation } : {})
       },
       events
     };
   }
 
-  if (state.turnResolution?.type === 'advanceAfterTurnEnd') {
+  if (continuation?.type === 'advanceAfterTurnEnd') {
     return advanceToNextTurn(
       {
         ...stateAfterPrompt,
         phase: 'RESOLVING',
         pendingPrompts: []
       },
-      state.turnResolution.startIndex,
+      continuation.startIndex,
       events,
       effectLibrary,
       'RESOLVE_PROMPT'
@@ -1246,35 +1331,121 @@ function applyPromptResolution(
   resolution: PromptResolution,
   effectLibrary: EffectLibrary
 ): CommandResult {
-  if (resolution.type === 'dismiss' || prompt.suggestionType.type === 'reminder') {
+  if (resolution.type === 'dismiss') {
     return { newState: state, events: [] };
   }
 
   if (resolution.type === 'remove') {
-    return removeEffect(state, prompt.combatantId, prompt.effectInstanceId, effectLibrary, 'removed');
+    return removeEffect(state, prompt.targetId, prompt.effectInstanceId, effectLibrary, 'removed');
   }
 
   if (resolution.type === 'setValue') {
-    return setEffectValue(state, prompt.combatantId, prompt.effectInstanceId, resolution.value, effectLibrary);
+    return setEffectValue(state, prompt.targetId, prompt.effectInstanceId, resolution.value, effectLibrary);
   }
 
   switch (prompt.suggestionType.type) {
     case 'suggestDecrement':
-      return modifyEffectValue(state, prompt.combatantId, prompt.effectInstanceId, -prompt.suggestionType.amount, effectLibrary);
+      return modifyEffectValue(state, prompt.targetId, prompt.effectInstanceId, -prompt.suggestionType.amount, effectLibrary);
     case 'suggestRemove':
     case 'promptResolution':
-      return removeEffect(state, prompt.combatantId, prompt.effectInstanceId, effectLibrary, 'removed');
+      return removeEffect(state, prompt.targetId, prompt.effectInstanceId, effectLibrary, 'removed');
     case 'confirmSustained':
-      return setEffectDuration(
-        state,
-        prompt.combatantId,
-        prompt.effectInstanceId,
-        { type: 'untilTurnEnd', combatantId: prompt.boundary.combatantId },
-        effectLibrary
-      );
+      {
+        const effect = state.combatants[prompt.targetId]?.appliedEffects.find(
+          (appliedEffect) => appliedEffect.instanceId === prompt.effectInstanceId
+        );
+        const ownerId = effect?.sourceId ?? prompt.boundary.ownerId;
+
+        return setEffectDuration(
+          state,
+          prompt.targetId,
+          prompt.effectInstanceId,
+          { type: 'untilTurnEnd', combatantId: ownerId },
+          effectLibrary
+        );
+      }
     default:
-      return assertNever(prompt.suggestionType);
+      return reject(state, 'RESOLVE_PROMPT', `Unsupported prompt suggestion ${JSON.stringify(prompt.suggestionType)}`);
   }
+}
+
+function clonePromptResolution(
+  resolution: PromptResolution
+): { kind: 'valid'; resolution: PromptResolution } | { kind: 'rejected'; reason: string } {
+  const candidate = resolution as { type?: unknown; value?: unknown };
+
+  switch (candidate.type) {
+    case 'accept':
+    case 'dismiss':
+    case 'remove':
+      return { kind: 'valid', resolution: { type: candidate.type } };
+    case 'setValue':
+      if (typeof candidate.value !== 'number') {
+        return { kind: 'rejected', reason: 'RESOLVE_PROMPT setValue resolution requires a numeric value' };
+      }
+
+      return { kind: 'valid', resolution: { type: 'setValue', value: candidate.value } };
+    default:
+      return { kind: 'rejected', reason: 'RESOLVE_PROMPT resolution type is invalid' };
+  }
+}
+
+function retagRejectedResolution(result: CommandResult): CommandResult {
+  return {
+    newState: result.newState,
+    events: result.events.map((event) =>
+      event.type === 'command-rejected' ? { ...event, commandType: 'RESOLVE_PROMPT' } : event
+    )
+  };
+}
+
+function normalizePrompt(prompt: Prompt): { kind: 'valid'; prompt: Prompt } | { kind: 'rejected'; reason: string } {
+  const boundary = prompt.boundary as { type?: unknown; ownerId?: unknown };
+  if ((boundary.type !== 'turnStart' && boundary.type !== 'turnEnd') || !isNonEmptyString(boundary.ownerId)) {
+    return { kind: 'rejected', reason: `Prompt ${prompt.id} has an invalid boundary` };
+  }
+
+  if (!isNonEmptyString(prompt.targetId)) {
+    return { kind: 'rejected', reason: `Prompt ${prompt.id} has an invalid target` };
+  }
+
+  if (!isNonEmptyString(prompt.effectInstanceId)) {
+    return { kind: 'rejected', reason: `Prompt ${prompt.id} has an invalid effect instance` };
+  }
+
+  const suggestion = cloneTurnBoundarySuggestion(prompt.suggestionType);
+  if (suggestion.kind === 'rejected') {
+    return { kind: 'rejected', reason: `Prompt ${prompt.id} has an invalid suggestion` };
+  }
+
+  return {
+    kind: 'valid',
+    prompt: {
+      ...prompt,
+      boundary: { type: boundary.type, ownerId: boundary.ownerId },
+      targetId: prompt.targetId,
+      effectInstanceId: prompt.effectInstanceId,
+      suggestionType: suggestion.suggestion
+    }
+  };
+}
+
+function validatePromptResolutionPair(prompt: Prompt, resolution: PromptResolution): string | undefined {
+  const suggestionType = prompt.suggestionType.type;
+
+  if (suggestionType === 'reminder') {
+    return resolution.type === 'dismiss' ? undefined : `${resolution.type} does not match ${suggestionType}`;
+  }
+
+  if (suggestionType === 'confirmSustained') {
+    return resolution.type === 'setValue' ? `${resolution.type} does not match ${suggestionType}` : undefined;
+  }
+
+  if (suggestionType === 'suggestRemove') {
+    return resolution.type === 'setValue' ? `${resolution.type} does not match ${suggestionType}` : undefined;
+  }
+
+  return undefined;
 }
 
 function findEffectInstance(
@@ -1444,6 +1615,10 @@ function isPositive(value: number): boolean {
 
 function isNonNegative(value: number): boolean {
   return Number.isInteger(value) && value >= 0;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function nextEffectInstanceId(commandId: string, effects: AppliedEffect[]): string {

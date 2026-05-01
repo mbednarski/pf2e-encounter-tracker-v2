@@ -83,7 +83,7 @@ interface AppliedEffect {
 
 **Amendments vs arch §8.3:**
 - `sourceId` now optional. Required for: APPLY_EFFECT from an active combatant. Undefined for: persisted effects rehydrated from PartyMember/Companion records, system-implied effects with no clear source, GM-applied conditions where the GM doesn't bother attributing.
-- `targetId` removed. The instance lives in `combatants[X].appliedEffects[]` — target is implicit. Where a Prompt or other structure needs to reference an effect across combatants, use `{ combatantId, instanceId }` pair.
+- `targetId` removed from `AppliedEffect`. The instance lives in `combatants[X].appliedEffects[]` — target is implicit there. Where a Prompt or other structure needs to reference an effect across combatants, use `{ targetId, instanceId }` pair.
 - `sourceLabel` added. Populated at APPLY_EFFECT time from `combatants[sourceId].name` by the domain reducer. UI displays `sourceLabel` if `sourceId` lookup fails (combatant removed or missing). On rehydration from PersistedEffect, sourceLabel is preserved if it was set; sourceId stays undefined.
 
 ---
@@ -100,7 +100,7 @@ type Duration =
 ```
 
 **Amendments vs arch §8.4:**
-- `sustained` removed from union. Sustained spells are intended to use `turnEndSuggestion: { type: "confirmSustained" }`, and confirm resolution can dispatch `SET_EFFECT_DURATION` (see §8) to push the end to the caster's next turn end. The generic prompt generator does not yet generate sustained prompts from hard-clock duration instances because hard-clock expirations run before prompts; sustained prompt generation needs a dedicated follow-up rule.
+- `sustained` removed from union. Sustained spells are intended to use `turnEndSuggestion: { type: "confirmSustained" }`, and confirm resolution can dispatch `SET_EFFECT_DURATION` (see §8) to push the end to the effect source's next turn end, falling back to the boundary owner when `sourceId` is absent. The generic prompt generator does not yet generate sustained prompts from hard-clock duration instances because hard-clock expirations run before prompts; sustained prompt generation needs a dedicated follow-up rule.
 - `rounds` simplified to `{ type: "rounds"; count: number }`. No anchor combatant, no auto-decrement. It's a display-only counter the GM ticks down manually via `SET_EFFECT_DURATION`. If the GM wants automatic behavior, they use `untilTurnEnd`.
 - `conditional` retained — distinguishes "ends on a trigger" from `unlimited` ("lasts forever"). Both are uncomputable; the type difference is purely semantic for UI.
 
@@ -258,7 +258,7 @@ interface SetEffectDurationPayload {
 **Events:**
 - `{ type: "effect-duration-changed", combatantId, effectName, instanceId }`
 
-For `rounds` countdown ticking, the orchestrator dispatches with `{ type: "rounds", count: oldCount - 1 }`. For sustained-confirm, it dispatches with `{ type: "untilTurnEnd", combatantId: casterId }` (the same shape, but the anchor is the caster's *next* turn end, which is what the hard clock will resolve to).
+For `rounds` countdown ticking, the orchestrator dispatches with `{ type: "rounds", count: oldCount - 1 }`. For sustained-confirm, it dispatches with `{ type: "untilTurnEnd", combatantId: effect.sourceId ?? boundary.ownerId }` (the same shape, but the anchor is the source caster's *next* turn end when known, which is what the hard clock will resolve to).
 
 **Amendment to command vocab spec §4.5:** Add SET_EFFECT_DURATION to the Effects section.
 
