@@ -37,10 +37,10 @@ Active work is grouped into three parallel tracks. Within each track items are d
 Track A. Order: effect handlers first, then derived stacking, then prompts.
 
 - [x] Add built-in condition and persistent damage library. (Implemented in PR #31.)
-- [ ] Implement `APPLY_EFFECT`, `REMOVE_EFFECT`, value changes, and duration changes. (Issue #10. Unblocks #11, #12, and the conditions UI in #45.)
-- [ ] Implement implied effects and removal cascades. (Issue #10.)
-- [ ] Implement PF2e stacking derivation. (Issue #11. Depends on #10.)
-- [ ] Implement turn-boundary prompt generation. (Issue #12. Depends on #10 and #11.)
+- [x] Implement `APPLY_EFFECT`, `REMOVE_EFFECT`, value changes, and duration changes. (Issue #10.)
+- [x] Implement implied effects and removal cascades. (Issue #10.)
+- [x] Implement PF2e stacking derivation. (Issue #11.)
+- [x] Implement turn-boundary prompt generation. (Issue #12.)
 
 ## M4 Persistence and Import
 
@@ -57,16 +57,16 @@ Track C. Order: encounter persistence first so other persistence work can reuse 
 Track B. Slice numbering follows the umbrella issues #15 (combat screen) and #16 (prompt panel + log).
 
 - [x] Slice 1 — extract combatant UI into components. (Issue #28.)
-- [ ] Slice 3 — turn controls on combatant cards. (Issue #38.)
-- [ ] Slice 4a — merge initiative track into combatant cards. (Groundwork for Slice 4 details panel.)
-- [ ] Slice 4b — combatant details panel scaffolding + selection. (Groundwork for Slice 4 notes editor.)
-- [ ] Slice 4 — combatant notes UI inside details panel. (Issue #40.)
-- [ ] Slice 5 — per-card HP delta controls. (Issue #39.)
-- [ ] Slice 6 — dead/unconscious visual state. (Issue #43.)
+- [x] Slice 3 — turn controls on combatant cards. (Issue #38.)
+- [x] Slice 4a — merge initiative track into combatant cards. (Groundwork for Slice 4 details panel.)
+- [x] Slice 4b — combatant details panel scaffolding + selection. (Groundwork for Slice 4 notes editor.)
+- [x] Slice 4 — combatant notes UI inside details panel. (Issue #40.)
+- [x] Slice 5 — per-card HP delta controls. (Issue #39.)
+- [x] Slice 6 — dead/unconscious visual state. (Issue #43.)
 - [ ] Slice 7 — tablet-first responsive layout pass. (Issue #44.)
 - [ ] Slice 8 — append-only combat log component. (Issue #41.)
 - [ ] Slice 9 — prompt resolution panel. (Issue #46. Depends on #12.)
-- [ ] Slice 10 — conditions UI on combatant cards. (Issue #45. Depends on #10.)
+- [x] Slice 10 — conditions UI on combatant cards. (Issue #45.)
 - [ ] Manual static Cloudflare Pages deployment verification.
 
 ## M6 Spellcasting (deferred)
