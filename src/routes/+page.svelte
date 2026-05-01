@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Command, CombatantState, Creature, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import FeedbackPanel from '../components/FeedbackPanel.svelte';
@@ -33,6 +34,12 @@
     reconcileWithCombatants,
     type Selection
   } from '$lib/selection-state';
+  import {
+    clearActiveEncounter,
+    loadActiveEncounter,
+    saveActiveEncounter
+  } from '$lib/storage/active-encounter';
+  import { createPersistenceController } from '$lib/storage/persistence-controller';
 
   const conditionOptions = listConditionOptions();
 
@@ -53,11 +60,42 @@
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
 
+  function appendFeedback(id: string, message: string) {
+    feedback = [
+      ...feedback,
+      { id, commandId: id, severity: 'warn', message }
+    ];
+  }
+
+  const persistence = createPersistenceController({
+    load: loadActiveEncounter,
+    save: saveActiveEncounter,
+    clear: clearActiveEncounter,
+    onRestoreFailed: () =>
+      appendFeedback(
+        `restore-fail-${Date.now()}`,
+        'Could not restore the previous encounter from storage. If you have this app open in another tab, close it and reload.'
+      ),
+    onPersistFailed: () =>
+      appendFeedback(
+        `persist-fail-${Date.now()}`,
+        'Auto-save is unavailable. Your encounter will not survive a reload. (Common causes: private-browsing mode, full storage, or another tab using a newer version.)'
+      )
+  });
+
   function runCommand(command: Command) {
     const result = dispatchEncounterCommand(encounter, feedback, command);
     encounter = result.state;
     feedback = result.feedback;
+    persistence.persist(result.state);
   }
+
+  onMount(async () => {
+    const restored = await persistence.restore();
+    if (restored) {
+      encounter = restored;
+    }
+  });
 
   function nextCommandId() {
     return `cmd-${commandCounter++}`;
@@ -196,6 +234,7 @@
     commandCounter = 1;
     combatantCounter = 1;
     selection = emptySelection;
+    persistence.reset();
   }
 </script>
 
