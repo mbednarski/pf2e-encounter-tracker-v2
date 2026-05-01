@@ -6,6 +6,7 @@
     type ManualCombatantInput,
     type TemplateAdjustmentChoice
   } from '$lib/encounter-app';
+  import { templateLabel } from '$lib/template-label';
 
   export let canStart: boolean;
   export let onAddCreatures: (input: {
@@ -40,12 +41,6 @@
         adjustment: selectedAdjustment
       })
     : undefined;
-
-  function templateLabel(adjustment: TemplateAdjustmentChoice) {
-    if (adjustment === 'elite') return 'Elite';
-    if (adjustment === 'weak') return 'Weak';
-    return 'Normal';
-  }
 
   function formatTraits(creature: Creature) {
     return [creature.rarity, creature.size, ...creature.traits].join(' · ');

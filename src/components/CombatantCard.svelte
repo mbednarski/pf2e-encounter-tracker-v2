@@ -10,6 +10,7 @@
     type ConditionOption
   } from '$lib/encounter-app';
   import type { CommittableEdit, HpEditField } from '$lib/hp-input';
+  import { templateLabel } from '$lib/template-label';
   import InlineNumberEdit from './InlineNumberEdit.svelte';
 
   export let combatant: CombatantState;
@@ -30,6 +31,8 @@
   export let onMove: (id: string, direction: -1 | 1) => void;
   export let isFirst: boolean = false;
   export let isLast: boolean = false;
+  export let isSelected: boolean = false;
+  export let onSelect: ((id: string) => void) | undefined = undefined;
 
   let pickerOpen = false;
   let pickerEffectId = '';
@@ -86,12 +89,6 @@
     }
   }
 
-  function templateLabel(adjustment: CombatantState['templateAdjustment']) {
-    if (adjustment === 'elite') return 'Elite';
-    if (adjustment === 'weak') return 'Weak';
-    return '';
-  }
-
   $: hpPercent = Math.max(
     0,
     Math.min(100, (combatant.currentHp / combatant.baseStats.hp) * 100)
@@ -128,6 +125,7 @@
 
 <article
   class:current-card={isCurrent}
+  class:selected-card={isSelected}
   class:dimmed={visualState !== 'alive'}
   data-visual-state={visualState}
   class="combatant-card"
@@ -135,7 +133,15 @@
   <div class="card-heading">
     <div>
       <div class="card-title">
-        <h2>{combatant.name}</h2>
+        <h2>
+          <button
+            type="button"
+            class="card-name-button"
+            aria-pressed={isSelected}
+            title={isSelected ? `${combatant.name} is selected` : `Show details for ${combatant.name}`}
+            onclick={() => onSelect?.(combatant.id)}
+          >{combatant.name}</button>
+        </h2>
         {#if combatant.templateAdjustment}
           <span class="template-badge {combatant.templateAdjustment}">{templateLabel(combatant.templateAdjustment)}</span>
         {/if}
@@ -340,6 +346,30 @@
 
   .current-card {
     border-color: #a53f2b;
+  }
+
+  .selected-card {
+    box-shadow:
+      inset 3px 0 0 #2f6f8a,
+      0 1px 2px rgb(29 37 40 / 7%);
+  }
+
+  .card-name-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .card-name-button:hover,
+  .card-name-button:focus-visible {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    outline: none;
   }
 
   .card-heading {
