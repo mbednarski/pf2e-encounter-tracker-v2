@@ -1,5 +1,16 @@
 import { applyCommand, createCombatantFromCreature, effectLibrary } from '../domain';
-import type { CombatantState, Command, CommandType, Creature, CreatureTemplateAdjustment, DomainEvent, EncounterState } from '../domain';
+import type {
+  AppliedEffect,
+  CombatantState,
+  Command,
+  CommandType,
+  Creature,
+  CreatureTemplateAdjustment,
+  DomainEvent,
+  Duration,
+  EffectDefinition,
+  EncounterState
+} from '../domain';
 
 export interface ManualCombatantInput {
   id: string;
@@ -130,6 +141,88 @@ export interface CombatantCardActionAvailability {
   canMarkReactionUsed: boolean;
   canMarkDead: boolean;
   canRevive: boolean;
+}
+
+export interface ConditionOption {
+  id: string;
+  name: string;
+  hasValue: boolean;
+  maxValue?: number;
+  description?: string;
+}
+
+export interface AppliedEffectView {
+  instanceId: string;
+  effectId: string;
+  name: string;
+  hasValue: boolean;
+  maxValue?: number;
+  value?: number;
+  durationLabel: string;
+  isImplied: boolean;
+  parentName?: string;
+}
+
+export function listConditionDefinitions(): EffectDefinition[] {
+  return Object.values(effectLibrary)
+    .filter((definition) => definition.category === 'condition')
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function listConditionOptions(): ConditionOption[] {
+  return listConditionDefinitions().map((definition) => ({
+    id: definition.id,
+    name: definition.name,
+    hasValue: definition.hasValue,
+    maxValue: definition.maxValue,
+    description: definition.description
+  }));
+}
+
+export function formatDuration(duration: Duration, state: EncounterState): string {
+  switch (duration.type) {
+    case 'unlimited':
+      return 'unlimited';
+    case 'rounds':
+      return duration.count === 1 ? '1 round' : `${duration.count} rounds`;
+    case 'untilTurnEnd':
+      return `until end of ${combatantName(state, duration.combatantId)}'s turn`;
+    case 'untilTurnStart':
+      return `until start of ${combatantName(state, duration.combatantId)}'s turn`;
+    case 'conditional':
+      return duration.description;
+  }
+}
+
+export function viewAppliedEffects(
+  combatant: CombatantState,
+  state: EncounterState
+): AppliedEffectView[] {
+  return combatant.appliedEffects.map((effect) => toAppliedEffectView(effect, combatant, state));
+}
+
+function toAppliedEffectView(
+  effect: AppliedEffect,
+  combatant: CombatantState,
+  state: EncounterState
+): AppliedEffectView {
+  const definition = effectLibrary[effect.effectId];
+  const parent = effect.parentInstanceId
+    ? combatant.appliedEffects.find((candidate) => candidate.instanceId === effect.parentInstanceId)
+    : undefined;
+  const parentDefinition = parent ? effectLibrary[parent.effectId] : undefined;
+
+  return {
+    instanceId: effect.instanceId,
+    effectId: effect.effectId,
+    name: definition?.name ?? effect.effectId,
+    hasValue: definition?.hasValue ?? false,
+    maxValue: definition?.maxValue,
+    value: effect.value,
+    durationLabel: formatDuration(effect.duration, state),
+    isImplied: Boolean(effect.parentInstanceId),
+    parentName: parentDefinition?.name ?? parent?.effectId
+  };
 }
 
 export function combatantCardActions(

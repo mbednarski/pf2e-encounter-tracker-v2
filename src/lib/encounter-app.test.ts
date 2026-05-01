@@ -3,12 +3,17 @@ import {
   combatantCardActions,
   combatantVisualState,
   dispatchEncounterCommand,
+  formatDuration,
+  listConditionDefinitions,
+  listConditionOptions,
   makeCombatant,
   makeCreatureCombatant,
   newEncounterState,
-  toCommand
+  toCommand,
+  viewAppliedEffects
 } from './encounter-app';
-import type { Creature } from '../domain';
+import { effectLibrary } from '../domain';
+import type { CombatantState, Creature, EncounterState } from '../domain';
 
 describe('encounter app boundary', () => {
   test('creates a normal creature combatant through the app boundary', () => {
@@ -322,7 +327,250 @@ describe('end-to-end turn-control dispatches', () => {
   });
 });
 
-function stateWithTwoCombatants() {
+describe('listConditionDefinitions', () => {
+  test('returns only condition-category definitions, alphabetized by name', () => {
+    const definitions = listConditionDefinitions();
+    const expectedCount = Object.values(effectLibrary).filter((d) => d.category === 'condition').length;
+
+    expect(definitions.length).toBe(expectedCount);
+    expect(definitions.every((d) => d.category === 'condition')).toBe(true);
+
+    const names = definitions.map((d) => d.name);
+    expect([...names].sort((a, b) => a.localeCompare(b))).toEqual(names);
+  });
+
+  test('listConditionOptions projects only the fields the UI needs', () => {
+    const options = listConditionOptions();
+    const frightened = options.find((o) => o.id === 'frightened');
+
+    expect(frightened).toEqual({
+      id: 'frightened',
+      name: 'Frightened',
+      hasValue: true,
+      maxValue: 4,
+      description: 'Decreases by 1 at end of your turn.'
+    });
+  });
+});
+
+describe('formatDuration', () => {
+  const state = newEncounterState();
+
+  test('renders unlimited durations', () => {
+    expect(formatDuration({ type: 'unlimited' }, state)).toBe('unlimited');
+  });
+
+  test('renders rounds with singular and plural forms', () => {
+    expect(formatDuration({ type: 'rounds', count: 1 }, state)).toBe('1 round');
+    expect(formatDuration({ type: 'rounds', count: 4 }, state)).toBe('4 rounds');
+  });
+
+  test('renders turn-bound durations using the combatant name', () => {
+    const populated = stateWithTwoCombatants();
+
+    expect(formatDuration({ type: 'untilTurnEnd', combatantId: 'goblin-1' }, populated))
+      .toBe("until end of Goblin Warrior's turn");
+    expect(formatDuration({ type: 'untilTurnStart', combatantId: 'fighter-1' }, populated))
+      .toBe("until start of Fighter's turn");
+  });
+
+  test('falls back to combatant id when the target is missing', () => {
+    expect(formatDuration({ type: 'untilTurnEnd', combatantId: 'ghost' }, state))
+      .toBe("until end of ghost's turn");
+  });
+
+  test('renders conditional durations using the description text', () => {
+    expect(formatDuration({ type: 'conditional', description: 'until next save' }, state))
+      .toBe('until next save');
+  });
+});
+
+describe('viewAppliedEffects', () => {
+  test('returns an empty list for a combatant with no effects', () => {
+    const state = stateWithTwoCombatants();
+    expect(viewAppliedEffects(state.combatants['goblin-1'], state)).toEqual([]);
+  });
+
+  test('hydrates name, hasValue, value, duration label, and parent attribution', () => {
+    const started = startedState();
+    const fightened = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('APPLY_EFFECT', {
+        effectId: 'frightened',
+        targetId: 'fighter-1',
+        value: 2,
+        duration: { type: 'unlimited' }
+      }, 'cmd-frighten')
+    );
+    const dyingApplied = dispatchEncounterCommand(
+      fightened.state,
+      fightened.feedback,
+      toCommand('APPLY_EFFECT', {
+        effectId: 'dying',
+        targetId: 'fighter-1',
+        value: 1,
+        duration: { type: 'unlimited' }
+      }, 'cmd-dying')
+    );
+
+    const fighter = dyingApplied.state.combatants['fighter-1'];
+    const views = viewAppliedEffects(fighter, dyingApplied.state);
+
+    const frightenedView = views.find((v) => v.effectId === 'frightened');
+    expect(frightenedView).toMatchObject({
+      effectId: 'frightened',
+      name: 'Frightened',
+      hasValue: true,
+      maxValue: 4,
+      value: 2,
+      durationLabel: 'unlimited',
+      isImplied: false,
+      parentName: undefined
+    });
+
+    const dyingView = views.find((v) => v.effectId === 'dying');
+    expect(dyingView).toMatchObject({
+      name: 'Dying',
+      hasValue: true,
+      value: 1,
+      isImplied: false
+    });
+
+    const unconsciousView = views.find((v) => v.effectId === 'unconscious');
+    expect(unconsciousView).toMatchObject({
+      name: 'Unconscious',
+      hasValue: false,
+      value: undefined,
+      isImplied: true,
+      parentName: 'Dying'
+    });
+
+    const offGuardView = views.find((v) => v.effectId === 'off-guard');
+    expect(offGuardView).toMatchObject({
+      name: 'Off-Guard',
+      isImplied: true,
+      parentName: 'Unconscious'
+    });
+  });
+});
+
+describe('end-to-end condition dispatches', () => {
+  test('apply, modify, and auto-remove a value condition through the orchestrator', () => {
+    const started = startedState();
+
+    const applied = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('APPLY_EFFECT', {
+        effectId: 'frightened',
+        targetId: 'fighter-1',
+        value: 2,
+        duration: { type: 'unlimited' }
+      }, 'cmd-apply')
+    );
+    const fightenedInstance = applied.state.combatants['fighter-1'].appliedEffects[0];
+    expect(fightenedInstance).toMatchObject({ effectId: 'frightened', value: 2 });
+
+    const decremented = dispatchEncounterCommand(
+      applied.state,
+      applied.feedback,
+      toCommand('MODIFY_EFFECT_VALUE', {
+        targetId: 'fighter-1',
+        instanceId: fightenedInstance.instanceId,
+        delta: -1
+      }, 'cmd-mod-1')
+    );
+    expect(decremented.state.combatants['fighter-1'].appliedEffects[0]).toMatchObject({
+      effectId: 'frightened',
+      value: 1
+    });
+
+    const removed = dispatchEncounterCommand(
+      decremented.state,
+      decremented.feedback,
+      toCommand('MODIFY_EFFECT_VALUE', {
+        targetId: 'fighter-1',
+        instanceId: fightenedInstance.instanceId,
+        delta: -1
+      }, 'cmd-mod-2')
+    );
+
+    expect(removed.state.combatants['fighter-1'].appliedEffects).toEqual([]);
+
+    const messages = removed.feedback.map((entry) => entry.message).join(' | ');
+    expect(messages).toContain('effect-applied');
+    expect(messages).toContain('effect-value-changed');
+    expect(messages).toContain('effect-removed');
+  });
+
+  test('SET_EFFECT_VALUE replaces the current value without removing the effect', () => {
+    const started = startedState();
+
+    const applied = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('APPLY_EFFECT', {
+        effectId: 'frightened',
+        targetId: 'fighter-1',
+        value: 1,
+        duration: { type: 'unlimited' }
+      }, 'cmd-apply')
+    );
+    const instance = applied.state.combatants['fighter-1'].appliedEffects[0];
+
+    const setTo3 = dispatchEncounterCommand(
+      applied.state,
+      applied.feedback,
+      toCommand('SET_EFFECT_VALUE', {
+        targetId: 'fighter-1',
+        instanceId: instance.instanceId,
+        newValue: 3
+      }, 'cmd-set')
+    );
+
+    expect(setTo3.state.combatants['fighter-1'].appliedEffects[0]).toMatchObject({
+      effectId: 'frightened',
+      value: 3
+    });
+  });
+
+  test('REMOVE_EFFECT cascades to implied children', () => {
+    const started = startedState();
+
+    const applied = dispatchEncounterCommand(
+      started,
+      [],
+      toCommand('APPLY_EFFECT', {
+        effectId: 'dying',
+        targetId: 'fighter-1',
+        value: 1,
+        duration: { type: 'unlimited' }
+      }, 'cmd-apply')
+    );
+
+    const dying = applied.state.combatants['fighter-1'].appliedEffects.find(
+      (e: CombatantState['appliedEffects'][number]) => e.effectId === 'dying'
+    );
+    expect(dying).toBeDefined();
+    expect(applied.state.combatants['fighter-1'].appliedEffects.some(
+      (e: CombatantState['appliedEffects'][number]) => e.effectId === 'unconscious'
+    )).toBe(true);
+
+    const removed = dispatchEncounterCommand(
+      applied.state,
+      applied.feedback,
+      toCommand('REMOVE_EFFECT', {
+        targetId: 'fighter-1',
+        instanceId: dying!.instanceId
+      }, 'cmd-remove')
+    );
+
+    expect(removed.state.combatants['fighter-1'].appliedEffects).toEqual([]);
+  });
+});
+
+function stateWithTwoCombatants(): EncounterState {
   const goblin = makeCombatant({
     id: 'goblin-1',
     name: 'Goblin Warrior',

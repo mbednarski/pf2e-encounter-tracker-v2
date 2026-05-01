@@ -1,11 +1,18 @@
 <script lang="ts">
   import type { CombatantState, EncounterState } from '../domain';
-  import { combatantVisualState, type CombatantCardActionAvailability } from '$lib/encounter-app';
+  import {
+    combatantVisualState,
+    type AppliedEffectView,
+    type CombatantCardActionAvailability,
+    type ConditionOption
+  } from '$lib/encounter-app';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
   export let phase: EncounterState['phase'];
   export let actions: CombatantCardActionAvailability;
+  export let appliedEffectsView: AppliedEffectView[];
+  export let conditionOptions: ConditionOption[];
   export let onDamage: (id: string) => void;
   export let onHeal: (id: string) => void;
   export let onSetTemp: (id: string) => void;
@@ -14,6 +21,60 @@
   export let onMarkReactionUsed: (id: string) => void;
   export let onMarkDead: (id: string) => void;
   export let onRevive: (id: string) => void;
+  export let onApplyCondition: (id: string, choice: { effectId: string; value?: number }) => void;
+  export let onRemoveCondition: (id: string, instanceId: string) => void;
+  export let onModifyConditionValue: (id: string, instanceId: string, delta: number) => void;
+  export let onSetConditionValue: (id: string, instanceId: string, newValue: number) => void;
+
+  let pickerOpen = false;
+  let pickerEffectId = '';
+  let pickerValue = 1;
+  let editingInstanceId: string | null = null;
+  let editingValue = 1;
+
+  $: pickerSelected = conditionOptions.find((option) => option.id === pickerEffectId);
+
+  function openPicker() {
+    pickerEffectId = conditionOptions[0]?.id ?? '';
+    pickerValue = 1;
+    pickerOpen = true;
+  }
+
+  function cancelPicker() {
+    pickerOpen = false;
+  }
+
+  function applyFromPicker() {
+    if (!pickerSelected) return;
+    const choice = pickerSelected.hasValue
+      ? { effectId: pickerSelected.id, value: clampValue(pickerValue, pickerSelected.maxValue) }
+      : { effectId: pickerSelected.id };
+    onApplyCondition(combatant.id, choice);
+    pickerOpen = false;
+  }
+
+  function startEdit(view: AppliedEffectView) {
+    editingInstanceId = view.instanceId;
+    editingValue = view.value ?? 1;
+  }
+
+  function commitEdit(view: AppliedEffectView) {
+    const next = clampValue(editingValue, view.maxValue);
+    if (next !== view.value) {
+      onSetConditionValue(combatant.id, view.instanceId, next);
+    }
+    editingInstanceId = null;
+  }
+
+  function cancelEdit() {
+    editingInstanceId = null;
+  }
+
+  function clampValue(value: number, maxValue: number | undefined): number {
+    const integer = Number.isFinite(value) ? Math.trunc(value) : 1;
+    const lowerBounded = Math.max(1, integer);
+    return maxValue ? Math.min(lowerBounded, maxValue) : lowerBounded;
+  }
 
   function templateLabel(adjustment: CombatantState['templateAdjustment']) {
     if (adjustment === 'elite') return 'Elite';
@@ -91,6 +152,92 @@
   </div>
   <div class="hp-track" aria-label={`${combatant.name} HP`}>
     <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
+  </div>
+
+  <div class="conditions" aria-label={`${combatant.name} conditions`}>
+    {#if appliedEffectsView.length === 0 && !pickerOpen}
+      <span class="conditions-empty">No conditions.</span>
+    {/if}
+
+    {#each appliedEffectsView as view (view.instanceId)}
+      <span class="condition-chip" class:implied={view.isImplied}>
+        <span class="condition-name">{view.name}</span>
+        {#if view.hasValue}
+          {#if editingInstanceId === view.instanceId}
+            <input
+              class="condition-value-input"
+              type="number"
+              min="1"
+              max={view.maxValue ?? 99}
+              bind:value={editingValue}
+              aria-label={`${view.name} value`}
+            />
+            <button type="button" class="condition-mini" onclick={() => commitEdit(view)}>Set</button>
+            <button type="button" class="condition-mini secondary" onclick={cancelEdit}>Cancel</button>
+          {:else}
+            <button
+              type="button"
+              class="condition-mini"
+              onclick={() => onModifyConditionValue(combatant.id, view.instanceId, -1)}
+              aria-label={`Decrease ${view.name}`}
+            >−</button>
+            <button
+              type="button"
+              class="condition-value"
+              onclick={() => startEdit(view)}
+              title="Click to edit"
+              aria-label={`${view.name} value ${view.value}`}
+            >{view.value ?? 1}</button>
+            <button
+              type="button"
+              class="condition-mini"
+              onclick={() => onModifyConditionValue(combatant.id, view.instanceId, 1)}
+              aria-label={`Increase ${view.name}`}
+            >+</button>
+          {/if}
+        {/if}
+        <span class="condition-duration">{view.durationLabel}</span>
+        {#if view.isImplied && view.parentName}
+          <span class="condition-parent">via {view.parentName}</span>
+        {/if}
+        <button
+          type="button"
+          class="condition-remove"
+          onclick={() => onRemoveCondition(combatant.id, view.instanceId)}
+          aria-label={`Remove ${view.name}`}
+          title="Remove"
+        >✕</button>
+      </span>
+    {/each}
+
+    {#if !pickerOpen}
+      <button
+        type="button"
+        class="condition-add"
+        onclick={openPicker}
+        disabled={conditionOptions.length === 0}
+      >+ Condition</button>
+    {:else}
+      <div class="condition-picker" role="group" aria-label="Apply condition">
+        <select bind:value={pickerEffectId} aria-label="Condition">
+          {#each conditionOptions as option (option.id)}
+            <option value={option.id}>{option.name}</option>
+          {/each}
+        </select>
+        {#if pickerSelected?.hasValue}
+          <input
+            class="condition-value-input"
+            type="number"
+            min="1"
+            max={pickerSelected.maxValue ?? 99}
+            bind:value={pickerValue}
+            aria-label="Initial value"
+          />
+        {/if}
+        <button type="button" class="condition-apply" onclick={applyFromPicker}>Apply</button>
+        <button type="button" class="condition-apply secondary" onclick={cancelPicker}>Cancel</button>
+      </div>
+    {/if}
   </div>
 
   <div class="card-actions">
@@ -274,6 +421,172 @@
     height: 100%;
     border-radius: inherit;
     background: #3f7f64;
+  }
+
+  .conditions {
+    display: flex;
+    align-items: center;
+    justify-content: start;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .conditions-empty {
+    color: #8a9690;
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  .condition-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid #cfd6d1;
+    border-radius: 999px;
+    background: #eef1ee;
+    color: #263235;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 5px 3px 10px;
+  }
+
+  .condition-chip.implied {
+    background: #f5f6f3;
+    border-style: dashed;
+    opacity: 0.78;
+  }
+
+  .condition-name {
+    font-weight: 700;
+  }
+
+  .condition-duration {
+    color: #627171;
+    font-weight: 500;
+    font-size: 11px;
+  }
+
+  .condition-parent {
+    color: #8a9690;
+    font-size: 11px;
+    font-style: italic;
+  }
+
+  .condition-mini {
+    border: 1px solid #b8c3be;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #263235;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    min-width: 22px;
+    padding: 2px 6px;
+  }
+
+  .condition-mini.secondary {
+    color: #627171;
+  }
+
+  .condition-value {
+    border: 1px solid #b8c3be;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #263235;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    min-width: 22px;
+    padding: 2px 6px;
+  }
+
+  .condition-value-input {
+    border: 1px solid #b8c3be;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #1d2528;
+    font: inherit;
+    font-size: 12px;
+    padding: 2px 4px;
+    width: 48px;
+  }
+
+  .condition-remove {
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: #7a1f1f;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 2px 6px;
+  }
+
+  .condition-remove:hover {
+    background: #f4d7d7;
+  }
+
+  .condition-add {
+    border: 1px dashed #9aa7a3;
+    border-radius: 999px;
+    background: transparent;
+    color: #28494c;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 11px;
+  }
+
+  .condition-add:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .condition-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #b8c3be;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 5px 7px;
+  }
+
+  .condition-picker select {
+    border: 1px solid #b8c3be;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #1d2528;
+    font: inherit;
+    font-size: 13px;
+    padding: 3px 6px;
+    max-width: 160px;
+  }
+
+  .condition-apply {
+    border: 1px solid #28494c;
+    border-radius: 4px;
+    background: #28494c;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .condition-apply.secondary {
+    border-color: #9aa7a3;
+    color: #263235;
+    background: #ffffff;
   }
 
   .card-actions {
