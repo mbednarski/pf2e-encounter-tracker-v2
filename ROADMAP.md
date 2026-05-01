@@ -58,7 +58,9 @@ Track B. Slice numbering follows the umbrella issues #15 (combat screen) and #16
 
 - [x] Slice 1 — extract combatant UI into components. (Issue #28.)
 - [ ] Slice 3 — turn controls on combatant cards. (Issue #38.)
-- [ ] Slice 4 — combatant notes UI. (Issue #40.)
+- [ ] Slice 4a — merge initiative track into combatant cards. (Groundwork for Slice 4 details panel.)
+- [ ] Slice 4b — combatant details panel scaffolding + selection. (Groundwork for Slice 4 notes editor.)
+- [ ] Slice 4 — combatant notes UI inside details panel. (Issue #40.)
 - [ ] Slice 5 — per-card HP delta controls. (Issue #39.)
 - [ ] Slice 6 — dead/unconscious visual state. (Issue #43.)
 - [ ] Slice 7 — tablet-first responsive layout pass. (Issue #44.)
