@@ -1,9 +1,8 @@
 <script lang="ts">
-  import type { Ability, ActionCost, Attack, CombatantState, DamageComponent, EncounterState } from '../domain';
+  import type { Ability, ActionCost, Attack, CombatantState, DamageComponent } from '../domain';
   import { templateLabel } from '$lib/template-label';
 
   export let combatant: CombatantState | undefined;
-  export let phase: EncounterState['phase'];
 
   function formatDamage(damage: DamageComponent[]): string {
     return damage
@@ -31,8 +30,6 @@
   }
 
   $: badgeLabel = combatant ? templateLabel(combatant.templateAdjustment) : '';
-  // phase is currently used only to keep the prop wired for future copy/affordances
-  $: void phase;
 </script>
 
 <aside class="details-panel" aria-label="Combatant details">

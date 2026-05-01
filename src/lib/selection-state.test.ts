@@ -102,15 +102,39 @@ describe('selection rules — encounter scenarios', () => {
     expect(s).toEqual({ id: 'goblin-3', pinned: true });
   });
 
-  test('reset clears everything', () => {
-    const s: Selection = { id: 'goblin-1', pinned: true };
-    expect(emptySelection).not.toBe(s);
-    expect(emptySelection).toEqual({ id: undefined, pinned: false });
-  });
-
   test('combatant whose id was selected is removed: selection clears', () => {
     let s: Selection = { id: 'goblin-1', pinned: true };
     s = reconcileWithCombatants(s, new Set(['goblin-2', 'goblin-3']));
     expect(s).toEqual(emptySelection);
+  });
+});
+
+describe('selection rules — composition (mirrors +page.svelte reactive order)', () => {
+  // The route composes the helpers as:
+  //   selection = reconcileWithCombatants(selection, ids)
+  //   selection = followActive(selection, activeId)
+  // Reordering those two lines silently breaks the "active combatant was just removed,
+  // active rotated to a survivor" path. This test pins that order.
+  function step(prev: Selection, ids: ReadonlySet<string>, activeId: string | undefined): Selection {
+    return followActive(reconcileWithCombatants(prev, ids), activeId);
+  }
+
+  test('removed active combatant + rotation: selection lands on the new active', () => {
+    const before: Selection = { id: 'goblin-1', pinned: false };
+    const after = step(before, new Set(['fighter-1', 'goblin-2']), 'fighter-1');
+    expect(after).toEqual({ id: 'fighter-1', pinned: false });
+  });
+
+  test('removed pinned combatant + rotation: selection clears, then auto-follows new active', () => {
+    const before: Selection = { id: 'goblin-1', pinned: true };
+    const after = step(before, new Set(['fighter-1']), 'fighter-1');
+    expect(after).toEqual({ id: 'fighter-1', pinned: false });
+  });
+
+  test('user re-clicks pinned combatant: stays pinned (value-based)', () => {
+    const pinned: Selection = { id: 'goblin-1', pinned: true };
+    const next = pickCombatant(pinned, 'goblin-1');
+    expect(next.pinned).toBe(true);
+    expect(next.id).toBe('goblin-1');
   });
 });

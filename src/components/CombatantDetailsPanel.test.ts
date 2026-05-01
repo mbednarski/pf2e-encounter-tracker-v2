@@ -5,20 +5,20 @@ import CombatantDetailsPanel from './CombatantDetailsPanel.svelte';
 
 describe('CombatantDetailsPanel', () => {
   test('renders empty state when combatant is undefined', () => {
-    render(CombatantDetailsPanel, { props: { combatant: undefined, phase: 'PREPARING' } });
+    render(CombatantDetailsPanel, { props: { combatant: undefined } });
     expect(screen.getByText('Select a combatant to see details.')).toBeInTheDocument();
   });
 
   test('renders header with name and no template badge by default', () => {
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
     expect(screen.getByRole('heading', { level: 2, name: 'Goblin Warrior' })).toBeInTheDocument();
     expect(screen.queryByText(/Elite|Weak|Normal/)).not.toBeInTheDocument();
   });
 
   test('renders Elite badge when templateAdjustment is elite', () => {
     const c = combatant('goblin-1', { name: 'Goblin', templateAdjustment: 'elite' });
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
     expect(screen.getByText('Elite')).toBeInTheDocument();
   });
 
@@ -37,7 +37,7 @@ describe('CombatantDetailsPanel', () => {
         skills: {}
       }
     });
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
 
     const defenses = screen.getByLabelText('Defenses');
     expect(defenses).toHaveTextContent('12');
@@ -53,19 +53,19 @@ describe('CombatantDetailsPanel', () => {
   test('shows temp HP only when greater than zero', () => {
     const withTemp = combatant('goblin-1', { tempHp: 5 });
     const { unmount } = render(CombatantDetailsPanel, {
-      props: { combatant: withTemp, phase: 'ACTIVE' }
+      props: { combatant: withTemp }
     });
     expect(screen.getByText(/\+5 temp/)).toBeInTheDocument();
     unmount();
 
     const noTemp = combatant('goblin-2', { tempHp: 0 });
-    render(CombatantDetailsPanel, { props: { combatant: noTemp, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: noTemp } });
     expect(screen.queryByText(/temp/)).not.toBeInTheDocument();
   });
 
   test('omits attacks section when combatant has no attacks', () => {
     const c = combatant('goblin-1', { attacks: [] });
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
     expect(screen.queryByLabelText('Attacks')).not.toBeInTheDocument();
   });
 
@@ -81,7 +81,7 @@ describe('CombatantDetailsPanel', () => {
         }
       ]
     });
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
     const attacks = screen.getByLabelText('Attacks');
     expect(attacks).toHaveTextContent('Longsword');
     expect(attacks).toHaveTextContent('(melee)');
@@ -91,7 +91,7 @@ describe('CombatantDetailsPanel', () => {
 
   test('omits each ability sub-section when its array is empty', () => {
     const c = combatant('goblin-1');
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
     expect(screen.queryByLabelText('Passive Abilities')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Reactive Abilities')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Active Abilities')).not.toBeInTheDocument();
@@ -107,7 +107,7 @@ describe('CombatantDetailsPanel', () => {
         { name: 'Brutal Charge', description: 'Charge and strike.', actions: 2 }
       ]
     });
-    render(CombatantDetailsPanel, { props: { combatant: c, phase: 'ACTIVE' } });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
 
     const passive = screen.getByLabelText('Passive Abilities');
     expect(passive).toHaveTextContent('Darkvision');

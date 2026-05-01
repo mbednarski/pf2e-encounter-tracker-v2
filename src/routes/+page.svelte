@@ -250,7 +250,7 @@
       </div>
     </section>
 
-    <CombatantDetailsPanel combatant={selectedCombatant} phase={encounter.phase} />
+    <CombatantDetailsPanel combatant={selectedCombatant} />
 
     <FeedbackPanel entries={feedback} />
   </section>
