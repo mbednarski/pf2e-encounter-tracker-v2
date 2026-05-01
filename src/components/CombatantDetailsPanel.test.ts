@@ -89,6 +89,27 @@ describe('CombatantDetailsPanel', () => {
     expect(attacks).toHaveTextContent('1d8+3 slashing');
   });
 
+  test('renders multi-component damage with persistent suffix and bonus-only piece', () => {
+    const c = combatant('flame-drake-1', {
+      attacks: [
+        {
+          name: 'Bite',
+          type: 'melee',
+          modifier: 14,
+          traits: ['fire'],
+          damage: [
+            { dice: 2, dieSize: 8, bonus: 4, type: 'piercing' },
+            { dice: 1, dieSize: 6, type: 'fire', persistent: true },
+            { bonus: 2, type: 'precision' }
+          ]
+        }
+      ]
+    });
+    render(CombatantDetailsPanel, { props: { combatant: c } });
+    const damageLine = screen.getByText(/2d8\+4 piercing/);
+    expect(damageLine).toHaveTextContent('2d8+4 piercing + 1d6 fire persistent + +2 precision');
+  });
+
   test('omits each ability sub-section when its array is empty', () => {
     const c = combatant('goblin-1');
     render(CombatantDetailsPanel, { props: { combatant: c } });

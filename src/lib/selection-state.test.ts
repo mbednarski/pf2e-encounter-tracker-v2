@@ -58,6 +58,13 @@ describe('pickCombatant', () => {
     const prev: Selection = { id: 'goblin-1', pinned: true };
     expect(pickCombatant(prev, 'goblin-1')).toBe(prev);
   });
+
+  test('re-picking already-pinned id keeps it pinned (value contract)', () => {
+    const prev: Selection = { id: 'goblin-1', pinned: true };
+    const next = pickCombatant(prev, 'goblin-1');
+    expect(next.pinned).toBe(true);
+    expect(next.id).toBe('goblin-1');
+  });
 });
 
 describe('reconcileWithCombatants', () => {
@@ -129,12 +136,5 @@ describe('selection rules — composition (mirrors +page.svelte reactive order)'
     const before: Selection = { id: 'goblin-1', pinned: true };
     const after = step(before, new Set(['fighter-1']), 'fighter-1');
     expect(after).toEqual({ id: 'fighter-1', pinned: false });
-  });
-
-  test('user re-clicks pinned combatant: stays pinned (value-based)', () => {
-    const pinned: Selection = { id: 'goblin-1', pinned: true };
-    const next = pickCombatant(pinned, 'goblin-1');
-    expect(next.pinned).toBe(true);
-    expect(next.id).toBe('goblin-1');
   });
 });
