@@ -278,6 +278,7 @@ The architecture-level rules are:
 
 - Effects live on combatants as applied instances.
 - `targetId` is implicit from the containing combatant.
+- Prompt data uses `boundary.ownerId` for the combatant whose turn boundary generated the prompt and `targetId` for the combatant carrying the effect instance.
 - `sourceId` is optional; `sourceLabel` preserves readable attribution when the source combatant no longer exists.
 - `maxValue` is advisory only. The domain validates minimum values, not PF2e display caps.
 - Hard-clock durations (`untilTurnEnd`, `untilTurnStart`) are the only automatic expirations.
@@ -293,7 +294,7 @@ When `END_TURN` is dispatched for combatant X:
 3. **Suggestion prompts** are generated for remaining non-hard-clock effects on X and placed in `pendingPrompts`.
 4. If prompts exist, state transitions to `RESOLVING` and stores `turnResolution` so initiative can continue after the final prompt.
 5. `RESOLVE_PROMPT` is the primary command in this phase. HP, effect, note, death-state, and spellcasting correction commands remain legal per command vocabulary phase restrictions.
-6. GM resolves each prompt (accept suggestion, modify, dismiss).
+6. GM resolves each prompt (accept suggestion, modify, dismiss). Mismatched prompt/resolution pairs reject under `RESOLVE_PROMPT` and do not consume the prompt.
 7. When `pendingPrompts` is empty, state transitions back to `ACTIVE` and initiative advances to next combatant.
 
 The next combatant's start boundary processes `untilTurnStart` expirations first, emits `turn-started`, and then generates start-of-turn prompts from remaining non-hard-clock effects. If prompts exist, phase stays or becomes `RESOLVING`; otherwise it is `ACTIVE`.
