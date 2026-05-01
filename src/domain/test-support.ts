@@ -1,12 +1,15 @@
 import { expect } from 'vitest';
 import type {
+  CombatantId,
   CombatantState,
   Command,
   CommandResult,
   CommandType,
   DomainEvent,
   EffectLibrary,
-  EncounterState
+  EncounterState,
+  Prompt,
+  TurnBoundarySuggestion
 } from './types';
 
 export const emptyEffects: EffectLibrary = {};
@@ -16,6 +19,36 @@ export function command<T extends Command['type']>(
   payload?: Extract<Command, { type: T }>['payload']
 ): Extract<Command, { type: T }> {
   return { id: `cmd-${type}`, type, payload: payload ?? {} } as Extract<Command, { type: T }>;
+}
+
+export interface PromptOverrides {
+  id?: string;
+  boundaryType?: 'turnStart' | 'turnEnd';
+  ownerId?: CombatantId;
+  targetId?: CombatantId;
+  effectInstanceId?: string;
+  effectName?: string;
+  description?: string;
+  suggestionType?: TurnBoundarySuggestion;
+  currentValue?: number;
+  suggestedValue?: number;
+}
+
+export function prompt(overrides: PromptOverrides = {}): Prompt {
+  return {
+    id: overrides.id ?? 'prompt-1',
+    boundary: {
+      type: overrides.boundaryType ?? 'turnEnd',
+      ownerId: overrides.ownerId ?? 'goblin-1'
+    },
+    targetId: overrides.targetId ?? overrides.ownerId ?? 'goblin-1',
+    effectInstanceId: overrides.effectInstanceId ?? 'instance-1',
+    effectName: overrides.effectName ?? 'Frightened',
+    description: overrides.description ?? 'Frightened decreases by 1 at end of turn.',
+    suggestionType: overrides.suggestionType ?? { type: 'reminder', description: 'Resolve pending save.' },
+    currentValue: overrides.currentValue,
+    suggestedValue: overrides.suggestedValue
+  };
 }
 
 export function combatant(id: string, overrides: Partial<CombatantState> = {}): CombatantState {
