@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { Command, CombatantState, Creature } from '../domain';
+  import type { Command, CombatantState, Creature, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import FeedbackPanel from '../components/FeedbackPanel.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
   import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
+  import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
   import SetupPanel from '../components/SetupPanel.svelte';
   import {
     combatantCardActions,
@@ -181,6 +182,10 @@
     runCommand(toCommand('SET_NOTE', { combatantId, note }, nextCommandId()));
   }
 
+  function resolvePrompt(promptId: string, resolution: PromptResolution) {
+    runCommand(toCommand('RESOLVE_PROMPT', { promptId, resolution }, nextCommandId()));
+  }
+
   function selectCombatant(id: string) {
     selection = pickCombatant(selection, id);
   }
@@ -204,6 +209,13 @@
     phase={encounter.phase}
     round={encounter.round}
     activeName={activeCombatant?.name}
+  />
+
+  <PromptResolutionPanel
+    prompts={encounter.pendingPrompts}
+    combatantsById={encounter.combatants}
+    phase={encounter.phase}
+    onResolve={resolvePrompt}
   />
 
   <section class="workspace">
