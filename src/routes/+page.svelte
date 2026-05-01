@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Command, CombatantState, Creature, PromptResolution } from '../domain';
+  import { onMount } from 'svelte';
+  import type { Command, CombatantState, Creature, EncounterState, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import FeedbackPanel from '../components/FeedbackPanel.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -33,6 +34,10 @@
     reconcileWithCombatants,
     type Selection
   } from '$lib/selection-state';
+  import {
+    loadActiveEncounter,
+    saveActiveEncounter
+  } from '$lib/storage/active-encounter';
 
   const conditionOptions = listConditionOptions();
 
@@ -53,11 +58,29 @@
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
 
+  function persist(state: EncounterState) {
+    saveActiveEncounter(state).catch((err) => {
+      console.error('Failed to persist encounter', err);
+    });
+  }
+
   function runCommand(command: Command) {
     const result = dispatchEncounterCommand(encounter, feedback, command);
     encounter = result.state;
     feedback = result.feedback;
+    persist(result.state);
   }
+
+  onMount(async () => {
+    try {
+      const restored = await loadActiveEncounter();
+      if (restored) {
+        encounter = restored;
+      }
+    } catch (err) {
+      console.error('Failed to restore encounter', err);
+    }
+  });
 
   function nextCommandId() {
     return `cmd-${commandCounter++}`;
@@ -196,6 +219,7 @@
     commandCounter = 1;
     combatantCounter = 1;
     selection = emptySelection;
+    persist(encounter);
   }
 </script>
 
