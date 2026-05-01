@@ -20,6 +20,11 @@
     type ManualCombatantInput,
     type TemplateAdjustmentChoice
   } from '$lib/encounter-app';
+  import {
+    resolveHpEdit,
+    type CommittableEdit,
+    type HpEditField
+  } from '$lib/hp-input';
 
   const conditionOptions = listConditionOptions();
 
@@ -27,8 +32,6 @@
   let feedback: FeedbackEntry[] = [];
   let commandCounter = 1;
   let combatantCounter = 1;
-  let hpAmount = 5;
-  let tempHpAmount = 0;
 
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
@@ -45,10 +48,6 @@
 
   function nextCommandId() {
     return `cmd-${commandCounter++}`;
-  }
-
-  function numberOrDefault(value: number, fallback: number) {
-    return Number.isFinite(value) ? Math.trunc(value) : fallback;
   }
 
   function addCombatant(combatant: CombatantState) {
@@ -105,20 +104,18 @@
     runCommand(toCommand('START_ENCOUNTER', undefined, nextCommandId()));
   }
 
-  function applyDamage(combatantId: string) {
-    runCommand(toCommand('APPLY_DAMAGE', { combatantId, amount: numberOrDefault(hpAmount, 1) }, nextCommandId()));
-  }
-
-  function applyHealing(combatantId: string) {
-    runCommand(toCommand('APPLY_HEALING', { combatantId, amount: numberOrDefault(hpAmount, 1) }, nextCommandId()));
-  }
-
-  function setTempHp(combatantId: string) {
-    runCommand(toCommand('SET_TEMP_HP', { combatantId, amount: numberOrDefault(tempHpAmount, 0) }, nextCommandId()));
-  }
-
-  function setHp(combatantId: string, amount: number) {
-    runCommand(toCommand('SET_HP', { combatantId, amount }, nextCommandId()));
+  function applyHpEdit(combatantId: string, field: HpEditField, parsed: CommittableEdit) {
+    const combatant = encounter.combatants[combatantId];
+    if (!combatant) return;
+    const intent = resolveHpEdit(field, parsed, {
+      hp: combatant.currentHp,
+      maxHp: combatant.baseStats.hp,
+      tempHp: combatant.tempHp
+    });
+    if (!intent) return;
+    runCommand(
+      toCommand(intent.type, { combatantId, amount: intent.amount }, nextCommandId())
+    );
   }
 
   function endTurn(_combatantId: string) {
@@ -205,17 +202,6 @@
     />
 
     <section class="combat-column" aria-label="Combatants">
-      <div class="quick-controls">
-        <label>
-          HP Amount
-          <input type="number" min="1" bind:value={hpAmount} />
-        </label>
-        <label>
-          Temp HP
-          <input type="number" min="0" bind:value={tempHpAmount} />
-        </label>
-      </div>
-
       <div class="cards">
         {#each orderedCombatants as combatant (combatant.id)}
           <CombatantCard
@@ -225,10 +211,7 @@
             actions={combatantCardActions(encounter, combatant.id)}
             appliedEffectsView={viewAppliedEffects(combatant, encounter)}
             {conditionOptions}
-            onDamage={applyDamage}
-            onHeal={applyHealing}
-            onSetTemp={setTempHp}
-            onSetZero={(id) => setHp(id, 0)}
+            onHpEdit={applyHpEdit}
             onEndTurn={endTurn}
             onMarkReactionUsed={markReactionUsed}
             onMarkDead={markDead}
@@ -274,37 +257,6 @@
     gap: 14px;
   }
 
-  .quick-controls {
-    display: flex;
-    align-items: center;
-    justify-content: start;
-    gap: 10px;
-    border: 1px solid #cfd6d1;
-    border-radius: 8px;
-    background: #fbfcfa;
-    box-shadow: 0 1px 2px rgb(29 37 40 / 7%);
-    padding: 14px;
-  }
-
-  .quick-controls label {
-    display: grid;
-    gap: 5px;
-    color: #526061;
-    font-size: 12px;
-    font-weight: 700;
-    max-width: 140px;
-  }
-
-  .quick-controls input {
-    min-width: 0;
-    border: 1px solid #b8c3be;
-    border-radius: 6px;
-    background: #ffffff;
-    color: #1d2528;
-    padding: 9px 10px;
-    font: inherit;
-  }
-
   .cards {
     display: grid;
     gap: 10px;
@@ -333,11 +285,6 @@
     .workspace > :nth-child(3),
     .workspace > :nth-child(4) {
       grid-column: auto;
-    }
-
-    .quick-controls {
-      align-items: stretch;
-      flex-direction: column;
     }
   }
 </style>
