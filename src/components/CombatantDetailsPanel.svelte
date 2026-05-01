@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { Ability, ActionCost, Attack, CombatantState, DamageComponent } from '../domain';
   import { templateLabel } from '$lib/template-label';
+  import NotesEditor from './NotesEditor.svelte';
 
   export let combatant: CombatantState | undefined;
+  export let onSetNote: (combatantId: string, note: string | null) => void;
 
   function formatDamage(damage: DamageComponent[]): string {
     return damage
@@ -42,6 +44,14 @@
         <span class="template-badge {combatant.templateAdjustment}">{badgeLabel}</span>
       {/if}
     </header>
+
+    <section class="notes" aria-label="Notes">
+      <h3>Notes</h3>
+      <NotesEditor
+        value={combatant.notes ?? ''}
+        onCommit={(note) => onSetNote(combatant.id, note)}
+      />
+    </section>
 
     <section class="defenses" aria-label="Defenses">
       <h3>Defenses</h3>

@@ -294,11 +294,11 @@ function formatFeedbackEntry(events: DomainEvent[], state: EncounterState, comma
     id: `log-${command.id}`,
     commandId: command.id,
     severity: rejected ? 'warn' : 'info',
-    message: rejected ? `${rejected.commandType} rejected: ${rejected.reason}` : formatEvents(events, state)
+    message: rejected ? `${rejected.commandType} rejected: ${rejected.reason}` : formatEvents(events, state, command)
   };
 }
 
-function formatEvents(events: DomainEvent[], state: EncounterState): string {
+function formatEvents(events: DomainEvent[], state: EncounterState, command: Command): string {
   const first = events[0];
 
   switch (first.type) {
@@ -324,6 +324,11 @@ function formatEvents(events: DomainEvent[], state: EncounterState): string {
         return `${target} temp HP set to ${first.tempHpTo}.`;
       }
       return `${target} HP set to ${first.hpTo}.`;
+    }
+    case 'note-changed': {
+      const target = combatantName(state, first.combatantId);
+      const cleared = command.type === 'SET_NOTE' && command.payload.note === null;
+      return cleared ? `${target} note cleared.` : `${target} note updated.`;
     }
     case 'encounter-completed':
       return 'Encounter completed.';

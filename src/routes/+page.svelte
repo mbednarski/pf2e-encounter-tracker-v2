@@ -177,6 +177,10 @@
     );
   }
 
+  function setNote(combatantId: string, note: string | null) {
+    runCommand(toCommand('SET_NOTE', { combatantId, note }, nextCommandId()));
+  }
+
   function selectCombatant(id: string) {
     selection = pickCombatant(selection, id);
   }
@@ -250,7 +254,7 @@
       </div>
     </section>
 
-    <CombatantDetailsPanel combatant={selectedCombatant} />
+    <CombatantDetailsPanel combatant={selectedCombatant} onSetNote={setNote} />
 
     <FeedbackPanel entries={feedback} />
   </section>
