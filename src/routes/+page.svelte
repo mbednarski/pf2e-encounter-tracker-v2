@@ -40,6 +40,8 @@
     saveActiveEncounter
   } from '$lib/storage/active-encounter';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
+  import { creatureLibrary } from '$lib/creature-library';
+  import { importCreatureYaml } from '$lib/yaml';
 
   const conditionOptions = listConditionOptions();
 
@@ -48,6 +50,9 @@
   let commandCounter = 1;
   let combatantCounter = 1;
   let selection: Selection = emptySelection;
+  let importedCreatures: Creature[] = [];
+
+  $: availableCreatures = [...creatureLibrary, ...importedCreatures];
 
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
@@ -60,10 +65,10 @@
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
 
-  function appendFeedback(id: string, message: string) {
+  function appendFeedback(id: string, message: string, severity: 'info' | 'warn' = 'warn') {
     feedback = [
       ...feedback,
-      { id, commandId: id, severity: 'warn', message }
+      { id, commandId: id, severity, message }
     ];
   }
 
@@ -125,6 +130,60 @@
         adjustment: input.adjustment
       });
       addCombatant(combatant);
+    }
+  }
+
+  async function handleImportYamlFiles(files: File[]) {
+    for (const file of files) {
+      let text: string;
+      try {
+        text = await file.text();
+      } catch (err) {
+        appendFeedback(
+          `import-read-fail-${Date.now()}-${file.name}`,
+          `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+        continue;
+      }
+
+      const { creatures, issues } = importCreatureYaml(text);
+
+      const existingIds = new Set(availableCreatures.map((c) => c.id));
+      const accepted: Creature[] = [];
+      for (const creature of creatures) {
+        if (existingIds.has(creature.id)) {
+          appendFeedback(
+            `import-dup-${Date.now()}-${creature.id}`,
+            `Skipped "${creature.name}" from "${file.name}": id "${creature.id}" already exists.`
+          );
+          continue;
+        }
+        existingIds.add(creature.id);
+        accepted.push(creature);
+      }
+
+      if (accepted.length > 0) {
+        importedCreatures = [...importedCreatures, ...accepted];
+        appendFeedback(
+          `import-ok-${Date.now()}-${file.name}`,
+          `Imported ${accepted.length} creature${accepted.length === 1 ? '' : 's'} from "${file.name}".`,
+          'info'
+        );
+      }
+
+      for (const issue of issues) {
+        appendFeedback(
+          `import-issue-${Date.now()}-${file.name}-${issue.documentIndex}-${issue.path || 'root'}`,
+          `"${file.name}" doc ${issue.documentIndex + 1}${issue.path ? ` at "${issue.path}"` : ''}: ${issue.message}`
+        );
+      }
+
+      if (accepted.length === 0 && issues.length === 0 && creatures.length === 0) {
+        appendFeedback(
+          `import-empty-${Date.now()}-${file.name}`,
+          `"${file.name}" contained no creature documents.`
+        );
+      }
     }
   }
 
@@ -234,6 +293,7 @@
     commandCounter = 1;
     combatantCounter = 1;
     selection = emptySelection;
+    importedCreatures = [];
     persistence.reset();
   }
 </script>
@@ -260,8 +320,10 @@
   <section class="workspace">
     <SetupPanel
       {canStart}
+      creatures={availableCreatures}
       onAddCreatures={handleAddCreatures}
       onAddManual={handleAddManual}
+      onImportYamlFiles={handleImportYamlFiles}
       onStart={startEncounter}
       onReset={resetLocal}
     />
