@@ -3,6 +3,7 @@
   import TopBar from '../components/TopBar.svelte';
   import FeedbackPanel from '../components/FeedbackPanel.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
+  import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
   import SetupPanel from '../components/SetupPanel.svelte';
   import {
     combatantCardActions,
@@ -24,6 +25,13 @@
     type CommittableEdit,
     type HpEditField
   } from '$lib/hp-input';
+  import {
+    emptySelection,
+    followActive,
+    pickCombatant,
+    reconcileWithCombatants,
+    type Selection
+  } from '$lib/selection-state';
 
   const conditionOptions = listConditionOptions();
 
@@ -31,6 +39,7 @@
   let feedback: FeedbackEntry[] = [];
   let commandCounter = 1;
   let combatantCounter = 1;
+  let selection: Selection = emptySelection;
 
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
@@ -38,6 +47,10 @@
   $: unorderedCombatants = Object.values(encounter.combatants).filter((combatant) => !encounter.initiative.order.includes(combatant.id));
   $: activeCombatant = currentCombatant(encounter);
   $: canStart = encounter.phase === 'PREPARING' && encounter.initiative.order.length >= 2;
+  $: combatantIdSet = new Set(Object.keys(encounter.combatants));
+  $: selection = reconcileWithCombatants(selection, combatantIdSet);
+  $: selection = followActive(selection, activeCombatant?.id);
+  $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
 
   function runCommand(command: Command) {
     const result = dispatchEncounterCommand(encounter, feedback, command);
@@ -164,11 +177,16 @@
     );
   }
 
+  function selectCombatant(id: string) {
+    selection = pickCombatant(selection, id);
+  }
+
   function resetLocal() {
     encounter = newEncounterState();
     feedback = [];
     commandCounter = 1;
     combatantCounter = 1;
+    selection = emptySelection;
   }
 </script>
 
@@ -209,6 +227,7 @@
           <CombatantCard
             {combatant}
             isCurrent={combatant.id === activeCombatant?.id}
+            isSelected={combatant.id === selection.id}
             phase={encounter.phase}
             actions={combatantCardActions(encounter, combatant.id)}
             appliedEffectsView={viewAppliedEffects(combatant, encounter)}
@@ -223,6 +242,7 @@
             onModifyConditionValue={modifyConditionValue}
             onSetConditionValue={setConditionValue}
             onMove={moveCombatant}
+            onSelect={selectCombatant}
             isFirst={index === 0}
             isLast={index === orderedCombatants.length - 1}
           />
@@ -230,9 +250,7 @@
       </div>
     </section>
 
-    <aside class="details-panel" aria-label="Combatant details">
-      <p class="details-placeholder">Combatant details coming soon.</p>
-    </aside>
+    <CombatantDetailsPanel combatant={selectedCombatant} phase={encounter.phase} />
 
     <FeedbackPanel entries={feedback} />
   </section>
@@ -297,21 +315,6 @@
   .not-yet-rolled li {
     color: #263235;
     font-size: 14px;
-  }
-
-  .details-panel {
-    border: 1px solid #cfd6d1;
-    border-radius: 8px;
-    background: #fbfcfa;
-    box-shadow: 0 1px 2px rgb(29 37 40 / 7%);
-    padding: 14px;
-  }
-
-  .details-placeholder {
-    margin: 0;
-    color: #8a9690;
-    font-size: 13px;
-    font-style: italic;
   }
 
   @media (max-width: 1180px) {
