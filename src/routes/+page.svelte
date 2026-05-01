@@ -15,6 +15,7 @@
     newEncounterState,
     toCommand,
     viewAppliedEffects,
+    type ApplyConditionChoice,
     type FeedbackEntry,
     type ManualCombatantInput,
     type TemplateAdjustmentChoice
@@ -136,14 +137,14 @@
     runCommand(toCommand('REVIVE', { combatantId }, nextCommandId()));
   }
 
-  function applyCondition(combatantId: string, choice: { effectId: string; value?: number }) {
+  function applyCondition(combatantId: string, choice: ApplyConditionChoice) {
     runCommand(
       toCommand(
         'APPLY_EFFECT',
         {
           effectId: choice.effectId,
           targetId: combatantId,
-          value: choice.value,
+          value: choice.kind === 'valued' ? choice.value : undefined,
           duration: { type: 'unlimited' }
         },
         nextCommandId()

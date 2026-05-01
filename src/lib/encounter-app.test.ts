@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  clampValue,
   combatantCardActions,
   combatantVisualState,
   dispatchEncounterCommand,
@@ -9,8 +10,10 @@ import {
   makeCombatant,
   makeCreatureCombatant,
   newEncounterState,
+  resolveApplyChoice,
   toCommand,
-  viewAppliedEffects
+  viewAppliedEffects,
+  type ConditionOption
 } from './encounter-app';
 import { effectLibrary } from '../domain';
 import type { CombatantState, Creature, EncounterState } from '../domain';
@@ -346,9 +349,79 @@ describe('listConditionDefinitions', () => {
     expect(frightened).toEqual({
       id: 'frightened',
       name: 'Frightened',
-      hasValue: true,
-      maxValue: 4,
+      value: { kind: 'valued', defaultValue: 1, maxValue: 4 },
       description: 'Decreases by 1 at end of your turn.'
+    });
+  });
+
+  test('listConditionOptions marks unvalued conditions with kind "unvalued"', () => {
+    const options = listConditionOptions();
+    const offGuard = options.find((o) => o.id === 'off-guard');
+
+    expect(offGuard?.value).toEqual({ kind: 'unvalued' });
+  });
+});
+
+describe('clampValue', () => {
+  test('floors fractional input via Math.trunc rather than rounding', () => {
+    expect(clampValue(2.7, 4)).toBe(2);
+    expect(clampValue(2.99, 4)).toBe(2);
+  });
+
+  test('returns 1 for non-finite input (NaN, +/-Infinity)', () => {
+    expect(clampValue(Number.NaN, 4)).toBe(1);
+    expect(clampValue(Number.POSITIVE_INFINITY, 4)).toBe(1);
+    expect(clampValue(Number.NEGATIVE_INFINITY, 4)).toBe(1);
+  });
+
+  test('floors zero and negatives to 1', () => {
+    expect(clampValue(0, 4)).toBe(1);
+    expect(clampValue(-5, 4)).toBe(1);
+  });
+
+  test('caps at maxValue when provided', () => {
+    expect(clampValue(99, 4)).toBe(4);
+    expect(clampValue(5, 4)).toBe(4);
+  });
+
+  test('does not cap when maxValue is undefined', () => {
+    expect(clampValue(99, undefined)).toBe(99);
+  });
+
+  test('respects maxValue of 0 instead of treating it as unbounded', () => {
+    expect(clampValue(5, 0)).toBe(0);
+  });
+});
+
+describe('resolveApplyChoice', () => {
+  const valuedOption: ConditionOption = {
+    id: 'frightened',
+    name: 'Frightened',
+    value: { kind: 'valued', defaultValue: 1, maxValue: 4 }
+  };
+  const unvaluedOption: ConditionOption = {
+    id: 'off-guard',
+    name: 'Off-Guard',
+    value: { kind: 'unvalued' }
+  };
+
+  test('returns kind "unvalued" for unvalued conditions and ignores rawValue', () => {
+    expect(resolveApplyChoice(unvaluedOption, 7)).toEqual({
+      kind: 'unvalued',
+      effectId: 'off-guard'
+    });
+  });
+
+  test('returns kind "valued" with the clamped raw value for valued conditions', () => {
+    expect(resolveApplyChoice(valuedOption, 99)).toEqual({
+      kind: 'valued',
+      effectId: 'frightened',
+      value: 4
+    });
+    expect(resolveApplyChoice(valuedOption, Number.NaN)).toEqual({
+      kind: 'valued',
+      effectId: 'frightened',
+      value: 1
     });
   });
 });
@@ -421,37 +494,76 @@ describe('viewAppliedEffects', () => {
     expect(frightenedView).toMatchObject({
       effectId: 'frightened',
       name: 'Frightened',
-      hasValue: true,
-      maxValue: 4,
-      value: 2,
+      value: { kind: 'valued', current: 2, maxValue: 4 },
       durationLabel: 'unlimited',
-      isImplied: false,
-      parentName: undefined
+      source: { kind: 'direct' }
     });
 
     const dyingView = views.find((v) => v.effectId === 'dying');
     expect(dyingView).toMatchObject({
       name: 'Dying',
-      hasValue: true,
-      value: 1,
-      isImplied: false
+      value: { kind: 'valued', current: 1 },
+      source: { kind: 'direct' }
     });
 
     const unconsciousView = views.find((v) => v.effectId === 'unconscious');
     expect(unconsciousView).toMatchObject({
       name: 'Unconscious',
-      hasValue: false,
-      value: undefined,
-      isImplied: true,
-      parentName: 'Dying'
+      value: { kind: 'unvalued' },
+      source: { kind: 'implied', parentName: 'Dying' }
     });
 
     const offGuardView = views.find((v) => v.effectId === 'off-guard');
     expect(offGuardView).toMatchObject({
       name: 'Off-Guard',
-      isImplied: true,
-      parentName: 'Unconscious'
+      source: { kind: 'implied', parentName: 'Unconscious' }
     });
+  });
+
+  test('falls back to the raw effectId when the definition is missing from the library', () => {
+    const orphan: CombatantState = {
+      ...stateWithTwoCombatants().combatants['fighter-1'],
+      appliedEffects: [
+        {
+          instanceId: 'inst-1',
+          effectId: 'custom-status',
+          duration: { type: 'unlimited' }
+        }
+      ]
+    };
+
+    const [view] = viewAppliedEffects(orphan, stateWithTwoCombatants());
+
+    expect(view).toMatchObject({
+      effectId: 'custom-status',
+      name: 'custom-status',
+      value: { kind: 'unvalued' },
+      source: { kind: 'direct' }
+    });
+  });
+
+  test('falls back to the parent effectId when the parent definition is missing', () => {
+    const fighter: CombatantState = {
+      ...stateWithTwoCombatants().combatants['fighter-1'],
+      appliedEffects: [
+        {
+          instanceId: 'parent-inst',
+          effectId: 'custom-source',
+          duration: { type: 'unlimited' }
+        },
+        {
+          instanceId: 'child-inst',
+          effectId: 'off-guard',
+          parentInstanceId: 'parent-inst',
+          duration: { type: 'unlimited' }
+        }
+      ]
+    };
+
+    const views = viewAppliedEffects(fighter, stateWithTwoCombatants());
+    const child = views.find((v) => v.effectId === 'off-guard');
+
+    expect(child?.source).toEqual({ kind: 'implied', parentName: 'custom-source' });
   });
 });
 
@@ -498,10 +610,18 @@ describe('end-to-end condition dispatches', () => {
 
     expect(removed.state.combatants['fighter-1'].appliedEffects).toEqual([]);
 
-    const messages = removed.feedback.map((entry) => entry.message).join(' | ');
-    expect(messages).toContain('effect-applied');
-    expect(messages).toContain('effect-value-changed');
-    expect(messages).toContain('effect-removed');
+    const firstDecrementFeedback = decremented.feedback
+      .slice(applied.feedback.length)
+      .map((entry) => entry.message)
+      .join(' | ');
+    expect(firstDecrementFeedback).toContain('effect-value-changed');
+    expect(firstDecrementFeedback).not.toContain('effect-removed');
+
+    const autoRemoveFeedback = removed.feedback
+      .slice(decremented.feedback.length)
+      .map((entry) => entry.message)
+      .join(' | ');
+    expect(autoRemoveFeedback).toContain('effect-removed');
   });
 
   test('SET_EFFECT_VALUE replaces the current value without removing the effect', () => {

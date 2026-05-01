@@ -1,8 +1,11 @@
 <script lang="ts">
   import type { CombatantState, EncounterState } from '../domain';
   import {
+    clampValue,
     combatantVisualState,
+    resolveApplyChoice,
     type AppliedEffectView,
+    type ApplyConditionChoice,
     type CombatantCardActionAvailability,
     type ConditionOption
   } from '$lib/encounter-app';
@@ -21,7 +24,7 @@
   export let onMarkReactionUsed: (id: string) => void;
   export let onMarkDead: (id: string) => void;
   export let onRevive: (id: string) => void;
-  export let onApplyCondition: (id: string, choice: { effectId: string; value?: number }) => void;
+  export let onApplyCondition: (id: string, choice: ApplyConditionChoice) => void;
   export let onRemoveCondition: (id: string, instanceId: string) => void;
   export let onModifyConditionValue: (id: string, instanceId: string, delta: number) => void;
   export let onSetConditionValue: (id: string, instanceId: string, newValue: number) => void;
@@ -46,23 +49,22 @@
 
   function applyFromPicker() {
     if (!pickerSelected) return;
-    const choice = pickerSelected.hasValue
-      ? { effectId: pickerSelected.id, value: clampValue(pickerValue, pickerSelected.maxValue) }
-      : { effectId: pickerSelected.id };
-    onApplyCondition(combatant.id, choice);
+    onApplyCondition(combatant.id, resolveApplyChoice(pickerSelected, pickerValue));
     pickerOpen = false;
   }
 
   function startEdit(view: AppliedEffectView) {
     editingInstanceId = view.instanceId;
-    editingValue = view.value ?? 1;
+    editingValue = view.value.kind === 'valued' ? view.value.current : 1;
   }
 
   function commitEdit(view: AppliedEffectView) {
-    const next = clampValue(editingValue, view.maxValue);
-    if (next !== view.value) {
-      onSetConditionValue(combatant.id, view.instanceId, next);
+    if (view.value.kind !== 'valued') {
+      editingInstanceId = null;
+      return;
     }
+    const next = clampValue(editingValue, view.value.maxValue);
+    onSetConditionValue(combatant.id, view.instanceId, next);
     editingInstanceId = null;
   }
 
@@ -70,10 +72,16 @@
     editingInstanceId = null;
   }
 
-  function clampValue(value: number, maxValue: number | undefined): number {
-    const integer = Number.isFinite(value) ? Math.trunc(value) : 1;
-    const lowerBounded = Math.max(1, integer);
-    return maxValue ? Math.min(lowerBounded, maxValue) : lowerBounded;
+  function clampPickerValue() {
+    if (pickerSelected?.value.kind === 'valued') {
+      pickerValue = clampValue(pickerValue, pickerSelected.value.maxValue);
+    }
+  }
+
+  function clampEditingValue(view: AppliedEffectView) {
+    if (view.value.kind === 'valued') {
+      editingValue = clampValue(editingValue, view.value.maxValue);
+    }
   }
 
   function templateLabel(adjustment: CombatantState['templateAdjustment']) {
@@ -160,16 +168,17 @@
     {/if}
 
     {#each appliedEffectsView as view (view.instanceId)}
-      <span class="condition-chip" class:implied={view.isImplied}>
+      <span class="condition-chip" class:implied={view.source.kind === 'implied'}>
         <span class="condition-name">{view.name}</span>
-        {#if view.hasValue}
+        {#if view.value.kind === 'valued'}
           {#if editingInstanceId === view.instanceId}
             <input
               class="condition-value-input"
               type="number"
               min="1"
-              max={view.maxValue ?? 99}
+              max={view.value.maxValue ?? 99}
               bind:value={editingValue}
+              onblur={() => clampEditingValue(view)}
               aria-label={`${view.name} value`}
             />
             <button type="button" class="condition-mini" onclick={() => commitEdit(view)}>Set</button>
@@ -186,8 +195,8 @@
               class="condition-value"
               onclick={() => startEdit(view)}
               title="Click to edit"
-              aria-label={`${view.name} value ${view.value}`}
-            >{view.value ?? 1}</button>
+              aria-label={`${view.name} value ${view.value.current}, click to edit`}
+            >{view.value.current}</button>
             <button
               type="button"
               class="condition-mini"
@@ -197,8 +206,8 @@
           {/if}
         {/if}
         <span class="condition-duration">{view.durationLabel}</span>
-        {#if view.isImplied && view.parentName}
-          <span class="condition-parent">via {view.parentName}</span>
+        {#if view.source.kind === 'implied'}
+          <span class="condition-parent">via {view.source.parentName}</span>
         {/if}
         <button
           type="button"
@@ -224,13 +233,14 @@
             <option value={option.id}>{option.name}</option>
           {/each}
         </select>
-        {#if pickerSelected?.hasValue}
+        {#if pickerSelected?.value.kind === 'valued'}
           <input
             class="condition-value-input"
             type="number"
             min="1"
-            max={pickerSelected.maxValue ?? 99}
+            max={pickerSelected.value.maxValue ?? 99}
             bind:value={pickerValue}
+            onblur={clampPickerValue}
             aria-label="Initial value"
           />
         {/if}

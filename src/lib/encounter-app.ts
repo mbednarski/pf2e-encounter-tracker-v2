@@ -143,25 +143,37 @@ export interface CombatantCardActionAvailability {
   canRevive: boolean;
 }
 
+export type ConditionOptionValue =
+  | { kind: 'valued'; defaultValue: number; maxValue?: number }
+  | { kind: 'unvalued' };
+
 export interface ConditionOption {
   id: string;
   name: string;
-  hasValue: boolean;
-  maxValue?: number;
+  value: ConditionOptionValue;
   description?: string;
 }
+
+export type AppliedEffectValue =
+  | { kind: 'valued'; current: number; maxValue?: number }
+  | { kind: 'unvalued' };
+
+export type AppliedEffectSource =
+  | { kind: 'direct' }
+  | { kind: 'implied'; parentName: string };
 
 export interface AppliedEffectView {
   instanceId: string;
   effectId: string;
   name: string;
-  hasValue: boolean;
-  maxValue?: number;
-  value?: number;
+  value: AppliedEffectValue;
   durationLabel: string;
-  isImplied: boolean;
-  parentName?: string;
+  source: AppliedEffectSource;
 }
+
+export type ApplyConditionChoice =
+  | { kind: 'valued'; effectId: string; value: number }
+  | { kind: 'unvalued'; effectId: string };
 
 export function listConditionDefinitions(): EffectDefinition[] {
   return Object.values(effectLibrary)
@@ -173,10 +185,29 @@ export function listConditionOptions(): ConditionOption[] {
   return listConditionDefinitions().map((definition) => ({
     id: definition.id,
     name: definition.name,
-    hasValue: definition.hasValue,
-    maxValue: definition.maxValue,
+    value: definition.hasValue
+      ? { kind: 'valued', defaultValue: 1, maxValue: definition.maxValue }
+      : { kind: 'unvalued' },
     description: definition.description
   }));
+}
+
+// PF2e condition values are 1..maxValue. Non-finite or sub-1 input falls back to 1.
+export function clampValue(value: number, maxValue: number | undefined): number {
+  const integer = Number.isFinite(value) ? Math.trunc(value) : 1;
+  const lowerBounded = Math.max(1, integer);
+  return maxValue !== undefined ? Math.min(lowerBounded, maxValue) : lowerBounded;
+}
+
+export function resolveApplyChoice(option: ConditionOption, rawValue: number): ApplyConditionChoice {
+  if (option.value.kind === 'unvalued') {
+    return { kind: 'unvalued', effectId: option.id };
+  }
+  return {
+    kind: 'valued',
+    effectId: option.id,
+    value: clampValue(rawValue, option.value.maxValue)
+  };
 }
 
 export function formatDuration(duration: Duration, state: EncounterState): string {
@@ -212,16 +243,21 @@ function toAppliedEffectView(
     : undefined;
   const parentDefinition = parent ? effectLibrary[parent.effectId] : undefined;
 
+  const value: AppliedEffectValue = definition?.hasValue
+    ? { kind: 'valued', current: effect.value ?? 1, maxValue: definition.maxValue }
+    : { kind: 'unvalued' };
+
+  const source: AppliedEffectSource = effect.parentInstanceId
+    ? { kind: 'implied', parentName: parentDefinition?.name ?? parent?.effectId ?? effect.parentInstanceId }
+    : { kind: 'direct' };
+
   return {
     instanceId: effect.instanceId,
     effectId: effect.effectId,
     name: definition?.name ?? effect.effectId,
-    hasValue: definition?.hasValue ?? false,
-    maxValue: definition?.maxValue,
-    value: effect.value,
+    value,
     durationLabel: formatDuration(effect.duration, state),
-    isImplied: Boolean(effect.parentInstanceId),
-    parentName: parentDefinition?.name ?? parent?.effectId
+    source
   };
 }
 
