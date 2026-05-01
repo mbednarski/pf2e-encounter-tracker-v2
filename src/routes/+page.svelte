@@ -9,14 +9,19 @@
     combatantCardActions,
     currentCombatant,
     dispatchEncounterCommand,
+    listConditionOptions,
     makeCombatant,
     makeCreatureCombatant,
     newEncounterState,
     toCommand,
+    viewAppliedEffects,
+    type ApplyConditionChoice,
     type FeedbackEntry,
     type ManualCombatantInput,
     type TemplateAdjustmentChoice
   } from '$lib/encounter-app';
+
+  const conditionOptions = listConditionOptions();
 
   let encounter = newEncounterState();
   let feedback: FeedbackEntry[] = [];
@@ -132,6 +137,37 @@
     runCommand(toCommand('REVIVE', { combatantId }, nextCommandId()));
   }
 
+  function applyCondition(combatantId: string, choice: ApplyConditionChoice) {
+    runCommand(
+      toCommand(
+        'APPLY_EFFECT',
+        {
+          effectId: choice.effectId,
+          targetId: combatantId,
+          value: choice.kind === 'valued' ? choice.value : undefined,
+          duration: { type: 'unlimited' }
+        },
+        nextCommandId()
+      )
+    );
+  }
+
+  function removeCondition(combatantId: string, instanceId: string) {
+    runCommand(toCommand('REMOVE_EFFECT', { targetId: combatantId, instanceId }, nextCommandId()));
+  }
+
+  function modifyConditionValue(combatantId: string, instanceId: string, delta: number) {
+    runCommand(
+      toCommand('MODIFY_EFFECT_VALUE', { targetId: combatantId, instanceId, delta }, nextCommandId())
+    );
+  }
+
+  function setConditionValue(combatantId: string, instanceId: string, newValue: number) {
+    runCommand(
+      toCommand('SET_EFFECT_VALUE', { targetId: combatantId, instanceId, newValue }, nextCommandId())
+    );
+  }
+
   function resetLocal() {
     encounter = newEncounterState();
     feedback = [];
@@ -187,6 +223,8 @@
             isCurrent={combatant.id === activeCombatant?.id}
             phase={encounter.phase}
             actions={combatantCardActions(encounter, combatant.id)}
+            appliedEffectsView={viewAppliedEffects(combatant, encounter)}
+            {conditionOptions}
             onDamage={applyDamage}
             onHeal={applyHealing}
             onSetTemp={setTempHp}
@@ -195,6 +233,10 @@
             onMarkReactionUsed={markReactionUsed}
             onMarkDead={markDead}
             onRevive={revive}
+            onApplyCondition={applyCondition}
+            onRemoveCondition={removeCondition}
+            onModifyConditionValue={modifyConditionValue}
+            onSetConditionValue={setConditionValue}
           />
         {/each}
       </div>

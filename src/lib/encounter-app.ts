@@ -1,5 +1,16 @@
 import { applyCommand, createCombatantFromCreature, effectLibrary } from '../domain';
-import type { CombatantState, Command, CommandType, Creature, CreatureTemplateAdjustment, DomainEvent, EncounterState } from '../domain';
+import type {
+  AppliedEffect,
+  CombatantState,
+  Command,
+  CommandType,
+  Creature,
+  CreatureTemplateAdjustment,
+  DomainEvent,
+  Duration,
+  EffectDefinition,
+  EncounterState
+} from '../domain';
 
 export interface ManualCombatantInput {
   id: string;
@@ -130,6 +141,124 @@ export interface CombatantCardActionAvailability {
   canMarkReactionUsed: boolean;
   canMarkDead: boolean;
   canRevive: boolean;
+}
+
+export type ConditionOptionValue =
+  | { kind: 'valued'; defaultValue: number; maxValue?: number }
+  | { kind: 'unvalued' };
+
+export interface ConditionOption {
+  id: string;
+  name: string;
+  value: ConditionOptionValue;
+  description?: string;
+}
+
+export type AppliedEffectValue =
+  | { kind: 'valued'; current: number; maxValue?: number }
+  | { kind: 'unvalued' };
+
+export type AppliedEffectSource =
+  | { kind: 'direct' }
+  | { kind: 'implied'; parentName: string };
+
+export interface AppliedEffectView {
+  instanceId: string;
+  effectId: string;
+  name: string;
+  value: AppliedEffectValue;
+  durationLabel: string;
+  source: AppliedEffectSource;
+}
+
+export type ApplyConditionChoice =
+  | { kind: 'valued'; effectId: string; value: number }
+  | { kind: 'unvalued'; effectId: string };
+
+export function listConditionDefinitions(): EffectDefinition[] {
+  return Object.values(effectLibrary)
+    .filter((definition) => definition.category === 'condition')
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function listConditionOptions(): ConditionOption[] {
+  return listConditionDefinitions().map((definition) => ({
+    id: definition.id,
+    name: definition.name,
+    value: definition.hasValue
+      ? { kind: 'valued', defaultValue: 1, maxValue: definition.maxValue }
+      : { kind: 'unvalued' },
+    description: definition.description
+  }));
+}
+
+// PF2e condition values are 1..maxValue. Non-finite or sub-1 input falls back to 1.
+export function clampValue(value: number, maxValue: number | undefined): number {
+  const integer = Number.isFinite(value) ? Math.trunc(value) : 1;
+  const lowerBounded = Math.max(1, integer);
+  return maxValue !== undefined ? Math.min(lowerBounded, maxValue) : lowerBounded;
+}
+
+export function resolveApplyChoice(option: ConditionOption, rawValue: number): ApplyConditionChoice {
+  if (option.value.kind === 'unvalued') {
+    return { kind: 'unvalued', effectId: option.id };
+  }
+  return {
+    kind: 'valued',
+    effectId: option.id,
+    value: clampValue(rawValue, option.value.maxValue)
+  };
+}
+
+export function formatDuration(duration: Duration, state: EncounterState): string {
+  switch (duration.type) {
+    case 'unlimited':
+      return 'unlimited';
+    case 'rounds':
+      return duration.count === 1 ? '1 round' : `${duration.count} rounds`;
+    case 'untilTurnEnd':
+      return `until end of ${combatantName(state, duration.combatantId)}'s turn`;
+    case 'untilTurnStart':
+      return `until start of ${combatantName(state, duration.combatantId)}'s turn`;
+    case 'conditional':
+      return duration.description;
+  }
+}
+
+export function viewAppliedEffects(
+  combatant: CombatantState,
+  state: EncounterState
+): AppliedEffectView[] {
+  return combatant.appliedEffects.map((effect) => toAppliedEffectView(effect, combatant, state));
+}
+
+function toAppliedEffectView(
+  effect: AppliedEffect,
+  combatant: CombatantState,
+  state: EncounterState
+): AppliedEffectView {
+  const definition = effectLibrary[effect.effectId];
+  const parent = effect.parentInstanceId
+    ? combatant.appliedEffects.find((candidate) => candidate.instanceId === effect.parentInstanceId)
+    : undefined;
+  const parentDefinition = parent ? effectLibrary[parent.effectId] : undefined;
+
+  const value: AppliedEffectValue = definition?.hasValue
+    ? { kind: 'valued', current: effect.value ?? 1, maxValue: definition.maxValue }
+    : { kind: 'unvalued' };
+
+  const source: AppliedEffectSource = effect.parentInstanceId
+    ? { kind: 'implied', parentName: parentDefinition?.name ?? parent?.effectId ?? effect.parentInstanceId }
+    : { kind: 'direct' };
+
+  return {
+    instanceId: effect.instanceId,
+    effectId: effect.effectId,
+    name: definition?.name ?? effect.effectId,
+    value,
+    durationLabel: formatDuration(effect.duration, state),
+    source
+  };
 }
 
 export function combatantCardActions(
