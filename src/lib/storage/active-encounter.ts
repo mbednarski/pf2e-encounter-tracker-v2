@@ -21,6 +21,12 @@ function getDb(): Promise<IDBPDatabase> | null {
           db.createObjectStore(STORE);
         }
       }
+    }).catch((err) => {
+      // Don't pin a rejected promise to the cache: a transient first-open failure
+      // (Firefox private-browsing InvalidStateError, VersionError from another tab,
+      // QuotaExceededError) would otherwise stay broken until full page reload.
+      dbPromise = null;
+      throw err;
     });
   }
   return dbPromise;

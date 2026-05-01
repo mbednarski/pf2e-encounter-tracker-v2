@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   activeEncounter,
   completedEncounter,
@@ -59,5 +59,16 @@ describe('active encounter storage', () => {
     await saveActiveEncounter(activeEncounter());
     await clearActiveEncounter();
     expect(await loadActiveEncounter()).toBeNull();
+  });
+
+  it('no-ops safely when indexedDB is unavailable (SSR / locked-down browsers)', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    try {
+      expect(await loadActiveEncounter()).toBeNull();
+      await expect(saveActiveEncounter(activeEncounter())).resolves.toBeUndefined();
+      await expect(clearActiveEncounter()).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

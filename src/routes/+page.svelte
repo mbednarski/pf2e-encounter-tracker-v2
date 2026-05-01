@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, EncounterState, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import FeedbackPanel from '../components/FeedbackPanel.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -35,9 +35,11 @@
     type Selection
   } from '$lib/selection-state';
   import {
+    clearActiveEncounter,
     loadActiveEncounter,
     saveActiveEncounter
   } from '$lib/storage/active-encounter';
+  import { createPersistenceController } from '$lib/storage/persistence-controller';
 
   const conditionOptions = listConditionOptions();
 
@@ -58,27 +60,40 @@
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
 
-  function persist(state: EncounterState) {
-    saveActiveEncounter(state).catch((err) => {
-      console.error('Failed to persist encounter', err);
-    });
+  function appendFeedback(id: string, message: string) {
+    feedback = [
+      ...feedback,
+      { id, commandId: id, severity: 'warn', message }
+    ];
   }
+
+  const persistence = createPersistenceController({
+    load: loadActiveEncounter,
+    save: saveActiveEncounter,
+    clear: clearActiveEncounter,
+    onRestoreFailed: () =>
+      appendFeedback(
+        `restore-fail-${Date.now()}`,
+        'Could not restore the previous encounter from storage. If you have this app open in another tab, close it and reload.'
+      ),
+    onPersistFailed: () =>
+      appendFeedback(
+        `persist-fail-${Date.now()}`,
+        'Auto-save is unavailable. Your encounter will not survive a reload. (Common causes: private-browsing mode, full storage, or another tab using a newer version.)'
+      )
+  });
 
   function runCommand(command: Command) {
     const result = dispatchEncounterCommand(encounter, feedback, command);
     encounter = result.state;
     feedback = result.feedback;
-    persist(result.state);
+    persistence.persist(result.state);
   }
 
   onMount(async () => {
-    try {
-      const restored = await loadActiveEncounter();
-      if (restored) {
-        encounter = restored;
-      }
-    } catch (err) {
-      console.error('Failed to restore encounter', err);
+    const restored = await persistence.restore();
+    if (restored) {
+      encounter = restored;
     }
   });
 
@@ -219,7 +234,7 @@
     commandCounter = 1;
     combatantCounter = 1;
     selection = emptySelection;
-    persist(encounter);
+    persistence.reset();
   }
 </script>
 
