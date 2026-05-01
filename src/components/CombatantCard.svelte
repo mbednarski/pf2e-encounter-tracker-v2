@@ -9,6 +9,8 @@
     type CombatantCardActionAvailability,
     type ConditionOption
   } from '$lib/encounter-app';
+  import type { CommittableEdit, HpEditField } from '$lib/hp-input';
+  import InlineNumberEdit from './InlineNumberEdit.svelte';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
@@ -16,10 +18,7 @@
   export let actions: CombatantCardActionAvailability;
   export let appliedEffectsView: AppliedEffectView[];
   export let conditionOptions: ConditionOption[];
-  export let onDamage: (id: string) => void;
-  export let onHeal: (id: string) => void;
-  export let onSetTemp: (id: string) => void;
-  export let onSetZero: (id: string) => void;
+  export let onHpEdit: (id: string, field: HpEditField, parsed: CommittableEdit) => void;
   export let onEndTurn: (id: string) => void;
   export let onMarkReactionUsed: (id: string) => void;
   export let onMarkDead: (id: string) => void;
@@ -149,13 +148,32 @@
   </div>
 
   <div class="hp-row">
-    <div>
-      <strong>{combatant.currentHp}</strong>
+    <div class="hp-cell">
+      <InlineNumberEdit
+        value={combatant.currentHp}
+        ariaLabel="Edit HP. Type 42 to set, +3 to heal, minus 5 to damage."
+        displayAriaLabel={`HP ${combatant.currentHp} of ${combatant.baseStats.hp}, click to edit`}
+        placeholder="−5, +3, 42"
+        displayClass="hp-value"
+        onCommit={(parsed) => onHpEdit(combatant.id, 'hp', parsed)}
+      />
       <span>/ {combatant.baseStats.hp} HP</span>
     </div>
-    <div>
-      <strong>{combatant.tempHp}</strong>
-      <span>temp</span>
+    <div class="hp-cell">
+      <InlineNumberEdit
+        value={combatant.tempHp}
+        ariaLabel="Edit temp HP. Type 5 to set, +3 to add, minus 2 to remove."
+        displayAriaLabel={combatant.tempHp === 0
+          ? 'Add temporary HP'
+          : `Temp HP ${combatant.tempHp}, click to edit`}
+        placeholder="+3, 5, −2"
+        displayClass="hp-value"
+        emptyDisplay="+ Add temp"
+        onCommit={(parsed) => onHpEdit(combatant.id, 'tempHp', parsed)}
+      />
+      {#if combatant.tempHp > 0}
+        <span>temp</span>
+      {/if}
     </div>
   </div>
   <div class="hp-track" aria-label={`${combatant.name} HP`}>
@@ -248,13 +266,6 @@
         <button type="button" class="condition-apply secondary" onclick={cancelPicker}>Cancel</button>
       </div>
     {/if}
-  </div>
-
-  <div class="card-actions">
-    <button type="button" onclick={() => onDamage(combatant.id)}>Damage</button>
-    <button type="button" onclick={() => onHeal(combatant.id)}>Heal</button>
-    <button type="button" onclick={() => onSetTemp(combatant.id)}>Set Temp</button>
-    <button type="button" class="secondary" onclick={() => onSetZero(combatant.id)}>Set 0</button>
   </div>
 
   <div class="card-turn-actions" aria-label="Turn and lifecycle controls">
@@ -408,10 +419,15 @@
     border-radius: 7px;
     background: #eef1ee;
     padding: 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
 
-  .hp-row strong {
+  .hp-row :global(.hp-value) {
     font-size: 24px;
+    font-weight: 700;
+    color: inherit;
   }
 
   .hp-row span {
@@ -599,32 +615,6 @@
     background: #ffffff;
   }
 
-  .card-actions {
-    display: flex;
-    align-items: center;
-    justify-content: start;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .card-actions button {
-    min-height: 38px;
-    border: 1px solid #28494c;
-    border-radius: 6px;
-    background: #28494c;
-    color: #ffffff;
-    cursor: pointer;
-    font: inherit;
-    font-weight: 700;
-    padding: 8px 12px;
-  }
-
-  .card-actions button.secondary {
-    border-color: #9aa7a3;
-    color: #263235;
-    background: #ffffff;
-  }
-
   .card-turn-actions {
     display: flex;
     align-items: center;
@@ -665,7 +655,6 @@
       flex-direction: column;
     }
 
-    .card-actions button,
     .card-turn-actions button.turn {
       width: 100%;
     }
