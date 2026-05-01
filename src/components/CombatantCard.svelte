@@ -27,6 +27,9 @@
   export let onRemoveCondition: (id: string, instanceId: string) => void;
   export let onModifyConditionValue: (id: string, instanceId: string, delta: number) => void;
   export let onSetConditionValue: (id: string, instanceId: string, newValue: number) => void;
+  export let onMove: (id: string, direction: -1 | 1) => void;
+  export let isFirst: boolean = false;
+  export let isLast: boolean = false;
 
   let pickerOpen = false;
   let pickerEffectId = '';
@@ -144,7 +147,25 @@
       </div>
       <p>AC {combatant.baseStats.ac} · Fort +{combatant.baseStats.fortitude} · Ref +{combatant.baseStats.reflex} · Will +{combatant.baseStats.will}</p>
     </div>
-    <span>{isCurrent ? 'Turn' : phase}</span>
+    <div class="card-aside">
+      <span class="phase-pill">{isCurrent ? 'Turn' : phase}</span>
+      <div class="card-reorder" aria-label="Reorder">
+        <button
+          type="button"
+          title="Move up"
+          aria-label={`Move ${combatant.name} up`}
+          disabled={isFirst}
+          onclick={() => onMove(combatant.id, -1)}
+        >↑</button>
+        <button
+          type="button"
+          title="Move down"
+          aria-label={`Move ${combatant.name} down`}
+          disabled={isLast}
+          onclick={() => onMove(combatant.id, 1)}
+        >↓</button>
+      </div>
+    </div>
   </div>
 
   <div class="hp-row">
@@ -348,13 +369,45 @@
     font-size: 13px;
   }
 
-  .card-heading > span {
+  .phase-pill {
     border-radius: 999px;
     background: #eef1ee;
     padding: 5px 8px;
     color: #627171;
     font-size: 13px;
     white-space: nowrap;
+  }
+
+  .card-aside {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .card-reorder {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .card-reorder button {
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #b8c3be;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #263235;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .card-reorder button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
   }
 
   .template-badge {

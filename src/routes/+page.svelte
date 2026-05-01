@@ -2,7 +2,6 @@
   import type { Command, CombatantState, Creature } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import FeedbackPanel from '../components/FeedbackPanel.svelte';
-  import InitiativeTrack from '../components/InitiativeTrack.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
   import SetupPanel from '../components/SetupPanel.svelte';
   import {
@@ -194,16 +193,19 @@
       onReset={resetLocal}
     />
 
-    <InitiativeTrack
-      ordered={orderedCombatants}
-      unordered={unorderedCombatants}
-      activeId={activeCombatant?.id}
-      onMove={moveCombatant}
-    />
-
     <section class="combat-column" aria-label="Combatants">
+      {#if unorderedCombatants.length > 0}
+        <div class="not-yet-rolled" aria-label="Not yet rolled">
+          <h3>Not yet rolled</h3>
+          <ul>
+            {#each unorderedCombatants as combatant (combatant.id)}
+              <li>{combatant.name}</li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
       <div class="cards">
-        {#each orderedCombatants as combatant (combatant.id)}
+        {#each orderedCombatants as combatant, index (combatant.id)}
           <CombatantCard
             {combatant}
             isCurrent={combatant.id === activeCombatant?.id}
@@ -220,10 +222,17 @@
             onRemoveCondition={removeCondition}
             onModifyConditionValue={modifyConditionValue}
             onSetConditionValue={setConditionValue}
+            onMove={moveCombatant}
+            isFirst={index === 0}
+            isLast={index === orderedCombatants.length - 1}
           />
         {/each}
       </div>
     </section>
+
+    <aside class="details-panel" aria-label="Combatant details">
+      <p class="details-placeholder">Combatant details coming soon.</p>
+    </aside>
 
     <FeedbackPanel entries={feedback} />
   </section>
@@ -245,7 +254,7 @@
 
   .workspace {
     display: grid;
-    grid-template-columns: minmax(260px, 320px) minmax(250px, 320px) minmax(420px, 1fr) minmax(260px, 340px);
+    grid-template-columns: minmax(260px, 320px) minmax(420px, 1fr) minmax(300px, 380px) minmax(260px, 340px);
     gap: 14px;
     max-width: 1440px;
     margin: 0 auto;
@@ -260,6 +269,49 @@
   .cards {
     display: grid;
     gap: 10px;
+  }
+
+  .not-yet-rolled {
+    border: 1px solid #cfd6d1;
+    border-radius: 8px;
+    background: #fbfcfa;
+    padding: 12px 14px;
+  }
+
+  .not-yet-rolled h3 {
+    margin: 0 0 6px;
+    color: #627171;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .not-yet-rolled ul {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .not-yet-rolled li {
+    color: #263235;
+    font-size: 14px;
+  }
+
+  .details-panel {
+    border: 1px solid #cfd6d1;
+    border-radius: 8px;
+    background: #fbfcfa;
+    box-shadow: 0 1px 2px rgb(29 37 40 / 7%);
+    padding: 14px;
+  }
+
+  .details-placeholder {
+    margin: 0;
+    color: #8a9690;
+    font-size: 13px;
+    font-style: italic;
   }
 
   @media (max-width: 1180px) {
