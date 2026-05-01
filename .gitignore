@@ -8,3 +8,9 @@ node_modules/
 build/
 .vite/
 coverage/
+
+# Local agent / tooling artifacts.
+.claude/settings.local.json
+.claude/worktrees/
+.playwright-mcp/
+*.png
