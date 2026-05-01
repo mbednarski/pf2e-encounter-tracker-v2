@@ -5,10 +5,18 @@
   export let onCommit: (note: string | null) => void;
   export let placeholder: string = 'Add note…';
   export let ariaLabel: string = 'Edit note';
+  export let displayAriaLabel: string = ariaLabel;
 
   let editing = false;
   let buffer = '';
   let textareaEl: HTMLTextAreaElement | null = null;
+  const hintId = `notes-edit-hint-${Math.random().toString(36).slice(2, 10)}`;
+
+  let lastValue = value;
+  $: if (value !== lastValue) {
+    lastValue = value;
+    if (editing) cancelEdit();
+  }
 
   async function startEdit() {
     buffer = value;
@@ -56,14 +64,26 @@
     class="notes-edit"
     rows="3"
     aria-label={ariaLabel}
+    aria-describedby={hintId}
     onkeydown={onKeydown}
     onblur={commit}
   ></textarea>
-  <p class="notes-hint">Ctrl+Enter to save · Esc to cancel</p>
+  <!-- commit on blur (vs InlineNumberEdit which cancels): typed prose is expensive to lose -->
+  <p id={hintId} class="notes-hint">Ctrl+Enter to save · Esc to cancel</p>
 {:else if value === ''}
-  <button type="button" class="notes-display empty" onclick={startEdit}>{placeholder}</button>
+  <button
+    type="button"
+    class="notes-display empty"
+    aria-label={displayAriaLabel}
+    onclick={startEdit}
+  >{placeholder}</button>
 {:else}
-  <button type="button" class="notes-display" onclick={startEdit}>{value}</button>
+  <button
+    type="button"
+    class="notes-display"
+    aria-label={displayAriaLabel}
+    onclick={startEdit}
+  >{value}</button>
 {/if}
 
 <style>

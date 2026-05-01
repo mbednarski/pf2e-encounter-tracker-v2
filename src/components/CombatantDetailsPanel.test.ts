@@ -158,7 +158,7 @@ describe('CombatantDetailsPanel', () => {
   test('committing a note forwards onSetNote with the combatant id', async () => {
     const onSetNote = vi.fn();
     renderPanel(combatant('goblin-1', { notes: '' }), onSetNote);
-    const placeholder = screen.getByRole('button', { name: 'Add note…' });
+    const placeholder = screen.getByRole('button', { name: 'Edit note' });
     placeholder.click();
     const textarea = await screen.findByRole('textbox', { name: 'Edit note' });
     (textarea as HTMLTextAreaElement).value = 'Watch the door.';
