@@ -690,6 +690,40 @@ describe('end-to-end condition dispatches', () => {
   });
 });
 
+describe('SET_NOTE feedback formatting', () => {
+  test('a non-null note produces "<name> note updated."', () => {
+    const prepared = stateWithTwoCombatants();
+    const result = dispatchEncounterCommand(
+      prepared,
+      [],
+      toCommand('SET_NOTE', { combatantId: 'goblin-1', note: 'Watch the door.' }, 'cmd-note-1')
+    );
+    expect(result.feedback).toHaveLength(1);
+    expect(result.feedback[0]).toMatchObject({
+      severity: 'info',
+      message: 'Goblin Warrior note updated.'
+    });
+  });
+
+  test('a null note produces "<name> note cleared."', () => {
+    const prepared = stateWithTwoCombatants();
+    const noted = dispatchEncounterCommand(
+      prepared,
+      [],
+      toCommand('SET_NOTE', { combatantId: 'goblin-1', note: 'Set then cleared.' }, 'cmd-note-2a')
+    );
+    const cleared = dispatchEncounterCommand(
+      noted.state,
+      noted.feedback,
+      toCommand('SET_NOTE', { combatantId: 'goblin-1', note: null }, 'cmd-note-2b')
+    );
+    expect(cleared.feedback.at(-1)).toMatchObject({
+      severity: 'info',
+      message: 'Goblin Warrior note cleared.'
+    });
+  });
+});
+
 function stateWithTwoCombatants(): EncounterState {
   const goblin = makeCombatant({
     id: 'goblin-1',
