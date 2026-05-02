@@ -41,7 +41,7 @@
   } from '$lib/storage/active-encounter';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
   import { creatureLibrary } from '$lib/creature-library';
-  import { importCreatureYaml } from '$lib/yaml';
+  import { dedupeNewCreatures, importCreatureYaml } from '$lib/yaml';
 
   const conditionOptions = listConditionOptions();
 
@@ -49,6 +49,7 @@
   let feedback: FeedbackEntry[] = [];
   let commandCounter = 1;
   let combatantCounter = 1;
+  let feedbackCounter = 1;
   let selection: Selection = emptySelection;
   let importedCreatures: Creature[] = [];
 
@@ -65,11 +66,19 @@
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
 
-  function appendFeedback(id: string, message: string, severity: 'info' | 'warn' = 'warn') {
+  function appendFeedback(
+    id: string,
+    message: string,
+    severity: 'info' | 'warn' | 'success' = 'warn'
+  ) {
     feedback = [
       ...feedback,
       { id, commandId: id, severity, message }
     ];
+  }
+
+  function nextFeedbackId(scope: string) {
+    return `${scope}-${feedbackCounter++}`;
   }
 
   const persistence = createPersistenceController({
@@ -78,12 +87,12 @@
     clear: clearActiveEncounter,
     onRestoreFailed: () =>
       appendFeedback(
-        `restore-fail-${Date.now()}`,
+        nextFeedbackId('restore-fail'),
         'Could not restore the previous encounter from storage. If you have this app open in another tab, close it and reload.'
       ),
     onPersistFailed: () =>
       appendFeedback(
-        `persist-fail-${Date.now()}`,
+        nextFeedbackId('persist-fail'),
         'Auto-save is unavailable. Your encounter will not survive a reload. (Common causes: private-browsing mode, full storage, or another tab using a newer version.)'
       )
   });
@@ -140,47 +149,74 @@
         text = await file.text();
       } catch (err) {
         appendFeedback(
-          `import-read-fail-${Date.now()}-${file.name}`,
+          nextFeedbackId('import-read-fail'),
           `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
         );
         continue;
       }
 
-      const { creatures, issues } = importCreatureYaml(text);
+      let creatures: Creature[];
+      let issues: ReturnType<typeof importCreatureYaml>['issues'];
+      let skipped: ReturnType<typeof importCreatureYaml>['skipped'];
+      try {
+        ({ creatures, issues, skipped } = importCreatureYaml(text));
+      } catch (err) {
+        appendFeedback(
+          nextFeedbackId('import-fail'),
+          `Could not import "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+        continue;
+      }
 
       const existingIds = new Set(availableCreatures.map((c) => c.id));
-      const accepted: Creature[] = [];
-      for (const creature of creatures) {
-        if (existingIds.has(creature.id)) {
-          appendFeedback(
-            `import-dup-${Date.now()}-${creature.id}`,
-            `Skipped "${creature.name}" from "${file.name}": id "${creature.id}" already exists.`
-          );
-          continue;
-        }
-        existingIds.add(creature.id);
-        accepted.push(creature);
+      const builtInIds = new Set(creatureLibrary.map((c) => c.id));
+      const { accepted, rejected } = dedupeNewCreatures(existingIds, creatures);
+
+      for (const creature of rejected) {
+        const reason = builtInIds.has(creature.id)
+          ? `id "${creature.id}" is in the built-in library and cannot be replaced`
+          : `id "${creature.id}" was already imported`;
+        appendFeedback(
+          nextFeedbackId('import-dup'),
+          `Skipped "${creature.name}" from "${file.name}": ${reason}.`
+        );
       }
 
       if (accepted.length > 0) {
         importedCreatures = [...importedCreatures, ...accepted];
         appendFeedback(
-          `import-ok-${Date.now()}-${file.name}`,
+          nextFeedbackId('import-ok'),
           `Imported ${accepted.length} creature${accepted.length === 1 ? '' : 's'} from "${file.name}".`,
+          'success'
+        );
+      }
+
+      for (const skip of skipped) {
+        appendFeedback(
+          nextFeedbackId('import-skip'),
+          `"${file.name}" doc ${skip.documentIndex + 1}: skipped — kind "${skip.kind}" is not yet imported by this build.`,
           'info'
         );
       }
 
       for (const issue of issues) {
+        const where = issue.path ? ` at "${issue.path}"` : '';
+        const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
         appendFeedback(
-          `import-issue-${Date.now()}-${file.name}-${issue.documentIndex}-${issue.path || 'root'}`,
-          `"${file.name}" doc ${issue.documentIndex + 1}${issue.path ? ` at "${issue.path}"` : ''}: ${issue.message}`
+          nextFeedbackId('import-issue'),
+          `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
         );
       }
 
-      if (accepted.length === 0 && issues.length === 0 && creatures.length === 0) {
+      if (
+        accepted.length === 0 &&
+        rejected.length === 0 &&
+        issues.length === 0 &&
+        skipped.length === 0 &&
+        creatures.length === 0
+      ) {
         appendFeedback(
-          `import-empty-${Date.now()}-${file.name}`,
+          nextFeedbackId('import-empty'),
           `"${file.name}" contained no creature documents.`
         );
       }
@@ -292,7 +328,10 @@
     feedback = [];
     commandCounter = 1;
     combatantCounter = 1;
+    feedbackCounter = 1;
     selection = emptySelection;
+    // Imported creatures are session-scoped by design; reset returns the
+    // picker to the built-in library only.
     importedCreatures = [];
     persistence.reset();
   }

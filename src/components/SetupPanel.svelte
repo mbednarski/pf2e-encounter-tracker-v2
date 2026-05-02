@@ -92,7 +92,8 @@
     if (files.length > 0) {
       onImportYamlFiles(files);
     }
-    // Allow re-importing the same file by clearing the input value.
+    // <input type="file"> only fires 'change' on a new selection; reset so
+    // the same file can be re-imported after fixing it.
     input.value = '';
   }
 </script>

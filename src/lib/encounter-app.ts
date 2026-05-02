@@ -36,7 +36,7 @@ export interface CreatureCombatantInput {
 export interface FeedbackEntry {
   id: string;
   commandId: string;
-  severity: 'info' | 'warn';
+  severity: 'info' | 'warn' | 'success';
   message: string;
 }
 

@@ -25,17 +25,20 @@ const ENVELOPE_FIELDS: ReadonlySet<string> = new Set(['kind', 'schemaVersion', '
 
 const SUPPORTED_SCHEMA_VERSION = 1;
 
-export interface ParsedEnvelope {
+export interface ParsedEnvelope<K extends YamlDocumentKind = YamlDocumentKind> {
   documentIndex: number;
-  kind: YamlDocumentKind;
+  kind: K;
   schemaVersion: 1;
   data: unknown;
 }
+
+export type CreatureEnvelope = ParsedEnvelope<'creature'>;
 
 export interface ValidationIssue {
   documentIndex: number;
   path: string;
   message: string;
+  line?: number;
 }
 
 export interface EnvelopeParseResult {
@@ -47,6 +50,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function errorLine(err: { linePos?: ReadonlyArray<{ line: number }> | undefined }): number | undefined {
+  return err.linePos?.[0]?.line;
+}
+
 export function parseYamlEnvelopes(text: string): EnvelopeParseResult {
   const envelopes: ParsedEnvelope[] = [];
   const issues: ValidationIssue[] = [];
@@ -55,7 +62,26 @@ export function parseYamlEnvelopes(text: string): EnvelopeParseResult {
     return { envelopes, issues };
   }
 
-  const docs = parseAllDocuments(text);
+  let docs;
+  try {
+    docs = parseAllDocuments(text);
+  } catch (err) {
+    issues.push({
+      documentIndex: 0,
+      path: '',
+      message: `YAML parser error: ${err instanceof Error ? err.message : String(err)}`
+    });
+    return { envelopes, issues };
+  }
+
+  if (docs.length === 0) {
+    issues.push({
+      documentIndex: 0,
+      path: '',
+      message: 'Document is empty or contains only comments'
+    });
+    return { envelopes, issues };
+  }
 
   for (let i = 0; i < docs.length; i++) {
     const doc = docs[i];
@@ -63,21 +89,45 @@ export function parseYamlEnvelopes(text: string): EnvelopeParseResult {
 
     if (doc.errors.length > 0) {
       for (const err of doc.errors) {
+        const line = errorLine(err);
         docIssues.push({
           documentIndex: i,
           path: '',
-          message: `YAML parse error: ${err.message}`
+          message: `YAML parse error: ${err.message}`,
+          ...(line !== undefined ? { line } : {})
         });
       }
       issues.push(...docIssues);
       continue;
     }
 
-    const raw = doc.toJS({ maxAliasCount: 100 });
+    let raw: unknown;
+    try {
+      // Cap alias expansion to bound parse work on hostile input (alias-bomb DoS).
+      raw = doc.toJS({ maxAliasCount: 100 });
+    } catch (err) {
+      issues.push({
+        documentIndex: i,
+        path: '',
+        message: `YAML materialization error: ${err instanceof Error ? err.message : String(err)}`
+      });
+      continue;
+    }
 
-    // Skip the trailing empty document that `parseAllDocuments` may emit when
-    // the input ends with a separator or whitespace.
+    // Trailing `---` / blank trailing whitespace makes `parseAllDocuments`
+    // emit a final null document. Skipping it here only when it is the last
+    // doc in a multi-doc stream avoids hiding genuinely empty single-doc
+    // input, which we still want to flag below.
     if (raw == null && docs.length > 1 && i === docs.length - 1) {
+      continue;
+    }
+
+    if (raw == null) {
+      issues.push({
+        documentIndex: i,
+        path: '',
+        message: 'Document is empty or contains only comments'
+      });
       continue;
     }
 

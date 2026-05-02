@@ -22,6 +22,10 @@ const ACTION_COSTS = new Set<ActionCost>([1, 2, 3, 'free', 'reaction']);
 const TRADITIONS: ReadonlySet<SpellTradition> = new Set(['arcane', 'divine', 'occult', 'primal']);
 const SPELLCASTING_TYPES: ReadonlySet<SpellcastingType> = new Set(['prepared', 'spontaneous', 'innate', 'focus']);
 
+export type ParseOutcome<T> =
+  | { ok: true; value: T; issues: ValidationIssue[] }
+  | { ok: false; issues: ValidationIssue[] };
+
 class IssueBag {
   readonly issues: ValidationIssue[] = [];
   constructor(private readonly documentIndex: number) {}
@@ -41,7 +45,7 @@ function isStringArray(value: unknown): value is string[] {
 
 function requireNumber(bag: IssueBag, path: string, value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    bag.add(path, `\`${path}\` must be a finite number`);
+    bag.add(path, 'must be a finite number');
     return null;
   }
   return value;
@@ -49,7 +53,7 @@ function requireNumber(bag: IssueBag, path: string, value: unknown): number | nu
 
 function requireString(bag: IssueBag, path: string, value: unknown): string | null {
   if (typeof value !== 'string') {
-    bag.add(path, `\`${path}\` must be a string`);
+    bag.add(path, 'must be a string');
     return null;
   }
   return value;
@@ -57,7 +61,7 @@ function requireString(bag: IssueBag, path: string, value: unknown): string | nu
 
 function requireStringArray(bag: IssueBag, path: string, value: unknown): string[] | null {
   if (!isStringArray(value)) {
-    bag.add(path, `\`${path}\` must be an array of strings`);
+    bag.add(path, 'must be an array of strings');
     return null;
   }
   return value;
@@ -65,7 +69,7 @@ function requireStringArray(bag: IssueBag, path: string, value: unknown): string
 
 function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | null {
   if (!Array.isArray(value)) {
-    bag.add(path, `\`${path}\` must be an array`);
+    bag.add(path, 'must be an array');
     return null;
   }
   return value;
@@ -73,7 +77,7 @@ function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | 
 
 function requireObject(bag: IssueBag, path: string, value: unknown): Record<string, unknown> | null {
   if (!isPlainObject(value)) {
-    bag.add(path, `\`${path}\` must be a mapping (object)`);
+    bag.add(path, 'must be a mapping (object)');
     return null;
   }
   return value;
@@ -90,7 +94,7 @@ function validateRecordOfNumbers(
   let ok = true;
   for (const [k, v] of Object.entries(obj)) {
     if (typeof v !== 'number' || !Number.isFinite(v)) {
-      bag.add(`${path}.${k}`, `\`${path}.${k}\` must be a finite number`);
+      bag.add(`${path}.${k}`, 'must be a finite number');
       ok = false;
     } else {
       out[k] = v;
@@ -102,12 +106,10 @@ function validateRecordOfNumbers(
 function validateDamageType(bag: IssueBag, path: string, raw: unknown): { type: string; value: number } | null {
   const obj = requireObject(bag, path, raw);
   if (!obj) return null;
-  let ok = true;
   const type = requireString(bag, `${path}.type`, obj.type);
-  if (type === null) ok = false;
   const value = requireNumber(bag, `${path}.value`, obj.value);
-  if (value === null) ok = false;
-  return ok ? { type: type as string, value: value as number } : null;
+  if (type === null || value === null) return null;
+  return { type, value };
 }
 
 function validateDamageComponent(bag: IssueBag, path: string, raw: unknown): DamageComponent | null {
@@ -117,36 +119,48 @@ function validateDamageComponent(bag: IssueBag, path: string, raw: unknown): Dam
   const type = requireString(bag, `${path}.type`, obj.type);
   if (type === null) ok = false;
 
-  const out: DamageComponent = { type: type ?? '' };
+  let dice: number | undefined;
   if (obj.dice !== undefined) {
     const n = requireNumber(bag, `${path}.dice`, obj.dice);
     if (n === null) ok = false;
-    else out.dice = n;
+    else dice = n;
   }
+  let dieSize: number | undefined;
   if (obj.dieSize !== undefined) {
     const n = requireNumber(bag, `${path}.dieSize`, obj.dieSize);
     if (n === null) ok = false;
-    else out.dieSize = n;
+    else dieSize = n;
   }
+  let bonus: number | undefined;
   if (obj.bonus !== undefined) {
     const n = requireNumber(bag, `${path}.bonus`, obj.bonus);
     if (n === null) ok = false;
-    else out.bonus = n;
+    else bonus = n;
   }
+  let persistent: boolean | undefined;
   if (obj.persistent !== undefined) {
     if (typeof obj.persistent !== 'boolean') {
-      bag.add(`${path}.persistent`, `\`${path}.persistent\` must be a boolean`);
+      bag.add(`${path}.persistent`, 'must be a boolean');
       ok = false;
     } else {
-      out.persistent = obj.persistent;
+      persistent = obj.persistent;
     }
   }
+  let conditional: string | undefined;
   if (obj.conditional !== undefined) {
     const s = requireString(bag, `${path}.conditional`, obj.conditional);
     if (s === null) ok = false;
-    else out.conditional = s;
+    else conditional = s;
   }
-  return ok ? out : null;
+
+  if (!ok || type === null) return null;
+  const out: DamageComponent = { type };
+  if (dice !== undefined) out.dice = dice;
+  if (dieSize !== undefined) out.dieSize = dieSize;
+  if (bonus !== undefined) out.bonus = bonus;
+  if (persistent !== undefined) out.persistent = persistent;
+  if (conditional !== undefined) out.conditional = conditional;
+  return out;
 }
 
 function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | null {
@@ -158,7 +172,7 @@ function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | nul
 
   let type: AttackType | null = null;
   if (typeof obj.type !== 'string' || !ATTACK_TYPES.has(obj.type as AttackType)) {
-    bag.add(`${path}.type`, `\`${path}.type\` must be one of: melee, ranged`);
+    bag.add(`${path}.type`, 'must be one of: melee, ranged');
     ok = false;
   } else {
     type = obj.type as AttackType;
@@ -189,16 +203,15 @@ function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | nul
     else effects = e;
   }
 
-  return ok && type !== null
-    ? {
-        name: name as string,
-        type,
-        modifier: modifier as number,
-        traits: traits as string[],
-        damage,
-        ...(effects !== undefined ? { effects } : {})
-      }
-    : null;
+  if (!ok || name === null || type === null || modifier === null || traits === null) return null;
+  return {
+    name,
+    type,
+    modifier,
+    traits,
+    damage,
+    ...(effects !== undefined ? { effects } : {})
+  };
 }
 
 function validateAbility(bag: IssueBag, path: string, raw: unknown): Ability | null {
@@ -210,33 +223,44 @@ function validateAbility(bag: IssueBag, path: string, raw: unknown): Ability | n
   const description = requireString(bag, `${path}.description`, obj.description);
   if (description === null) ok = false;
 
-  const out: Ability = {
-    name: name ?? '',
-    description: description ?? ''
-  };
-
+  let actions: ActionCost | undefined;
   if (obj.actions !== undefined) {
     if (!ACTION_COSTS.has(obj.actions as ActionCost)) {
-      bag.add(`${path}.actions`, `\`${path}.actions\` must be 1, 2, 3, "free", or "reaction"`);
+      bag.add(`${path}.actions`, 'must be 1, 2, 3, "free", or "reaction"');
       ok = false;
     } else {
-      out.actions = obj.actions as ActionCost;
+      actions = obj.actions as ActionCost;
     }
   }
+
+  let traits: string[] | undefined;
   if (obj.traits !== undefined) {
     const t = requireStringArray(bag, `${path}.traits`, obj.traits);
     if (t === null) ok = false;
-    else out.traits = t;
+    else traits = t;
   }
-  for (const optional of ['trigger', 'frequency', 'requirements'] as const) {
-    if (obj[optional] !== undefined) {
-      const s = requireString(bag, `${path}.${optional}`, obj[optional]);
+
+  const optionalStrings: Record<'trigger' | 'frequency' | 'requirements', string | undefined> = {
+    trigger: undefined,
+    frequency: undefined,
+    requirements: undefined
+  };
+  for (const key of ['trigger', 'frequency', 'requirements'] as const) {
+    if (obj[key] !== undefined) {
+      const s = requireString(bag, `${path}.${key}`, obj[key]);
       if (s === null) ok = false;
-      else out[optional] = s;
+      else optionalStrings[key] = s;
     }
   }
 
-  return ok ? out : null;
+  if (!ok || name === null || description === null) return null;
+  const out: Ability = { name, description };
+  if (actions !== undefined) out.actions = actions;
+  if (traits !== undefined) out.traits = traits;
+  if (optionalStrings.trigger !== undefined) out.trigger = optionalStrings.trigger;
+  if (optionalStrings.frequency !== undefined) out.frequency = optionalStrings.frequency;
+  if (optionalStrings.requirements !== undefined) out.requirements = optionalStrings.requirements;
+  return out;
 }
 
 function validateSpellFrequency(bag: IssueBag, path: string, raw: unknown): SpellFrequency | null {
@@ -249,7 +273,7 @@ function validateSpellFrequency(bag: IssueBag, path: string, raw: unknown): Spel
     if (uses === null) return null;
     return { type: 'perDay', uses };
   }
-  bag.add(`${path}.type`, `\`${path}.type\` must be "atWill", "constant", or "perDay"`);
+  bag.add(`${path}.type`, 'must be "atWill", "constant", or "perDay"');
   return null;
 }
 
@@ -264,28 +288,34 @@ function validateSpellListEntry(bag: IssueBag, path: string, raw: unknown): Spel
   const level = requireNumber(bag, `${path}.level`, obj.level);
   if (level === null) ok = false;
 
-  const out: SpellListEntry = {
-    spellSlug: spellSlug ?? '',
-    name: name ?? '',
-    level: level ?? 0
-  };
+  let isCantrip: boolean | undefined;
   if (obj.isCantrip !== undefined) {
     if (typeof obj.isCantrip !== 'boolean') {
-      bag.add(`${path}.isCantrip`, `\`${path}.isCantrip\` must be a boolean`);
+      bag.add(`${path}.isCantrip`, 'must be a boolean');
       ok = false;
-    } else out.isCantrip = obj.isCantrip;
+    } else isCantrip = obj.isCantrip;
   }
+
+  let frequency: SpellFrequency | undefined;
   if (obj.frequency !== undefined) {
     const f = validateSpellFrequency(bag, `${path}.frequency`, obj.frequency);
     if (f === null) ok = false;
-    else out.frequency = f;
+    else frequency = f;
   }
+
+  let count: number | undefined;
   if (obj.count !== undefined) {
     const n = requireNumber(bag, `${path}.count`, obj.count);
     if (n === null) ok = false;
-    else out.count = n;
+    else count = n;
   }
-  return ok ? out : null;
+
+  if (!ok || spellSlug === null || name === null || level === null) return null;
+  const out: SpellListEntry = { spellSlug, name, level };
+  if (isCantrip !== undefined) out.isCantrip = isCantrip;
+  if (frequency !== undefined) out.frequency = frequency;
+  if (count !== undefined) out.count = count;
+  return out;
 }
 
 function validateSpellcastingBlock(bag: IssueBag, path: string, raw: unknown): SpellcastingBlock | null {
@@ -299,13 +329,13 @@ function validateSpellcastingBlock(bag: IssueBag, path: string, raw: unknown): S
 
   let tradition: SpellTradition | null = null;
   if (typeof obj.tradition !== 'string' || !TRADITIONS.has(obj.tradition as SpellTradition)) {
-    bag.add(`${path}.tradition`, `\`${path}.tradition\` must be one of: arcane, divine, occult, primal`);
+    bag.add(`${path}.tradition`, 'must be one of: arcane, divine, occult, primal');
     ok = false;
   } else tradition = obj.tradition as SpellTradition;
 
   let type: SpellcastingType | null = null;
   if (typeof obj.type !== 'string' || !SPELLCASTING_TYPES.has(obj.type as SpellcastingType)) {
-    bag.add(`${path}.type`, `\`${path}.type\` must be one of: prepared, spontaneous, innate, focus`);
+    bag.add(`${path}.type`, 'must be one of: prepared, spontaneous, innate, focus');
     ok = false;
   } else type = obj.type as SpellcastingType;
 
@@ -323,57 +353,75 @@ function validateSpellcastingBlock(bag: IssueBag, path: string, raw: unknown): S
     }
   }
 
-  if (!ok || tradition === null || type === null) return null;
-
-  const block: SpellcastingBlock = {
-    blockId: blockId as string,
-    name: name as string,
-    tradition,
-    type,
-    dc: dc as number,
-    entries
-  };
+  let attackModifier: number | undefined;
   if (obj.attackModifier !== undefined) {
     const n = requireNumber(bag, `${path}.attackModifier`, obj.attackModifier);
-    if (n === null) return null;
-    block.attackModifier = n;
+    if (n === null) ok = false;
+    else attackModifier = n;
   }
+
+  let focusPoints: number | undefined;
   if (obj.focusPoints !== undefined) {
     const n = requireNumber(bag, `${path}.focusPoints`, obj.focusPoints);
-    if (n === null) return null;
-    block.focusPoints = n;
+    if (n === null) ok = false;
+    else focusPoints = n;
   }
+
+  let slots: Record<number, number> | undefined;
   if (obj.slots !== undefined) {
     const slotsObj = requireObject(bag, `${path}.slots`, obj.slots);
-    if (slotsObj === null) return null;
-    const slots: Record<number, number> = {};
-    for (const [k, v] of Object.entries(slotsObj)) {
-      const lvl = Number(k);
-      if (!Number.isInteger(lvl)) {
-        bag.add(`${path}.slots.${k}`, `\`${path}.slots\` keys must be integer spell levels`);
-        return null;
+    if (slotsObj === null) ok = false;
+    else {
+      const collected: Record<number, number> = {};
+      let slotsOk = true;
+      for (const [k, v] of Object.entries(slotsObj)) {
+        const lvl = Number(k);
+        if (!Number.isInteger(lvl)) {
+          bag.add(`${path}.slots.${k}`, 'keys must be integer spell levels');
+          slotsOk = false;
+          continue;
+        }
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          bag.add(`${path}.slots.${k}`, 'must be a finite number');
+          slotsOk = false;
+          continue;
+        }
+        collected[lvl] = v;
       }
-      if (typeof v !== 'number' || !Number.isFinite(v)) {
-        bag.add(`${path}.slots.${k}`, `\`${path}.slots.${k}\` must be a finite number`);
-        return null;
-      }
-      slots[lvl] = v;
+      if (slotsOk) slots = collected;
+      else ok = false;
     }
-    block.slots = slots;
   }
+
+  if (!ok || blockId === null || name === null || tradition === null || type === null || dc === null) {
+    return null;
+  }
+
+  const block: SpellcastingBlock = { blockId, name, tradition, type, dc, entries };
+  if (attackModifier !== undefined) block.attackModifier = attackModifier;
+  if (focusPoints !== undefined) block.focusPoints = focusPoints;
+  if (slots !== undefined) block.slots = slots;
   return block;
 }
 
-export interface CreatureValidationResult {
-  creature: Creature | null;
-  issues: ValidationIssue[];
+function validateAbilityArray(bag: IssueBag, path: string, raw: unknown): Ability[] | null {
+  const arr = requireArray(bag, path, raw);
+  if (arr === null) return null;
+  const out: Ability[] = [];
+  let ok = true;
+  for (let i = 0; i < arr.length; i++) {
+    const a = validateAbility(bag, `${path}[${i}]`, arr[i]);
+    if (a === null) ok = false;
+    else out.push(a);
+  }
+  return ok ? out : null;
 }
 
-export function validateCreature(raw: unknown, documentIndex: number): CreatureValidationResult {
+export function validateCreature(raw: unknown, documentIndex: number): ParseOutcome<Creature> {
   const bag = new IssueBag(documentIndex);
 
   const obj = requireObject(bag, '', raw);
-  if (!obj) return { creature: null, issues: bag.issues };
+  if (!obj) return { ok: false, issues: bag.issues };
 
   let ok = true;
 
@@ -388,13 +436,13 @@ export function validateCreature(raw: unknown, documentIndex: number): CreatureV
 
   let size: CreatureSize | null = null;
   if (typeof obj.size !== 'string' || !SIZES.has(obj.size as CreatureSize)) {
-    bag.add('size', '`size` must be one of: tiny, small, medium, large, huge, gargantuan');
+    bag.add('size', 'must be one of: tiny, small, medium, large, huge, gargantuan');
     ok = false;
   } else size = obj.size as CreatureSize;
 
   let rarity: CreatureRarity | null = null;
   if (typeof obj.rarity !== 'string' || !RARITIES.has(obj.rarity as CreatureRarity)) {
-    bag.add('rarity', '`rarity` must be one of: common, uncommon, rare, unique');
+    bag.add('rarity', 'must be one of: common, uncommon, rare, unique');
     ok = false;
   } else rarity = obj.rarity as CreatureRarity;
 
@@ -497,48 +545,58 @@ export function validateCreature(raw: unknown, documentIndex: number): CreatureV
     }
   }
 
-  if (!ok) return { creature: null, issues: bag.issues };
+  if (
+    !ok ||
+    id === null ||
+    name === null ||
+    level === null ||
+    traits === null ||
+    size === null ||
+    rarity === null ||
+    ac === null ||
+    fortitude === null ||
+    reflex === null ||
+    will === null ||
+    perception === null ||
+    hp === null ||
+    immunities === null ||
+    speed === null ||
+    passive === null ||
+    reactive === null ||
+    active === null ||
+    skills === null ||
+    tags === null
+  ) {
+    return { ok: false, issues: bag.issues };
+  }
 
   const creature: Creature = {
-    id: id as string,
-    name: name as string,
-    level: level as number,
-    traits: traits as string[],
-    size: size as CreatureSize,
-    rarity: rarity as CreatureRarity,
-    ac: ac as number,
-    fortitude: fortitude as number,
-    reflex: reflex as number,
-    will: will as number,
-    perception: perception as number,
-    hp: hp as number,
-    immunities: immunities as string[],
+    id,
+    name,
+    level,
+    traits,
+    size,
+    rarity,
+    ac,
+    fortitude,
+    reflex,
+    will,
+    perception,
+    hp,
+    immunities,
     resistances,
     weaknesses,
-    speed: speed as Record<string, number>,
+    speed,
     attacks,
-    passiveAbilities: passive as Ability[],
-    reactiveAbilities: reactive as Ability[],
-    activeAbilities: active as Ability[],
-    skills: skills as Record<string, number>,
-    tags: tags as string[],
+    passiveAbilities: passive,
+    reactiveAbilities: reactive,
+    activeAbilities: active,
+    skills,
+    tags,
     ...(alignment !== undefined ? { alignment } : {}),
     ...(source !== undefined ? { source } : {}),
     ...(notes !== undefined ? { notes } : {}),
     ...(spellcasting !== undefined ? { spellcasting } : {})
   };
-  return { creature, issues: bag.issues };
-}
-
-function validateAbilityArray(bag: IssueBag, path: string, raw: unknown): Ability[] | null {
-  const arr = requireArray(bag, path, raw);
-  if (arr === null) return null;
-  const out: Ability[] = [];
-  let ok = true;
-  for (let i = 0; i < arr.length; i++) {
-    const a = validateAbility(bag, `${path}[${i}]`, arr[i]);
-    if (a === null) ok = false;
-    else out.push(a);
-  }
-  return ok ? out : null;
+  return { ok: true, value: creature, issues: bag.issues };
 }

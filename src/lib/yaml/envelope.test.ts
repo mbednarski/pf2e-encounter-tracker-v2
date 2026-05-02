@@ -43,6 +43,20 @@ data:
     expect((result.envelopes[1].data as { id: string }).id).toBe('skeleton');
   });
 
+  it('skips a trailing empty document produced by a final --- separator', () => {
+    const text = `kind: creature
+schemaVersion: 1
+data:
+  id: goblin
+---
+`;
+    const result = parseYamlEnvelopes(text);
+
+    expect(result.issues).toEqual([]);
+    expect(result.envelopes).toHaveLength(1);
+    expect(result.envelopes[0].documentIndex).toBe(0);
+  });
+
   it('rejects unknown kind with an issue and emits no envelope', () => {
     const text = `kind: invented
 schemaVersion: 1
@@ -67,9 +81,21 @@ data:
     const result = parseYamlEnvelopes(text);
 
     expect(result.envelopes).toEqual([]);
-    expect(result.issues).toHaveLength(1);
-    expect(result.issues[0].path).toBe('schemaVersion');
-    expect(result.issues[0].message).toMatch(/unsupported schemaVersion/i);
+    expect(result.issues.some((i) => i.path === 'schemaVersion' && /unsupported/i.test(i.message))).toBe(
+      true
+    );
+  });
+
+  it('rejects schemaVersion as a string (must be the numeric literal 1)', () => {
+    const text = `kind: creature
+schemaVersion: "1"
+data:
+  id: x
+`;
+    const result = parseYamlEnvelopes(text);
+
+    expect(result.envelopes).toEqual([]);
+    expect(result.issues.some((i) => i.path === 'schemaVersion')).toBe(true);
   });
 
   it('rejects missing schemaVersion with an issue', () => {
@@ -80,8 +106,9 @@ data:
     const result = parseYamlEnvelopes(text);
 
     expect(result.envelopes).toEqual([]);
-    expect(result.issues[0].path).toBe('schemaVersion');
-    expect(result.issues[0].message).toMatch(/required/i);
+    expect(result.issues.some((i) => i.path === 'schemaVersion' && /required/i.test(i.message))).toBe(
+      true
+    );
   });
 
   it('rejects missing data with an issue', () => {
@@ -91,11 +118,10 @@ schemaVersion: 1
     const result = parseYamlEnvelopes(text);
 
     expect(result.envelopes).toEqual([]);
-    expect(result.issues[0].path).toBe('data');
-    expect(result.issues[0].message).toMatch(/required/i);
+    expect(result.issues.some((i) => i.path === 'data' && /required/i.test(i.message))).toBe(true);
   });
 
-  it('rejects a non-object document with an issue', () => {
+  it('rejects a top-level list document with an issue', () => {
     const text = `- just
 - a
 - list
@@ -105,7 +131,16 @@ schemaVersion: 1
     expect(result.envelopes).toEqual([]);
     expect(result.issues).toHaveLength(1);
     expect(result.issues[0].path).toBe('');
-    expect(result.issues[0].message).toMatch(/object/i);
+    expect(result.issues[0].message).toMatch(/mapping/i);
+  });
+
+  it('reports a clear issue for a comment-only document', () => {
+    const text = `# nothing here\n# really\n`;
+    const result = parseYamlEnvelopes(text);
+
+    expect(result.envelopes).toEqual([]);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].message).toMatch(/empty|comment/i);
   });
 
   it('reports a parse issue (no crash) when YAML is syntactically invalid', () => {
@@ -121,6 +156,34 @@ data:
     expect(result.issues.length).toBeGreaterThan(0);
     expect(result.issues[0].documentIndex).toBe(0);
     expect(result.issues[0].message.toLowerCase()).toContain('yaml');
+  });
+
+  it('reports an issue (no throw) for an alias-bomb document', () => {
+    const bomb = [
+      'kind: creature',
+      'schemaVersion: 1',
+      'data:',
+      '  a: &a [x,x,x,x,x,x,x,x,x,x]',
+      '  b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a,*a]',
+      '  c: &c [*b,*b,*b,*b,*b,*b,*b,*b,*b,*b]',
+      '  d: &d [*c,*c,*c,*c,*c,*c,*c,*c,*c,*c]',
+      ''
+    ].join('\n');
+
+    expect(() => parseYamlEnvelopes(bomb)).not.toThrow();
+    const result = parseYamlEnvelopes(bomb);
+    expect(result.envelopes).toEqual([]);
+    expect(result.issues.length).toBeGreaterThan(0);
+    expect(result.issues[0].message.toLowerCase()).toMatch(/yaml|alias|resource/);
+  });
+
+  it('parses a document with a leading UTF-8 BOM', () => {
+    const text = '﻿kind: creature\nschemaVersion: 1\ndata:\n  id: a\n';
+    const result = parseYamlEnvelopes(text);
+
+    expect(result.issues).toEqual([]);
+    expect(result.envelopes).toHaveLength(1);
+    expect(result.envelopes[0].kind).toBe('creature');
   });
 
   it('keeps valid envelopes when one document in the stream is invalid', () => {
@@ -152,7 +215,9 @@ extraneous: true
     const result = parseYamlEnvelopes(text);
 
     expect(result.envelopes).toEqual([]);
-    expect(result.issues.some((i) => /unknown field/i.test(i.message) && i.path === 'extraneous')).toBe(true);
+    expect(result.issues.some((i) => /unknown field/i.test(i.message) && i.path === 'extraneous')).toBe(
+      true
+    );
   });
 
   it('returns no envelopes and no issues for empty input', () => {

@@ -14,7 +14,10 @@
   {:else}
     <ol class="feedback-list">
       {#each entries as entry (entry.id)}
-        <li class:warn={entry.severity === 'warn'}>{entry.message}</li>
+        <li
+          class:warn={entry.severity === 'warn'}
+          class:success={entry.severity === 'success'}
+        >{entry.message}</li>
       {/each}
     </ol>
   {/if}
@@ -72,5 +75,11 @@
   .feedback-list li.warn {
     border-left-color: #b6652e;
     background: #fff7ee;
+  }
+
+  .feedback-list li.success {
+    border-left-color: #2c6f4d;
+    background: #ecf6ee;
+    font-weight: 600;
   }
 </style>
