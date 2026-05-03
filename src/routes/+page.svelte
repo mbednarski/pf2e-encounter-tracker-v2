@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import type { Command, CombatantState, Creature, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
-  import FeedbackPanel from '../components/FeedbackPanel.svelte';
+  import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
   import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
   import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
@@ -345,25 +345,26 @@
     activeName={activeCombatant?.name}
   />
 
-  <PromptResolutionPanel
-    prompts={encounter.pendingPrompts}
-    combatantsById={encounter.combatants}
-    phase={encounter.phase}
-    onResolve={resolvePrompt}
-  />
-
   <section class="workspace">
-    <SetupPanel
-      {canStart}
-      creatures={availableCreatures}
-      onAddCreatures={handleAddCreatures}
-      onAddManual={handleAddManual}
-      onImportYamlFiles={handleImportYamlFiles}
-      onStart={startEncounter}
-      onReset={resetLocal}
-    />
+    <aside class="workspace__library">
+      <SetupPanel
+        {canStart}
+        creatures={availableCreatures}
+        onAddCreatures={handleAddCreatures}
+        onAddManual={handleAddManual}
+        onImportYamlFiles={handleImportYamlFiles}
+        onStart={startEncounter}
+        onReset={resetLocal}
+      />
+    </aside>
 
-    <section class="combat-column" aria-label="Combatants">
+    <section class="workspace__track" aria-label="Combatants">
+      <PromptResolutionPanel
+        prompts={encounter.pendingPrompts}
+        combatantsById={encounter.combatants}
+        phase={encounter.phase}
+        onResolve={resolvePrompt}
+      />
       {#if unorderedCombatants.length > 0}
         <div class="not-yet-rolled" aria-label="Not yet rolled">
           <h3>Not yet rolled</h3>
@@ -402,9 +403,13 @@
       </div>
     </section>
 
-    <CombatantDetailsPanel combatant={selectedCombatant} onSetNote={setNote} />
+    <aside class="workspace__details">
+      <CombatantDetailsPanel combatant={selectedCombatant} onSetNote={setNote} />
+    </aside>
 
-    <FeedbackPanel entries={feedback} />
+    <section class="workspace__log">
+      <CombatLogDrawer entries={feedback} />
+    </section>
   </section>
 </main>
 
@@ -416,16 +421,32 @@
 
   .workspace {
     display: grid;
-    grid-template-columns: minmax(260px, 320px) minmax(420px, 1fr) minmax(300px, 380px) minmax(260px, 340px);
+    grid-template-columns: minmax(260px, 320px) minmax(420px, 1fr) minmax(300px, 380px);
+    grid-template-areas:
+      'library track details'
+      'log     log   log';
     gap: 14px;
     max-width: 1440px;
     margin: 0 auto;
     align-items: start;
   }
 
-  .combat-column {
+  .workspace__library {
+    grid-area: library;
+  }
+
+  .workspace__track {
+    grid-area: track;
     display: grid;
     gap: 14px;
+  }
+
+  .workspace__details {
+    grid-area: details;
+  }
+
+  .workspace__log {
+    grid-area: log;
   }
 
   .cards {
@@ -464,11 +485,10 @@
   @media (max-width: 1180px) {
     .workspace {
       grid-template-columns: minmax(260px, 320px) 1fr;
-    }
-
-    .workspace > :nth-child(3),
-    .workspace > :nth-child(4) {
-      grid-column: span 2;
+      grid-template-areas:
+        'library track'
+        'details details'
+        'log     log';
     }
   }
 
@@ -479,11 +499,11 @@
 
     .workspace {
       grid-template-columns: 1fr;
-    }
-
-    .workspace > :nth-child(3),
-    .workspace > :nth-child(4) {
-      grid-column: auto;
+      grid-template-areas:
+        'library'
+        'track'
+        'details'
+        'log';
     }
   }
 </style>
