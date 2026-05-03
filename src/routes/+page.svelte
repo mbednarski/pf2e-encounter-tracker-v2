@@ -109,14 +109,23 @@
   }
 
   onMount(async () => {
-    const [restored, creatures] = await Promise.all([
+    const [restored, loadResult] = await Promise.all([
       persistence.restore(),
       loadCreatures()
     ]);
     if (restored) {
       encounter = restored;
     }
-    storedCreatures = creatures;
+    if (loadResult.ok) {
+      storedCreatures = loadResult.creatures;
+    } else {
+      appendFeedback(
+        nextFeedbackId('library-load-fail'),
+        loadResult.reason === 'unavailable'
+          ? 'Could not load your creature library: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your creature library from storage. Try reloading the page; if it persists, your saved data may be inaccessible (another tab on a newer version, full storage, or browser policy).'
+      );
+    }
   });
 
   function nextCommandId() {
@@ -178,11 +187,14 @@
 
       const persistResult = await addCreatures(creatures);
 
-      if (!persistResult.persisted) {
+      if (!persistResult.ok) {
         appendFeedback(
           nextFeedbackId('import-persist-fail'),
-          `Could not save creatures from "${file.name}". Storage is unavailable (common causes: private-browsing mode, full storage, or another tab using a newer version).`
+          persistResult.reason === 'unavailable'
+            ? `Could not save creatures from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+            : `Could not save creatures from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
         );
+        continue;
       }
 
       for (const creature of persistResult.rejected) {
@@ -234,11 +246,13 @@
   }
 
   async function handleRemoveCreature(id: string) {
-    const removed = await removeCreature(id);
-    if (!removed) {
+    const result = await removeCreature(id);
+    if (!result.ok) {
       appendFeedback(
         nextFeedbackId('remove-fail'),
-        'Could not remove creature: storage is unavailable.'
+        result.reason === 'unavailable'
+          ? 'Could not remove creature: storage is unavailable.'
+          : 'Could not remove creature: storage write failed.'
       );
       return;
     }

@@ -19,8 +19,7 @@ export function getDb(): Promise<IDBPDatabase> | null {
       upgrade(db) {
         // Idempotent migration: each store is created only if missing, so
         // existing users keep prior data when new stores are added in later
-        // versions (v1 had only activeEncounter; v2 added settings; v3 adds
-        // creatureLibrary).
+        // versions.
         if (!db.objectStoreNames.contains(ACTIVE_ENCOUNTER_STORE)) {
           db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
         }

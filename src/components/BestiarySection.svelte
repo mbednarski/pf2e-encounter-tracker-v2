@@ -132,12 +132,8 @@
     border-bottom: none;
   }
 
-  /*
-   * Hide the destructive remove control by default and reveal it on row
-   * hover or when anything inside the row gains keyboard focus. The button
-   * is still in the tab order and reachable; it just gets out of the way of
-   * the dominant quick-add affordance until the user expresses intent.
-   */
+  /* Destructive remove is de-emphasized but kept in tab order; hover/focus-within
+     reveals it so quick-add stays the dominant affordance. */
   .row__remove {
     opacity: 0;
     transition: opacity 0.12s;

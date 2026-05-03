@@ -32,7 +32,8 @@ describe('docs/sample-creatures.yaml', () => {
     const { creatures } = importCreatureYaml(sampleYaml);
     const persistResult = await addCreatures(creatures);
 
-    expect(persistResult.persisted).toBe(true);
+    expect(persistResult.ok).toBe(true);
+    if (!persistResult.ok) return;
     expect(persistResult.added.map((c) => c.id).sort()).toEqual([
       'cave-wolf',
       'goblin-warrior',
@@ -41,7 +42,9 @@ describe('docs/sample-creatures.yaml', () => {
     expect(persistResult.rejected).toEqual([]);
 
     const stored = await loadCreatures();
-    expect(stored.map((c) => c.id).sort()).toEqual([
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.creatures.map((c) => c.id).sort()).toEqual([
       'cave-wolf',
       'goblin-warrior',
       'skeleton-guard'
@@ -54,12 +57,17 @@ describe('docs/sample-creatures.yaml', () => {
     await addCreatures(creatures);
     const second = await addCreatures(creatures);
 
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
     expect(second.added).toEqual([]);
     expect(second.rejected.map((c) => c.id).sort()).toEqual([
       'cave-wolf',
       'goblin-warrior',
       'skeleton-guard'
     ]);
-    expect((await loadCreatures()).length).toBe(3);
+    const stored = await loadCreatures();
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.creatures.length).toBe(3);
   });
 });
