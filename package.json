@@ -10,8 +10,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.domain.json --noEmit",
     "test:run": "vitest run",
     "audit": "npm audit --audit-level=moderate",
-    "audit:low": "npm audit --audit-level=low",
-    "deploy:pages": "npm run build && wrangler pages deploy build --project-name pf2e-tracker-v2"
+    "audit:low": "npm audit --audit-level=low"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.9",
@@ -25,8 +24,7 @@
     "svelte-check": "^4.3.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
-    "vitest": "^4.0.0",
-    "wrangler": "^4.86.0"
+    "vitest": "^4.0.0"
   },
   "dependencies": {
     "idb": "^8.0.3",

@@ -14,6 +14,8 @@ coverage/
 .claude/worktrees/
 .playwright-mcp/
 *.png
+!static/apple-touch-icon.png
+!static/og-image.png
 
 # Personal monster YAMLs. Statblock content from published sources is not
 # checked in; keep your own creature library here or outside the repo entirely.

@@ -15,7 +15,6 @@ Use npm for project tooling.
 - `npm run audit` fails on any known dependency vulnerability at moderate severity or higher.
 - `npm run audit:low` runs the stricter low-severity manual audit check.
 - `npm run build` creates the static Cloudflare Pages build in `build`.
-- `npm run deploy:pages` builds and uploads `build` to Cloudflare Pages with Wrangler.
 - `git status` verifies the intended files changed.
 - `git diff --stat` checks review scope before committing.
 
