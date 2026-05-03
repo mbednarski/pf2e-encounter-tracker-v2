@@ -33,15 +33,9 @@ Keep the deployed app within Cloudflare's free static hosting model by avoiding 
 
 The initial deployment is intended to be unlisted, not access-gated. `static/_headers` sends `X-Robots-Tag: noindex, nofollow`, and `static/robots.txt` asks crawlers not to index the app while it is only being shared directly with friends.
 
-Create the production deployment through Cloudflare Pages Git integration:
+Production is `https://pf2etracker.app`, deployed by Cloudflare Pages Git integration:
 
-- Connect Cloudflare Pages to `mbednarski/pf2e-encounter-tracker-v2`.
-- Set the production branch to `master`.
-- Disable preview branch deployments for now.
-- Attach `pf2etracker.app` as the custom domain.
+- Push to `master` → production rebuild.
+- Push to any other branch → automatic preview URL.
 
-Manual deployment after Cloudflare login:
-
-```powershell
-npm run deploy:pages
-```
+CI/CD is the only deploy path; there is no local `wrangler` deploy. See `docs/cloudflare-pages.md` for the full Cloudflare dashboard setup, custom-domain configuration, and rollback procedure.

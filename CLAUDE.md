@@ -18,7 +18,6 @@ npx vitest run path/to/file.test.ts   # single test file
 npx vitest run -t "test name"         # single test by name
 npm run audit                         # npm audit, fails at moderate severity or higher
 npm run build                         # static Cloudflare Pages build into ./build
-npm run deploy:pages                  # wrangler upload — do not run from Claude
 ```
 
 Pre-PR gate (also Cloudflare's build command, also CI):
