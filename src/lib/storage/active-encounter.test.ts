@@ -61,14 +61,33 @@ describe('active encounter storage', () => {
     expect(await loadActiveEncounter()).toBeNull();
   });
 
-  it('no-ops safely when indexedDB is unavailable (SSR / locked-down browsers)', async () => {
+});
+
+describe('active encounter storage when indexedDB is unavailable', () => {
+  // Reset the module-level dbPromise singleton + stub indexedDB before
+  // importing, otherwise a cached promise from an earlier test would let
+  // getDb() bypass the !hasIndexedDb() guard we want to exercise here.
+  beforeEach(() => {
+    vi.resetModules();
     vi.stubGlobal('indexedDB', undefined);
-    try {
-      expect(await loadActiveEncounter()).toBeNull();
-      await expect(saveActiveEncounter(activeEncounter())).resolves.toBeUndefined();
-      await expect(clearActiveEncounter()).resolves.toBeUndefined();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('loadActiveEncounter returns null', async () => {
+    const { loadActiveEncounter: load } = await import('./active-encounter');
+    expect(await load()).toBeNull();
+  });
+
+  it('saveActiveEncounter no-ops without throwing', async () => {
+    const { saveActiveEncounter: save } = await import('./active-encounter');
+    await expect(save(activeEncounter())).resolves.toBeUndefined();
+  });
+
+  it('clearActiveEncounter no-ops without throwing', async () => {
+    const { clearActiveEncounter: clear } = await import('./active-encounter');
+    await expect(clear()).resolves.toBeUndefined();
   });
 });
