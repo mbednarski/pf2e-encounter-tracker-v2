@@ -31,14 +31,41 @@ describe('settings storage', () => {
     expect(await loadApiKey()).toBeNull();
   });
 
-  it('no-ops safely when indexedDB is unavailable (SSR / locked-down browsers)', async () => {
+  it('saveApiKey returns true when persisted', async () => {
+    expect(await saveApiKey('sk-test')).toBe(true);
+  });
+
+  it('clearApiKey returns true when cleared (even if no prior key)', async () => {
+    expect(await clearApiKey()).toBe(true);
+  });
+});
+
+describe('settings storage when indexedDB is unavailable', () => {
+  // Use vi.resetModules + dynamic import so the module-level dbPromise
+  // singleton is fresh for every test in this block — otherwise an earlier
+  // test in the file may have cached a resolved promise, and getDb() would
+  // bypass the !hasIndexedDb() guard we are trying to exercise here.
+  beforeEach(() => {
+    vi.resetModules();
     vi.stubGlobal('indexedDB', undefined);
-    try {
-      expect(await loadApiKey()).toBeNull();
-      await expect(saveApiKey('sk-test')).resolves.toBeUndefined();
-      await expect(clearApiKey()).resolves.toBeUndefined();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('loadApiKey returns null', async () => {
+    const { loadApiKey: load } = await import('./settings');
+    expect(await load()).toBeNull();
+  });
+
+  it('saveApiKey returns false (signals "not persisted") instead of silently no-opping', async () => {
+    const { saveApiKey: save } = await import('./settings');
+    expect(await save('sk-test')).toBe(false);
+  });
+
+  it('clearApiKey returns false (signals "not cleared") instead of silently no-opping', async () => {
+    const { clearApiKey: clear } = await import('./settings');
+    expect(await clear()).toBe(false);
   });
 });

@@ -1,35 +1,96 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { hasIndexedDb } from '$lib/storage/db';
   import { clearApiKey, loadApiKey, saveApiKey } from '$lib/storage/settings';
+
+  type Feedback = { kind: 'success' | 'error'; message: string };
 
   let keyPresent = false;
   let draft = '';
   let showKey = false;
-  let feedback = '';
+  let feedback: Feedback | null = null;
+  let storageAvailable = true;
 
   onMount(async () => {
-    // Compute presence only; never bind the stored value into reactive state.
-    keyPresent = (await loadApiKey()) !== null;
+    storageAvailable = hasIndexedDb();
+    if (!storageAvailable) {
+      feedback = {
+        kind: 'error',
+        message:
+          'IndexedDB is unavailable in this browser (e.g. private browsing or strict privacy mode). The API key cannot be stored here.'
+      };
+      return;
+    }
+    try {
+      // Check only whether a key exists — never bind the stored value into
+      // reactive state, so the secret cannot leak into the DOM, devtools,
+      // or component snapshots.
+      keyPresent = (await loadApiKey()) !== null;
+    } catch (err) {
+      console.error('Failed to check for saved API key', err);
+      feedback = {
+        kind: 'error',
+        message:
+          'Could not check for a saved key. Storage may be temporarily unavailable — if you have this app open in another tab, close it and reload.'
+      };
+    }
   });
 
   $: trimmedDraft = draft.trim();
-  $: canSave = trimmedDraft.length > 0;
+  $: canSave = trimmedDraft.length > 0 && storageAvailable;
+  $: canClear = keyPresent && storageAvailable;
 
   async function handleSave() {
     if (!canSave) return;
-    await saveApiKey(trimmedDraft);
-    draft = '';
-    showKey = false;
-    keyPresent = true;
-    feedback = 'Saved.';
+    feedback = null;
+    try {
+      const persisted = await saveApiKey(trimmedDraft);
+      if (!persisted) {
+        feedback = {
+          kind: 'error',
+          message:
+            'Could not save: this browser has IndexedDB disabled. Your key was not stored.'
+        };
+        return;
+      }
+      draft = '';
+      showKey = false;
+      keyPresent = true;
+      feedback = { kind: 'success', message: 'Saved.' };
+    } catch (err) {
+      console.error('Failed to save API key', err);
+      feedback = {
+        kind: 'error',
+        message:
+          'Save failed. Storage may be full, or another tab may be using a newer version — close other tabs and reload, then try again.'
+      };
+    }
   }
 
   async function handleClear() {
-    if (!keyPresent) return;
+    if (!canClear) return;
     if (!confirm('Clear the saved API key?')) return;
-    await clearApiKey();
-    keyPresent = false;
-    feedback = 'Cleared.';
+    feedback = null;
+    try {
+      const cleared = await clearApiKey();
+      if (!cleared) {
+        feedback = {
+          kind: 'error',
+          message:
+            'Could not clear: storage is unavailable in this browser. The key was not removed.'
+        };
+        return;
+      }
+      keyPresent = false;
+      feedback = { kind: 'success', message: 'Cleared.' };
+    } catch (err) {
+      console.error('Failed to clear API key', err);
+      feedback = {
+        kind: 'error',
+        message:
+          'Clear failed. The key may still be stored — try reloading and clearing again.'
+      };
+    }
   }
 
   function toggleShow() {
@@ -78,13 +139,19 @@
       <button type="button" class="primary" on:click={handleSave} disabled={!canSave}>
         Save
       </button>
-      <button type="button" class="danger" on:click={handleClear} disabled={!keyPresent}>
+      <button type="button" class="danger" on:click={handleClear} disabled={!canClear}>
         Clear
       </button>
     </div>
 
     {#if feedback}
-      <p class="feedback" role="status">{feedback}</p>
+      <p
+        class="feedback"
+        data-kind={feedback.kind}
+        role={feedback.kind === 'error' ? 'alert' : 'status'}
+      >
+        {feedback.message}
+      </p>
     {/if}
   </section>
 </main>
@@ -236,7 +303,21 @@
 
   .feedback {
     margin: 16px 0 0;
-    color: #2e6a3a;
+    padding: 8px 10px;
+    border-radius: 6px;
     font-size: 14px;
+    border: 1px solid transparent;
+  }
+
+  .feedback[data-kind='success'] {
+    color: #2e6a3a;
+    background: #eef6ef;
+    border-color: #c5dfc8;
+  }
+
+  .feedback[data-kind='error'] {
+    color: #8c2a2a;
+    background: #fbeeee;
+    border-color: #d8b4b4;
   }
 </style>
