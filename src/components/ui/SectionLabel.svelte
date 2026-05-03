@@ -1,8 +1,9 @@
 <script lang="ts">
   export let as: 'span' | 'div' | 'h2' | 'h3' | 'h4' = 'span';
+  export let id: string | undefined = undefined;
 </script>
 
-<svelte:element this={as} class="label">
+<svelte:element this={as} {id} class="label">
   <slot />
 </svelte:element>
 
