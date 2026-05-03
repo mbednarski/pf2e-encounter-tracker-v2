@@ -28,6 +28,18 @@ npm run check && npm run test:run && npm run audit && npm run build
 
 All four must pass before opening a PR.
 
+## package-lock.json discipline
+
+Dev happens on Windows; CI and Cloudflare build on Linux. `npm install` only writes optional dependencies for the current platform, so a Windows-regenerated lockfile is missing Linux-only packages (e.g. rolldown's `@emnapi/runtime` chain) and `npm ci` on Linux fails with `Missing: ... from lock file`.
+
+Do not commit a Windows-regenerated `package-lock.json`. If `package.json` changes (add/remove a dep, version bump), push the branch and run the `Refresh package-lock.json on Linux` workflow:
+
+```
+gh workflow run refresh-lockfile.yml --ref <branch-name>
+```
+
+(or via GitHub UI → Actions → Run workflow). It regenerates the lockfile on `ubuntu-latest` and commits it back to the branch. Then re-run the failing CI check.
+
 ## Architecture (big picture)
 
 Strict unidirectional layering. Edits must respect this direction:

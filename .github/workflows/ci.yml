@@ -26,7 +26,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci || {
+            echo "::error::package-lock.json is out of sync with package.json on Linux."
+            echo "::error::This typically means the lockfile was last regenerated on a non-Linux host (Windows/macOS) and is missing platform-specific optional dependencies."
+            echo "::error::Fix: trigger the 'Refresh package-lock.json on Linux' workflow on this branch (Actions tab → Run workflow, or 'gh workflow run refresh-lockfile.yml --ref ${{ github.ref_name }}'), then re-run this CI check."
+            exit 1
+          }
 
       - name: Check
         run: npm run check
