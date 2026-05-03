@@ -13,7 +13,7 @@
     <polyline points="120,100 0,200"/>
     <line x1="120" y1="100" x2="120" y2="270"/>
   </g>
-  <text x="440" y="290" font-family="ui-sans-serif, system-ui, sans-serif" font-size="76" font-weight="800" fill="#e8ecff">PF2e Encounter Tracker</text>
+  <text x="440" y="290" font-family="ui-sans-serif, system-ui, sans-serif" font-size="52" font-weight="800" fill="#e8ecff">PF2e Encounter Tracker</text>
   <text x="440" y="360" font-family="ui-sans-serif, system-ui, sans-serif" font-size="32" font-weight="500" fill="#a8b3d9">Initiative · conditions · effects · turn prompts</text>
   <text x="440" y="410" font-family="ui-sans-serif, system-ui, sans-serif" font-size="26" font-weight="400" fill="#7d89b3">Free · browser-only · no account</text>
 </svg>
