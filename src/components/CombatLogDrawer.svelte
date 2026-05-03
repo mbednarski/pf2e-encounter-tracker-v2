@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FeedbackEntry } from '$lib/encounter-app';
+  import CombatLog from './CombatLog.svelte';
 
   export let entries: FeedbackEntry[];
 
@@ -24,19 +25,7 @@
   </button>
   {#if open}
     <div id="combat-log-body" class="drawer__body">
-      {#if entries.length === 0}
-        <p class="empty">Domain events will appear here.</p>
-      {:else}
-        <ol class="entries">
-          {#each entries as entry (entry.id)}
-            <li
-              class="entry"
-              class:entry--warn={entry.severity === 'warn'}
-              class:entry--success={entry.severity === 'success'}
-            >{entry.message}</li>
-          {/each}
-        </ol>
-      {/if}
+      <CombatLog {entries} />
     </div>
   {/if}
 </section>
@@ -108,39 +97,5 @@
     max-height: 240px;
     overflow: auto;
     padding: var(--space-3) var(--space-4);
-  }
-
-  .empty {
-    margin: 0;
-    color: var(--color-ink-mute);
-    font-size: var(--text-base);
-    font-style: italic;
-  }
-
-  .entries {
-    display: grid;
-    gap: var(--space-2);
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .entry {
-    border-left: 4px solid var(--color-green);
-    background: var(--color-panel);
-    padding: var(--space-2) var(--space-3);
-    font-size: var(--text-base);
-    color: var(--color-ink);
-  }
-
-  .entry--warn {
-    border-left-color: var(--color-amber);
-    background: #fff7ee;
-  }
-
-  .entry--success {
-    border-left-color: var(--color-green);
-    background: #ecf6ee;
-    font-weight: 600;
   }
 </style>
