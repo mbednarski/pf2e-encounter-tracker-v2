@@ -81,4 +81,30 @@ describe('BestiarySection', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Add Goblin Warrior' }));
     expect(onAddCreature).toHaveBeenCalledWith(c);
   });
+
+  test('renders the empty-library message (not the no-match copy) when the library is empty', () => {
+    render(BestiarySection, { props: { creatures: [], onAddCreature: vi.fn() } });
+    expect(
+      screen.getByText('Import a YAML file to add creatures.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No matching creatures.')).not.toBeInTheDocument();
+  });
+
+  test('renders no remove button when onRemoveCreature is not provided', () => {
+    const c = creature('a', 'Goblin Warrior', ['goblin'], 1);
+    render(BestiarySection, { props: { creatures: [c], onAddCreature: vi.fn() } });
+    expect(
+      screen.queryByRole('button', { name: 'Remove Goblin Warrior' })
+    ).not.toBeInTheDocument();
+  });
+
+  test('the per-row remove button calls onRemoveCreature with that creature id', async () => {
+    const onRemoveCreature = vi.fn();
+    const c = creature('a', 'Goblin Warrior', ['goblin'], 1);
+    render(BestiarySection, {
+      props: { creatures: [c], onAddCreature: vi.fn(), onRemoveCreature }
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove Goblin Warrior' }));
+    expect(onRemoveCreature).toHaveBeenCalledWith('a');
+  });
 });

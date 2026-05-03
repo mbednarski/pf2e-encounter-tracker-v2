@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteDB, openDB, type IDBPDatabase } from 'idb';
-import { ACTIVE_ENCOUNTER_STORE, DB_NAME, SETTINGS_STORE } from './db';
+import {
+  ACTIVE_ENCOUNTER_STORE,
+  CREATURE_LIBRARY_STORE,
+  DB_NAME,
+  SETTINGS_STORE
+} from './db';
 
 // fake-indexeddb's deleteDB blocks until every open connection is closed,
 // so each test pushes its connections here and afterEach closes them all.
@@ -28,9 +33,9 @@ afterEach(async () => {
 });
 
 describe('IndexedDB schema migration', () => {
-  it('preserves a v1 activeEncounter record and adds the settings store when upgrading to v2', async () => {
+  it('preserves a v1 activeEncounter record and adds the settings + creatureLibrary stores when upgrading', async () => {
     // Seed a v1 database with only the activeEncounter store and a sentinel record,
-    // mirroring what an existing user would have on disk before this PR.
+    // mirroring what an existing user would have on disk before settings landed.
     const v1 = await openDB(DB_NAME, 1, {
       upgrade(db) {
         db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
@@ -39,26 +44,52 @@ describe('IndexedDB schema migration', () => {
     await v1.put(ACTIVE_ENCOUNTER_STORE, { sentinel: 'v1-data' }, 'current');
     v1.close();
 
-    // Open via the production getDb(), which targets v2 — the upgrade callback
-    // must run, add the settings store, and leave the sentinel intact.
+    // Open via the production getDb(); the upgrade callback must run idempotently,
+    // add the missing stores, and leave the sentinel intact.
     const { getDb } = await import('./db');
     const db = await getDb()!;
     openConnections.push(db);
 
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE].sort()
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
       sentinel: 'v1-data'
     });
   });
 
-  it('creates both stores on a fresh install (no prior database)', async () => {
+  it('preserves prior activeEncounter + settings records when upgrading from v2 to v3', async () => {
+    // Seed a v2 database with the two pre-creatureLibrary stores and sentinel records.
+    const v2 = await openDB(DB_NAME, 2, {
+      upgrade(db) {
+        db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
+        db.createObjectStore(SETTINGS_STORE);
+      }
+    });
+    await v2.put(ACTIVE_ENCOUNTER_STORE, { sentinel: 'v2-active' }, 'current');
+    await v2.put(SETTINGS_STORE, 'sk-test', 'llmApiKey');
+    v2.close();
+
+    const { getDb } = await import('./db');
+    const db = await getDb()!;
+    openConnections.push(db);
+
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE].sort()
+    );
+    expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
+      sentinel: 'v2-active'
+    });
+    expect(await db.get(SETTINGS_STORE, 'llmApiKey')).toBe('sk-test');
+    expect(await db.getAll(CREATURE_LIBRARY_STORE)).toEqual([]);
+  });
+
+  it('creates all three stores on a fresh install (no prior database)', async () => {
     const { getDb } = await import('./db');
     const db = await getDb()!;
     openConnections.push(db);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE].sort()
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE].sort()
     );
   });
 });

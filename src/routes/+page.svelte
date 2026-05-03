@@ -39,9 +39,13 @@
     loadActiveEncounter,
     saveActiveEncounter
   } from '$lib/storage/active-encounter';
+  import {
+    addCreatures,
+    loadCreatures,
+    removeCreature
+  } from '$lib/storage/creature-library';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { creatureLibrary } from '$lib/creature-library';
-  import { dedupeNewCreatures, importCreatureYaml } from '$lib/yaml';
+  import { importCreatureYaml } from '$lib/yaml';
 
   const conditionOptions = listConditionOptions();
 
@@ -51,9 +55,9 @@
   let combatantCounter = 1;
   let feedbackCounter = 1;
   let selection: Selection = emptySelection;
-  let importedCreatures: Creature[] = [];
+  let storedCreatures: Creature[] = [];
 
-  $: availableCreatures = [...creatureLibrary, ...importedCreatures];
+  $: availableCreatures = storedCreatures;
 
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
@@ -105,9 +109,22 @@
   }
 
   onMount(async () => {
-    const restored = await persistence.restore();
+    const [restored, loadResult] = await Promise.all([
+      persistence.restore(),
+      loadCreatures()
+    ]);
     if (restored) {
       encounter = restored;
+    }
+    if (loadResult.ok) {
+      storedCreatures = loadResult.creatures;
+    } else {
+      appendFeedback(
+        nextFeedbackId('library-load-fail'),
+        loadResult.reason === 'unavailable'
+          ? 'Could not load your creature library: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your creature library from storage. Try reloading the page; if it persists, your saved data may be inaccessible (another tab on a newer version, full storage, or browser policy).'
+      );
     }
   });
 
@@ -168,25 +185,30 @@
         continue;
       }
 
-      const existingIds = new Set(availableCreatures.map((c) => c.id));
-      const builtInIds = new Set(creatureLibrary.map((c) => c.id));
-      const { accepted, rejected } = dedupeNewCreatures(existingIds, creatures);
+      const persistResult = await addCreatures(creatures);
 
-      for (const creature of rejected) {
-        const reason = builtInIds.has(creature.id)
-          ? `id "${creature.id}" is in the built-in library and cannot be replaced`
-          : `id "${creature.id}" was already imported`;
+      if (!persistResult.ok) {
+        appendFeedback(
+          nextFeedbackId('import-persist-fail'),
+          persistResult.reason === 'unavailable'
+            ? `Could not save creatures from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+            : `Could not save creatures from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
+        );
+        continue;
+      }
+
+      for (const creature of persistResult.rejected) {
         appendFeedback(
           nextFeedbackId('import-dup'),
-          `Skipped "${creature.name}" from "${file.name}": ${reason}.`
+          `Skipped "${creature.name}" from "${file.name}": id "${creature.id}" is already in your library.`
         );
       }
 
-      if (accepted.length > 0) {
-        importedCreatures = [...importedCreatures, ...accepted];
+      if (persistResult.added.length > 0) {
+        storedCreatures = [...storedCreatures, ...persistResult.added];
         appendFeedback(
           nextFeedbackId('import-ok'),
-          `Imported ${accepted.length} creature${accepted.length === 1 ? '' : 's'} from "${file.name}".`,
+          `Imported ${persistResult.added.length} creature${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
           'success'
         );
       }
@@ -209,8 +231,8 @@
       }
 
       if (
-        accepted.length === 0 &&
-        rejected.length === 0 &&
+        persistResult.added.length === 0 &&
+        persistResult.rejected.length === 0 &&
         issues.length === 0 &&
         skipped.length === 0 &&
         creatures.length === 0
@@ -221,6 +243,20 @@
         );
       }
     }
+  }
+
+  async function handleRemoveCreature(id: string) {
+    const result = await removeCreature(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove creature: storage is unavailable.'
+          : 'Could not remove creature: storage write failed.'
+      );
+      return;
+    }
+    storedCreatures = storedCreatures.filter((c) => c.id !== id);
   }
 
   function handleAddManual(input: Omit<ManualCombatantInput, 'id'>) {
@@ -330,9 +366,6 @@
     combatantCounter = 1;
     feedbackCounter = 1;
     selection = emptySelection;
-    // Imported creatures are session-scoped by design; reset returns the
-    // picker to the built-in library only.
-    importedCreatures = [];
     persistence.reset();
   }
 </script>
@@ -353,6 +386,7 @@
         onAddCreatures={handleAddCreatures}
         onAddManual={handleAddManual}
         onImportYamlFiles={handleImportYamlFiles}
+        onRemoveCreature={handleRemoveCreature}
         onStart={startEncounter}
         onReset={resetLocal}
       />

@@ -1,9 +1,10 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 export const DB_NAME = 'pf2e-tracker-v2';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const ACTIVE_ENCOUNTER_STORE = 'activeEncounter';
 export const SETTINGS_STORE = 'settings';
+export const CREATURE_LIBRARY_STORE = 'creatureLibrary';
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -16,14 +17,17 @@ export function getDb(): Promise<IDBPDatabase> | null {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        // Idempotent migration: each store is created only if missing,
-        // so users on v1 (activeEncounter only) get the new settings store
-        // without losing existing data.
+        // Idempotent migration: each store is created only if missing, so
+        // existing users keep prior data when new stores are added in later
+        // versions.
         if (!db.objectStoreNames.contains(ACTIVE_ENCOUNTER_STORE)) {
           db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
         }
         if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
           db.createObjectStore(SETTINGS_STORE);
+        }
+        if (!db.objectStoreNames.contains(CREATURE_LIBRARY_STORE)) {
+          db.createObjectStore(CREATURE_LIBRARY_STORE);
         }
       }
     }).catch((err) => {
