@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Creature } from '../domain';
-  import { creatureLibrary } from '$lib/creature-library';
   import {
     makeCreatureCombatant,
     type ManualCombatantInput,
@@ -9,6 +8,7 @@
   import { templateLabel } from '$lib/template-label';
 
   export let canStart: boolean;
+  export let creatures: Creature[];
   export let onAddCreatures: (input: {
     creature: Creature;
     adjustment: TemplateAdjustmentChoice;
@@ -16,13 +16,19 @@
     namePrefix: string;
   }) => void;
   export let onAddManual: (input: Omit<ManualCombatantInput, 'id'>) => void;
+  export let onImportYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
   export let onReset: () => void;
 
-  let selectedCreatureId = creatureLibrary[0]?.id ?? '';
+  let selectedCreatureId = creatures[0]?.id ?? '';
   let selectedAdjustment: TemplateAdjustmentChoice = 'normal';
   let creatureQuantity = 1;
   let creatureNamePrefix = '';
+  let fileInput: HTMLInputElement | undefined;
+
+  $: if (!creatures.some((c) => c.id === selectedCreatureId) && creatures.length > 0) {
+    selectedCreatureId = creatures[0].id;
+  }
 
   let manualName = 'Goblin Warrior';
   let manualHp = 18;
@@ -33,7 +39,7 @@
   let manualPerception = 7;
   let manualSpeed = 25;
 
-  $: selectedCreature = creatureLibrary.find((c) => c.id === selectedCreatureId) ?? creatureLibrary[0];
+  $: selectedCreature = creatures.find((c) => c.id === selectedCreatureId) ?? creatures[0];
   $: previewCombatant = selectedCreature
     ? makeCreatureCombatant({
         creature: selectedCreature,
@@ -79,19 +85,45 @@
     creatureNamePrefix = '';
     onReset();
   }
+
+  function handleFileChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length > 0) {
+      onImportYamlFiles(files);
+    }
+    // <input type="file"> only fires 'change' on a new selection; reset so
+    // the same file can be re-imported after fixing it.
+    input.value = '';
+  }
 </script>
 
 <aside class="panel setup-panel" aria-labelledby="setup-title">
   <div class="panel-heading">
     <h2 id="setup-title">Encounter Setup</h2>
-    <span>{creatureLibrary.length} creatures</span>
+    <span>{creatures.length} creature{creatures.length === 1 ? '' : 's'}</span>
+  </div>
+
+  <div class="import-row">
+    <button type="button" class="secondary" onclick={() => fileInput?.click()}>
+      Import YAML…
+    </button>
+    <input
+      bind:this={fileInput}
+      type="file"
+      accept=".yaml,.yml,application/yaml,text/yaml"
+      multiple
+      hidden
+      onchange={handleFileChange}
+    />
+    <span class="import-hint">Personal monster YAMLs (kept on your machine).</span>
   </div>
 
   <form class="creature-form" onsubmit={(event) => { event.preventDefault(); submitCreatures(); }}>
     <label>
       Creature
       <select bind:value={selectedCreatureId}>
-        {#each creatureLibrary as creature (creature.id)}
+        {#each creatures as creature (creature.id)}
           <option value={creature.id}>{creature.name}</option>
         {/each}
       </select>
@@ -406,6 +438,19 @@
     justify-content: space-between;
     gap: 10px;
     margin-top: 12px;
+  }
+
+  .import-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .import-hint {
+    color: #627171;
+    font-size: 12px;
+    line-height: 1.3;
   }
 
   @media (max-width: 760px) {

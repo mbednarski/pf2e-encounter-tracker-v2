@@ -14,3 +14,9 @@ coverage/
 .claude/worktrees/
 .playwright-mcp/
 *.png
+
+# Personal monster YAMLs. Statblock content from published sources is not
+# checked in; keep your own creature library here or outside the repo entirely.
+/creatures/
+*.yaml.local
+*.yml.local
