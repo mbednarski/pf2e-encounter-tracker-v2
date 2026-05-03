@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { Ability, ActionCost, Attack, CombatantState, DamageComponent } from '../domain';
   import { templateLabel } from '$lib/template-label';
+  import Chip from './ui/Chip.svelte';
   import NotesEditor from './NotesEditor.svelte';
+  import SectionLabel from './ui/SectionLabel.svelte';
 
   export let combatant: CombatantState | undefined;
   export let onSetNote: (combatantId: string, note: string | null) => void;
@@ -31,79 +33,92 @@
     return value >= 0 ? `+${value}` : `${value}`;
   }
 
+  function templateChipVariant(adjustment: 'elite' | 'weak' | undefined) {
+    if (adjustment === 'elite') return 'warning';
+    if (adjustment === 'weak') return 'pc';
+    return 'default';
+  }
+
   $: badgeLabel = combatant ? templateLabel(combatant.templateAdjustment) : '';
+  $: subtitle = combatant
+    ? [
+        combatant.level !== undefined ? `Level ${combatant.level}` : null,
+        ...(combatant.traits ?? [])
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 </script>
 
-<aside class="details-panel" aria-label="Combatant details">
+<aside class="details" aria-label="Combatant details">
   {#if !combatant}
     <p class="empty-state">Select a combatant to see details.</p>
   {:else}
-    <header class="panel-header">
-      <h2>{combatant.name}</h2>
-      {#if badgeLabel}
-        <span class="template-badge {combatant.templateAdjustment}">{badgeLabel}</span>
+    <header class="details__header">
+      <div class="details__title">
+        <h2>{combatant.name}</h2>
+        {#if badgeLabel}
+          <Chip variant={templateChipVariant(combatant.templateAdjustment)}>{badgeLabel}</Chip>
+        {/if}
+      </div>
+      {#if subtitle}
+        <div class="details__subtitle">{subtitle}</div>
       {/if}
     </header>
 
-    <section class="notes" aria-label="Notes">
-      <h3>Notes</h3>
-      <NotesEditor
-        value={combatant.notes ?? ''}
-        onCommit={(note) => onSetNote(combatant.id, note)}
-      />
-    </section>
-
-    <section class="defenses" aria-label="Defenses">
-      <h3>Defenses</h3>
-      <dl>
-        <div>
-          <dt>HP</dt>
+    <section class="details__section" aria-label="Defenses">
+      <SectionLabel as="h3">Defenses</SectionLabel>
+      <dl class="defenses-grid">
+        <div class="stat">
+          <SectionLabel>AC</SectionLabel>
+          <dd>{combatant.baseStats.ac}</dd>
+        </div>
+        <div class="stat">
+          <SectionLabel>HP</SectionLabel>
           <dd>
             {combatant.currentHp}<span class="muted">/{combatant.baseStats.hp}</span>
             {#if combatant.tempHp > 0}<span class="temp">+{combatant.tempHp} temp</span>{/if}
           </dd>
         </div>
-        <div>
-          <dt>AC</dt>
-          <dd>{combatant.baseStats.ac}</dd>
-        </div>
-        <div>
-          <dt>Fort</dt>
-          <dd>{formatModifier(combatant.baseStats.fortitude)}</dd>
-        </div>
-        <div>
-          <dt>Ref</dt>
-          <dd>{formatModifier(combatant.baseStats.reflex)}</dd>
-        </div>
-        <div>
-          <dt>Will</dt>
-          <dd>{formatModifier(combatant.baseStats.will)}</dd>
-        </div>
-        <div>
-          <dt>Perception</dt>
+        <div class="stat">
+          <SectionLabel>Perception</SectionLabel>
           <dd>{formatModifier(combatant.baseStats.perception)}</dd>
         </div>
-        <div>
-          <dt>Speed</dt>
+        <div class="stat">
+          <SectionLabel>Speed</SectionLabel>
           <dd>{combatant.baseStats.speed} ft</dd>
+        </div>
+      </dl>
+      <dl class="saves-grid">
+        <div class="stat stat--small">
+          <SectionLabel>Fort</SectionLabel>
+          <dd>{formatModifier(combatant.baseStats.fortitude)}</dd>
+        </div>
+        <div class="stat stat--small">
+          <SectionLabel>Ref</SectionLabel>
+          <dd>{formatModifier(combatant.baseStats.reflex)}</dd>
+        </div>
+        <div class="stat stat--small">
+          <SectionLabel>Will</SectionLabel>
+          <dd>{formatModifier(combatant.baseStats.will)}</dd>
         </div>
       </dl>
     </section>
 
     {#if combatant.attacks.length > 0}
-      <section class="attacks" aria-label="Attacks">
-        <h3>Attacks</h3>
-        <ul>
+      <section class="details__section" aria-label="Attacks">
+        <SectionLabel as="h3">Attacks</SectionLabel>
+        <ul class="entry-list">
           {#each combatant.attacks as attack, attackIndex (attackIndex)}
             {@const a = attack as Attack}
             <li>
-              <div class="attack-line">
-                <span class="attack-name">{a.name}</span>
+              <div class="entry-head">
+                <span class="entry-name">{a.name}</span>
                 <span class="muted">({a.type})</span>
-                <span class="attack-modifier">{formatModifier(a.modifier)}</span>
+                <span class="entry-modifier">{formatModifier(a.modifier)}</span>
               </div>
               {#if a.damage.length > 0}
-                <div class="attack-damage">{formatDamage(a.damage)}</div>
+                <div class="entry-meta entry-meta--mono">{formatDamage(a.damage)}</div>
               {/if}
             </li>
           {/each}
@@ -117,196 +132,212 @@
       { title: 'Active Abilities', list: combatant.activeAbilities }
     ] as group (group.title)}
       {#if group.list.length > 0}
-        <section class="abilities" aria-label={group.title}>
-          <h3>{group.title}</h3>
-          <ul>
+        <section class="details__section" aria-label={group.title}>
+          <SectionLabel as="h3">{group.title}</SectionLabel>
+          <ul class="entry-list">
             {#each group.list as ability, abilityIndex (abilityIndex)}
               {@const ab = ability as Ability}
               <li>
-                <div class="ability-head">
-                  <span class="ability-name">{ab.name}</span>
+                <div class="entry-head">
+                  <span class="entry-name">{ab.name}</span>
                   {#if ab.actions !== undefined}
-                    <span class="ability-cost">{formatActionCost(ab.actions)}</span>
+                    <span class="entry-cost">{formatActionCost(ab.actions)}</span>
                   {/if}
                 </div>
-                {#if ab.frequency}<div class="ability-meta"><strong>Frequency:</strong> {ab.frequency}</div>{/if}
-                {#if ab.trigger}<div class="ability-meta"><strong>Trigger:</strong> {ab.trigger}</div>{/if}
-                {#if ab.requirements}<div class="ability-meta"><strong>Requirements:</strong> {ab.requirements}</div>{/if}
-                <p class="ability-desc">{ab.description}</p>
+                {#if ab.frequency}<div class="entry-meta"><strong>Frequency:</strong> {ab.frequency}</div>{/if}
+                {#if ab.trigger}<div class="entry-meta"><strong>Trigger:</strong> {ab.trigger}</div>{/if}
+                {#if ab.requirements}<div class="entry-meta"><strong>Requirements:</strong> {ab.requirements}</div>{/if}
+                <p class="entry-desc">{ab.description}</p>
               </li>
             {/each}
           </ul>
         </section>
       {/if}
     {/each}
+
+    <section class="details__section" aria-label="Notes">
+      <SectionLabel as="h3">GM Notes</SectionLabel>
+      <NotesEditor
+        value={combatant.notes ?? ''}
+        onCommit={(note) => onSetNote(combatant.id, note)}
+      />
+    </section>
   {/if}
 </aside>
 
 <style>
-  .details-panel {
-    border: 1px solid #cfd6d1;
-    border-radius: 8px;
-    background: #fbfcfa;
-    box-shadow: 0 1px 2px rgb(29 37 40 / 7%);
-    padding: 14px;
-    display: grid;
-    gap: 12px;
-    align-content: start;
+  .details {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-panel);
+    border: var(--border-strong);
+    border-radius: var(--radius-card);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-snug);
   }
 
   .empty-state {
     margin: 0;
-    color: #8a9690;
-    font-size: 13px;
+    padding: var(--space-4);
+    color: var(--color-ink-mute);
+    font-size: var(--text-base);
     font-style: italic;
   }
 
-  .panel-header {
+  .details__header {
+    padding: var(--space-4);
+    background: var(--color-panel-2);
+    border-bottom: var(--border-thin);
+  }
+
+  .details__title {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
   }
 
-  .panel-header h2 {
+  h2 {
     margin: 0;
-    font-size: 17px;
-    line-height: 1.2;
+    font-family: var(--font-serif);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    color: var(--color-ink);
+    letter-spacing: -0.2px;
   }
 
-  .template-badge {
-    border-radius: 999px;
-    background: #eef1ee;
-    color: #334143;
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1;
-    padding: 5px 7px;
-    text-transform: uppercase;
-    white-space: nowrap;
+  .details__subtitle {
+    margin-top: 4px;
+    color: var(--color-ink-soft);
+    font-size: var(--text-base);
+    font-style: italic;
   }
 
-  .template-badge.elite {
-    background: #f4e6d7;
-    color: #7c3d1f;
+  .details__section {
+    padding: var(--space-3) var(--space-4);
+    border-top: var(--border-thin);
   }
 
-  .template-badge.weak {
-    background: #e6eef6;
-    color: #275171;
+  .details__section :global(h3) {
+    margin: 0 0 var(--space-2);
+    display: block;
   }
 
-  h3 {
-    margin: 0 0 6px;
-    color: #627171;
-    font-size: 12px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-
-  .defenses dl {
+  .defenses-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
-    gap: 6px 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
     margin: 0;
   }
 
-  .defenses dl div {
+  .saves-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin: var(--space-3) 0 0;
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--color-rule);
+  }
+
+  .stat {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
   }
 
-  .defenses dt {
-    color: #627171;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .defenses dd {
+  .stat dd {
     margin: 0;
-    color: #1d2528;
-    font-size: 14px;
+    color: var(--color-ink);
+    font-family: var(--font-serif);
+    font-size: var(--text-xl);
     font-weight: 600;
+    line-height: var(--leading-tight);
+  }
+
+  .stat--small dd {
+    font-size: var(--text-lg);
   }
 
   .muted {
-    color: #8a9690;
+    color: var(--color-ink-mute);
     font-weight: 400;
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
   }
 
   .temp {
-    margin-left: 4px;
-    color: #2f6f8a;
-    font-size: 12px;
+    margin-left: var(--space-1);
+    color: var(--color-blue);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     font-weight: 600;
   }
 
-  .attacks ul,
-  .abilities ul {
+  .entry-list {
     margin: 0;
     padding: 0;
     list-style: none;
     display: grid;
-    gap: 8px;
+    gap: var(--space-3);
   }
 
-  .attacks li,
-  .abilities li {
-    border-top: 1px solid #ebeeea;
-    padding-top: 6px;
+  .entry-list li {
+    border-top: 1px dashed var(--color-rule);
+    padding-top: var(--space-2);
   }
 
-  .attacks li:first-child,
-  .abilities li:first-child {
+  .entry-list li:first-child {
     border-top: 0;
     padding-top: 0;
   }
 
-  .attack-line,
-  .ability-head {
+  .entry-head {
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: var(--space-2);
     flex-wrap: wrap;
   }
 
-  .attack-name,
-  .ability-name {
-    color: #1d2528;
-    font-size: 14px;
+  .entry-name {
+    color: var(--color-ink);
+    font-size: var(--text-base);
     font-weight: 600;
   }
 
-  .attack-modifier {
-    color: #1d2528;
+  .entry-modifier {
+    margin-left: auto;
+    color: var(--color-red);
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
     font-weight: 700;
+    border-bottom: 2px solid var(--color-red);
+    padding: 0 4px;
   }
 
-  .attack-damage {
+  .entry-meta {
     margin-top: 2px;
-    color: #334143;
-    font-size: 13px;
+    color: var(--color-ink-soft);
+    font-size: var(--text-base);
   }
 
-  .ability-cost {
-    color: #627171;
-    font-size: 12px;
+  .entry-meta--mono {
+    font-family: var(--font-mono);
+  }
+
+  .entry-cost {
+    color: var(--color-ink-mute);
+    font-size: var(--text-xs);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--tracking-wide);
   }
 
-  .ability-meta {
-    margin-top: 2px;
-    color: #334143;
-    font-size: 13px;
-  }
-
-  .ability-desc {
-    margin: 4px 0 0;
-    color: #1d2528;
-    font-size: 13px;
-    line-height: 1.45;
+  .entry-desc {
+    margin: var(--space-1) 0 0;
+    color: var(--color-ink);
+    font-size: var(--text-base);
+    line-height: var(--leading-relaxed);
   }
 </style>
