@@ -6,6 +6,8 @@
     PromptResolution,
     TurnBoundarySuggestion
   } from '../domain';
+  import Button from './ui/Button.svelte';
+  import SectionLabel from './ui/SectionLabel.svelte';
 
   export let prompts: Prompt[];
   export let combatantsById: Record<string, CombatantState>;
@@ -92,31 +94,34 @@
 
 {#if focused}
   <aside
-    class="panel prompt-panel"
+    class="prompt-panel"
     aria-labelledby="prompt-resolution-title"
     aria-live="polite"
   >
-    <div class="panel-heading">
+    <header class="prompt-panel__header">
       <h2 id="prompt-resolution-title">Awaiting GM resolution</h2>
-      <span>{prompts.length}</span>
-    </div>
+      <span class="prompt-panel__count">{prompts.length}</span>
+    </header>
     <ol class="prompt-list">
       {#each prompts as prompt (prompt.id)}
         {@const target = targetLabel(prompt)}
         <li class="prompt">
-          <div class="meta">
-            <span class="boundary">{boundaryLabel(prompt)}</span>
-            <span class="effect">{prompt.effectName}</span>
+          <div class="prompt__meta">
+            <SectionLabel>{boundaryLabel(prompt)}</SectionLabel>
+            <span class="prompt__effect">{prompt.effectName}</span>
             {#if target}
-              <span class="target">on {target}</span>
+              <span class="prompt__target">on {target}</span>
             {/if}
           </div>
-          <p class="description">{prompt.description}</p>
-          <div class="actions">
+          <p class="prompt__description">{prompt.description}</p>
+          <div class="prompt__actions">
             {#if showAccept(prompt.suggestionType)}
-              <button type="button" class="primary" on:click={() => handleAccept(prompt)}>
-                {acceptLabel(prompt.suggestionType)}
-              </button>
+              <Button
+                size="sm"
+                variant="primary"
+                ariaLabel={acceptLabel(prompt.suggestionType)}
+                onclick={() => handleAccept(prompt)}
+              >{acceptLabel(prompt.suggestionType)}</Button>
             {/if}
             {#if supportsSetValue(prompt.suggestionType)}
               <span class="set-value">
@@ -128,14 +133,27 @@
                     bind:value={setValueDrafts[prompt.id]}
                   />
                 </label>
-                <button type="button" on:click={() => handleSetValue(prompt)}>Set</button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  ariaLabel="Set"
+                  onclick={() => handleSetValue(prompt)}
+                >Set</Button>
               </span>
             {/if}
-            <button type="button" on:click={() => handleDismiss(prompt)}>Dismiss</button>
+            <Button
+              size="sm"
+              variant="secondary"
+              ariaLabel="Dismiss"
+              onclick={() => handleDismiss(prompt)}
+            >Dismiss</Button>
             {#if showRemove(prompt.suggestionType)}
-              <button type="button" class="danger" on:click={() => handleRemove(prompt)}>
-                Remove effect
-              </button>
+              <Button
+                size="sm"
+                variant="destructive"
+                ariaLabel="Remove effect"
+                onclick={() => handleRemove(prompt)}
+              >Remove effect</Button>
             {/if}
           </div>
         </li>
@@ -145,134 +163,117 @@
 {/if}
 
 <style>
-  .panel {
-    border: 1px solid #b6652e;
-    border-radius: 8px;
+  .prompt-panel {
     background: #fff7ee;
-    box-shadow: 0 1px 2px rgb(29 37 40 / 7%);
-    padding: 14px;
-    max-width: 1440px;
-    margin: 0 auto 18px;
+    border: 1px solid var(--color-amber);
+    border-left: 4px solid var(--color-amber);
+    border-radius: var(--radius-card);
+    padding: var(--space-3) var(--space-4);
   }
 
-  .panel-heading {
+  .prompt-panel__header {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
   }
 
   h2 {
     margin: 0;
-    font-size: 17px;
-    line-height: 1.2;
-    color: #6f3f16;
+    font-family: var(--font-serif);
+    font-size: var(--text-md);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    color: var(--color-amber);
   }
 
-  .panel-heading > span {
-    color: #6f3f16;
-    font-size: 13px;
+  .prompt-panel__count {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     font-weight: 600;
+    color: var(--color-amber);
   }
 
   .prompt-list {
     display: grid;
-    gap: 10px;
+    gap: var(--space-2);
     list-style: none;
     margin: 0;
     padding: 0;
   }
 
   .prompt {
-    border-left: 4px solid #b6652e;
-    border-radius: 6px;
-    background: #ffffff;
-    padding: 10px 12px;
+    background: var(--color-panel);
+    border: var(--border-thin);
+    border-left: 3px solid var(--color-amber);
+    padding: var(--space-2) var(--space-3);
     display: grid;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
-  .meta {
+  .prompt__meta {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 6px;
-    font-size: 12px;
-    color: #627171;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-ink-soft);
   }
 
-  .meta .boundary {
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 600;
-    color: #6f3f16;
-  }
-
-  .meta .effect {
-    color: #1d2528;
-    font-size: 14px;
+  .prompt__effect {
+    color: var(--color-ink);
+    font-size: var(--text-base);
     font-weight: 600;
   }
 
-  .description {
+  .prompt__target {
+    color: var(--color-ink-soft);
+    font-size: var(--text-sm);
+    font-style: italic;
+  }
+
+  .prompt__description {
     margin: 0;
-    font-size: 13px;
-    color: #1d2528;
+    font-size: var(--text-base);
+    color: var(--color-ink);
+    line-height: var(--leading-snug);
   }
 
-  .actions {
+  .prompt__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-2);
     align-items: center;
-  }
-
-  .actions button {
-    border: 1px solid #cfd6d1;
-    background: #fbfcfa;
-    color: #1d2528;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .actions button.primary {
-    background: #b6652e;
-    border-color: #6f3f16;
-    color: #ffffff;
-  }
-
-  .actions button.danger {
-    background: #fbfcfa;
-    border-color: #b6652e;
-    color: #6f3f16;
-  }
-
-  .actions button:hover {
-    filter: brightness(0.96);
   }
 
   .set-value {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
   }
 
   .set-value label {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 13px;
-    color: #1d2528;
+    gap: var(--space-2);
+    font-size: var(--text-base);
+    color: var(--color-ink);
   }
 
   .set-value input {
     width: 64px;
-    padding: 4px 6px;
-    border: 1px solid #cfd6d1;
-    border-radius: 6px;
-    font-size: 13px;
+    padding: 4px var(--space-2);
+    border: var(--border-thin);
+    background: var(--color-panel);
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+  }
+
+  .set-value input:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 1px;
+    border-color: var(--color-ink);
   }
 </style>

@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { EncounterState } from '../domain';
+  import Chip from './ui/Chip.svelte';
+  import SectionLabel from './ui/SectionLabel.svelte';
 
   export let name: string;
   export let phase: EncounterState['phase'];
@@ -8,15 +10,20 @@
 </script>
 
 <header class="topbar">
-  <div>
-    <p class="eyebrow">PF2e Encounter Tracker v2</p>
+  <div class="topbar__title">
+    <SectionLabel>PF2e Encounter Tracker v2</SectionLabel>
     <h1>{name}</h1>
   </div>
-  <div class="status-strip" aria-label="Encounter status">
-    <span class="status">{phase}</span>
-    <span>Round {round}</span>
-    <span>{activeName ? `${activeName}'s turn` : 'No active turn'}</span>
-    <a class="settings-link" href="/settings">Settings</a>
+  <div class="topbar__status" aria-label="Encounter status">
+    <Chip variant={phase === 'ACTIVE' ? 'success' : 'default'}>{phase}</Chip>
+    <div class="topbar__round">
+      <SectionLabel>Round</SectionLabel>
+      <span class="topbar__round-value">{round}</span>
+    </div>
+    <span class="topbar__turn">
+      {activeName ? `${activeName}'s turn` : 'No active turn'}
+    </span>
+    <a class="topbar__settings" href="/settings">Settings</a>
   </div>
 </header>
 
@@ -25,63 +32,85 @@
     display: flex;
     align-items: end;
     justify-content: space-between;
-    gap: 20px;
-    margin: 0 auto 18px;
+    gap: var(--space-5);
+    margin: 0 auto var(--space-4);
     max-width: 1440px;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-panel);
+    border: var(--border-strong);
+    border-radius: var(--radius-card);
   }
 
-  .eyebrow,
+  .topbar__title {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
   h1 {
     margin: 0;
+    font-family: var(--font-serif);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    color: var(--color-ink);
+    letter-spacing: -0.2px;
   }
 
-  .eyebrow {
-    color: #697170;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    font-size: 32px;
-    line-height: 1.1;
-  }
-
-  .status-strip {
+  .topbar__status {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
-    color: #415052;
-    font-size: 14px;
-  }
-
-  .status-strip span,
-  .status,
-  .settings-link {
-    border: 1px solid #c5ccc8;
-    border-radius: 6px;
-    background: #ffffff;
-    padding: 8px 10px;
-  }
-
-  .settings-link {
-    color: #28494c;
-    text-decoration: none;
-    font-weight: 600;
-    min-height: 44px;
-    display: inline-flex;
     align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    color: var(--color-ink-soft);
+    font-size: var(--text-base);
   }
 
-  .settings-link:hover {
-    background: #eef2f0;
+  .topbar__round {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
   }
 
-  .status {
-    color: #f3f6f5;
-    background: #28494c;
-    border-color: #28494c;
+  .topbar__round-value {
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--color-red);
+    line-height: var(--leading-tight);
+  }
+
+  .topbar__turn {
+    color: var(--color-ink-soft);
+    font-size: var(--text-base);
+    font-style: italic;
+  }
+
+  .topbar__settings {
+    color: var(--color-ink);
+    text-decoration: none;
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    border: var(--border-thin);
+    background: transparent;
+    padding: 6px var(--space-3);
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .topbar__settings:hover {
+    background: var(--color-panel-2);
+    border-color: var(--color-ink);
+  }
+
+  .topbar__settings:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
   }
 
   @media (max-width: 760px) {
@@ -90,7 +119,7 @@
       grid-template-columns: 1fr;
     }
 
-    .status-strip {
+    .topbar__status {
       justify-content: start;
     }
   }
