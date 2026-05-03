@@ -337,10 +337,6 @@
   }
 </script>
 
-<svelte:head>
-  <title>PF2e Encounter Tracker v2</title>
-</svelte:head>
-
 <main class="shell">
   <TopBar
     name={encounter.name}

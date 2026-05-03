@@ -99,7 +99,7 @@
 </script>
 
 <svelte:head>
-  <title>Settings — PF2e Encounter Tracker v2</title>
+  <title>Settings — PF2e Encounter Tracker</title>
 </svelte:head>
 
 <main class="settings">
