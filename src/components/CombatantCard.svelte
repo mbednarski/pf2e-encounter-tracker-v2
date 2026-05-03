@@ -12,6 +12,10 @@
   import type { CommittableEdit, HpEditField } from '$lib/hp-input';
   import { templateLabel } from '$lib/template-label';
   import InlineNumberEdit from './InlineNumberEdit.svelte';
+  import Button from './ui/Button.svelte';
+  import Chip from './ui/Chip.svelte';
+  import IconButton from './ui/IconButton.svelte';
+  import SectionLabel from './ui/SectionLabel.svelte';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
@@ -94,6 +98,9 @@
     Math.min(100, (combatant.currentHp / combatant.baseStats.hp) * 100)
   );
 
+  $: hpTone =
+    hpPercent >= 60 ? 'healthy' : hpPercent >= 30 ? 'wounded' : 'critical';
+
   $: visualState = combatantVisualState(combatant);
 
   $: endTurnTitle = actions.canEndTurn
@@ -128,10 +135,11 @@
   class:selected-card={isSelected}
   class:dimmed={visualState !== 'alive'}
   data-visual-state={visualState}
+  data-hp-tone={hpTone}
   class="combatant-card"
 >
   <div class="card-heading">
-    <div>
+    <div class="card-heading__main">
       <div class="card-title">
         <h2>
           <button
@@ -143,68 +151,94 @@
           >{combatant.name}</button>
         </h2>
         {#if combatant.templateAdjustment}
-          <span class="template-badge {combatant.templateAdjustment}">{templateLabel(combatant.templateAdjustment)}</span>
+          <Chip variant={combatant.templateAdjustment === 'elite' ? 'warning' : 'default'}>
+            {templateLabel(combatant.templateAdjustment)}
+          </Chip>
         {/if}
         {#if visualState === 'dead'}
-          <span class="status-badge dead" aria-label="Combatant is dead">Dead</span>
+          <Chip variant="danger">Dead</Chip>
         {:else if visualState === 'unconscious'}
-          <span class="status-badge unconscious" aria-label="Combatant is unconscious">Unconscious</span>
+          <Chip variant="warning">Unconscious</Chip>
         {/if}
       </div>
-      <p>AC {combatant.baseStats.ac} · Fort +{combatant.baseStats.fortitude} · Ref +{combatant.baseStats.reflex} · Will +{combatant.baseStats.will}</p>
     </div>
     <div class="card-aside">
-      <span class="phase-pill">{isCurrent ? 'Turn' : phase}</span>
+      <Chip variant={isCurrent ? 'success' : 'default'}>
+        {isCurrent ? 'Turn' : phase}
+      </Chip>
       <div class="card-reorder" aria-label="Reorder">
-        <button
-          type="button"
+        <IconButton
+          ariaLabel={`Move ${combatant.name} up`}
           title="Move up"
-          aria-label={`Move ${combatant.name} up`}
+          size={22}
           disabled={isFirst}
           onclick={() => onMove(combatant.id, -1)}
-        >↑</button>
-        <button
-          type="button"
+        >↑</IconButton>
+        <IconButton
+          ariaLabel={`Move ${combatant.name} down`}
           title="Move down"
-          aria-label={`Move ${combatant.name} down`}
+          size={22}
           disabled={isLast}
           onclick={() => onMove(combatant.id, 1)}
-        >↓</button>
+        >↓</IconButton>
       </div>
     </div>
   </div>
 
-  <div class="hp-row">
-    <div class="hp-cell">
-      <InlineNumberEdit
-        value={combatant.currentHp}
-        ariaLabel="Edit HP. Type 42 to set, +3 to heal, minus 5 to damage."
-        displayAriaLabel={`HP ${combatant.currentHp} of ${combatant.baseStats.hp}, click to edit`}
-        placeholder="−5, +3, 42"
-        displayClass="hp-value"
-        onCommit={(parsed) => onHpEdit(combatant.id, 'hp', parsed)}
-      />
-      <span>/ {combatant.baseStats.hp} HP</span>
+  <div class="stat-grid">
+    <div class="stat-cell stat-cell--ac">
+      <SectionLabel>AC</SectionLabel>
+      <span class="stat-cell__value">{combatant.baseStats.ac}</span>
     </div>
-    <div class="hp-cell">
-      <InlineNumberEdit
-        value={combatant.tempHp}
-        ariaLabel="Edit temp HP. Type 5 to set, +3 to add, minus 2 to remove."
-        displayAriaLabel={combatant.tempHp === 0
-          ? 'Add temporary HP'
-          : `Temp HP ${combatant.tempHp}, click to edit`}
-        placeholder="+3, 5, −2"
-        displayClass="hp-value"
-        emptyDisplay="+ Add temp"
-        onCommit={(parsed) => onHpEdit(combatant.id, 'tempHp', parsed)}
-      />
-      {#if combatant.tempHp > 0}
-        <span>temp</span>
-      {/if}
+    <div class="stat-cell stat-cell--hp">
+      <SectionLabel>HP</SectionLabel>
+      <div class="hp-row">
+        <div class="hp-cell">
+          <InlineNumberEdit
+            value={combatant.currentHp}
+            ariaLabel="Edit HP. Type 42 to set, +3 to heal, minus 5 to damage."
+            displayAriaLabel={`HP ${combatant.currentHp} of ${combatant.baseStats.hp}, click to edit`}
+            placeholder="−5, +3, 42"
+            displayClass="hp-value"
+            onCommit={(parsed) => onHpEdit(combatant.id, 'hp', parsed)}
+          />
+          <span class="hp-max">/ {combatant.baseStats.hp}</span>
+        </div>
+        <div class="hp-cell hp-cell--temp">
+          <InlineNumberEdit
+            value={combatant.tempHp}
+            ariaLabel="Edit temp HP. Type 5 to set, +3 to add, minus 2 to remove."
+            displayAriaLabel={combatant.tempHp === 0
+              ? 'Add temporary HP'
+              : `Temp HP ${combatant.tempHp}, click to edit`}
+            placeholder="+3, 5, −2"
+            displayClass="temp-hp-value"
+            emptyDisplay="+ temp"
+            onCommit={(parsed) => onHpEdit(combatant.id, 'tempHp', parsed)}
+          />
+          {#if combatant.tempHp > 0}
+            <span class="hp-temp-label">temp</span>
+          {/if}
+        </div>
+      </div>
+      <div class="hp-track" aria-label={`${combatant.name} HP`}>
+        <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
+      </div>
     </div>
-  </div>
-  <div class="hp-track" aria-label={`${combatant.name} HP`}>
-    <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
+    <div class="stat-cell stat-cell--saves">
+      <div class="save">
+        <SectionLabel>Fort</SectionLabel>
+        <span class="save__value">+{combatant.baseStats.fortitude}</span>
+      </div>
+      <div class="save">
+        <SectionLabel>Ref</SectionLabel>
+        <span class="save__value">+{combatant.baseStats.reflex}</span>
+      </div>
+      <div class="save">
+        <SectionLabel>Will</SectionLabel>
+        <span class="save__value">+{combatant.baseStats.will}</span>
+      </div>
+    </div>
   </div>
 
   <div class="conditions" aria-label={`${combatant.name} conditions`}>
@@ -213,7 +247,7 @@
     {/if}
 
     {#each appliedEffectsView as view (view.instanceId)}
-      <span class="condition-chip" class:implied={view.source.kind === 'implied'}>
+      <span class="condition-chip" class:condition-chip--implied={view.source.kind === 'implied'}>
         <span class="condition-name">{view.name}</span>
         {#if view.value.kind === 'valued'}
           {#if editingInstanceId === view.instanceId}
@@ -226,15 +260,14 @@
               onblur={() => clampEditingValue(view)}
               aria-label={`${view.name} value`}
             />
-            <button type="button" class="condition-mini" onclick={() => commitEdit(view)}>Set</button>
-            <button type="button" class="condition-mini secondary" onclick={cancelEdit}>Cancel</button>
+            <Button size="sm" variant="primary" onclick={() => commitEdit(view)}>Set</Button>
+            <Button size="sm" variant="secondary" onclick={cancelEdit}>Cancel</Button>
           {:else}
-            <button
-              type="button"
-              class="condition-mini"
+            <IconButton
+              size={22}
+              ariaLabel={`Decrease ${view.name}`}
               onclick={() => onModifyConditionValue(combatant.id, view.instanceId, -1)}
-              aria-label={`Decrease ${view.name}`}
-            >−</button>
+            >−</IconButton>
             <button
               type="button"
               class="condition-value"
@@ -242,38 +275,38 @@
               title="Click to edit"
               aria-label={`${view.name} value ${view.value.current}, click to edit`}
             >{view.value.current}</button>
-            <button
-              type="button"
-              class="condition-mini"
+            <IconButton
+              size={22}
+              ariaLabel={`Increase ${view.name}`}
               onclick={() => onModifyConditionValue(combatant.id, view.instanceId, 1)}
-              aria-label={`Increase ${view.name}`}
-            >+</button>
+            >+</IconButton>
           {/if}
         {/if}
         <span class="condition-duration">{view.durationLabel}</span>
         {#if view.source.kind === 'implied'}
           <span class="condition-parent">via {view.source.parentName}</span>
         {/if}
-        <button
-          type="button"
-          class="condition-remove"
-          onclick={() => onRemoveCondition(combatant.id, view.instanceId)}
-          aria-label={`Remove ${view.name}`}
+        <IconButton
+          size={22}
+          variant="destructive"
+          ariaLabel={`Remove ${view.name}`}
           title="Remove"
-        >✕</button>
+          onclick={() => onRemoveCondition(combatant.id, view.instanceId)}
+        >✕</IconButton>
       </span>
     {/each}
 
     {#if !pickerOpen}
-      <button
-        type="button"
-        class="condition-add"
-        onclick={openPicker}
+      <Button
+        size="sm"
+        variant="ghost"
+        ariaLabel="Add condition"
         disabled={conditionOptions.length === 0}
-      >+ Condition</button>
+        onclick={openPicker}
+      >+ Condition</Button>
     {:else}
       <div class="condition-picker" role="group" aria-label="Apply condition">
-        <select bind:value={pickerEffectId} aria-label="Condition">
+        <select bind:value={pickerEffectId} aria-label="Condition" class="condition-picker__select">
           {#each conditionOptions as option (option.id)}
             <option value={option.id}>{option.name}</option>
           {/each}
@@ -289,69 +322,80 @@
             aria-label="Initial value"
           />
         {/if}
-        <button type="button" class="condition-apply" onclick={applyFromPicker}>Apply</button>
-        <button type="button" class="condition-apply secondary" onclick={cancelPicker}>Cancel</button>
+        <Button size="sm" variant="primary" onclick={applyFromPicker}>Apply</Button>
+        <Button size="sm" variant="secondary" onclick={cancelPicker}>Cancel</Button>
       </div>
     {/if}
   </div>
 
   <div class="card-turn-actions" aria-label="Turn and lifecycle controls">
-    <button
-      type="button"
-      class="turn"
-      disabled={!actions.canEndTurn}
+    <Button
+      size="sm"
+      variant="primary"
+      ariaLabel="End turn"
       title={endTurnTitle}
+      disabled={!actions.canEndTurn}
       onclick={() => onEndTurn(combatant.id)}
-    >
-      End Turn
-    </button>
-    <button
-      type="button"
-      class="turn secondary"
-      disabled={!actions.canMarkReactionUsed}
+    >End Turn</Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      ariaLabel="Reaction used"
       title={reactionTitle}
+      disabled={!actions.canMarkReactionUsed}
       onclick={() => onMarkReactionUsed(combatant.id)}
-    >
-      Reaction Used
-    </button>
-    <button
-      type="button"
-      class="turn secondary"
-      disabled={!actions.canMarkDead}
+    >Reaction Used</Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      ariaLabel="Mark dead"
       title={markDeadTitle}
+      disabled={!actions.canMarkDead}
       onclick={() => onMarkDead(combatant.id)}
-    >
-      Mark Dead
-    </button>
-    <button
-      type="button"
-      class="turn secondary"
-      disabled={!actions.canRevive}
+    >Mark Dead</Button>
+    <Button
+      size="sm"
+      variant="secondary"
+      ariaLabel="Revive"
       title={reviveTitle}
+      disabled={!actions.canRevive}
       onclick={() => onRevive(combatant.id)}
-    >
-      Revive
-    </button>
+    >Revive</Button>
   </div>
 </article>
 
 <style>
   .combatant-card {
-    border: 1px solid #cfd6d1;
-    border-radius: 8px;
-    background: #fbfcfa;
-    box-shadow: 0 1px 2px rgb(29 37 40 / 7%);
-    padding: 16px;
+    position: relative;
+    background: var(--color-panel-2);
+    border: var(--border-thin);
+    border-left: 3px solid var(--color-rule-strong);
+    padding: var(--space-3) var(--space-4);
+    transition: background 0.12s, border-color 0.12s;
   }
 
   .current-card {
-    border-color: #a53f2b;
+    background: var(--color-panel);
+    border-color: var(--color-ink);
+    border-left-color: var(--color-ink);
+    box-shadow: var(--shadow-soft);
   }
 
   .selected-card {
-    box-shadow:
-      inset 3px 0 0 #2f6f8a,
-      0 1px 2px rgb(29 37 40 / 7%);
+    box-shadow: inset 3px 0 0 var(--color-blue), 0 1px 2px rgba(31, 26, 20, 0.08);
+  }
+
+  .selected-card.current-card {
+    box-shadow: inset 3px 0 0 var(--color-blue), var(--shadow-soft);
+  }
+
+  .combatant-card.dimmed {
+    background: var(--color-rule);
+    opacity: 0.72;
+  }
+
+  .combatant-card.dimmed .hp-fill {
+    background: var(--color-ink-mute);
   }
 
   .card-name-button {
@@ -376,192 +420,194 @@
     display: flex;
     align-items: start;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--space-3);
+  }
+
+  .card-heading__main {
+    min-width: 0;
+    flex: 1;
   }
 
   .card-title {
     display: flex;
     align-items: center;
     justify-content: start;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
   }
 
   h2 {
     margin: 0;
-    font-size: 17px;
-    line-height: 1.2;
-  }
-
-  .card-heading p {
-    margin: 5px 0 0;
-    color: #526061;
-    font-size: 13px;
-  }
-
-  .phase-pill {
-    border-radius: 999px;
-    background: #eef1ee;
-    padding: 5px 8px;
-    color: #627171;
-    font-size: 13px;
-    white-space: nowrap;
+    font-family: var(--font-serif);
+    font-size: var(--text-md);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    color: var(--color-ink);
   }
 
   .card-aside {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .card-reorder {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
   }
 
-  .card-reorder button {
-    width: 24px;
-    height: 22px;
-    padding: 0;
-    border: 1px solid #b8c3be;
-    border-radius: 4px;
-    background: #ffffff;
-    color: #263235;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--color-rule);
   }
 
-  .card-reorder button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
+  .stat-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  .template-badge {
-    border-radius: 999px;
-    background: #eef1ee;
-    color: #334143;
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1;
-    padding: 5px 7px;
-    text-transform: uppercase;
-    white-space: nowrap;
+  .stat-cell--ac {
+    align-items: center;
   }
 
-  .template-badge.elite {
-    background: #f4e6d7;
-    color: #7c3d1f;
+  .stat-cell--ac .stat-cell__value {
+    font-family: var(--font-serif);
+    font-size: var(--text-xl);
+    font-weight: 600;
+    color: var(--color-ink);
+    line-height: var(--leading-tight);
   }
 
-  .template-badge.weak {
-    background: #e6eef6;
-    color: #275171;
-  }
-
-  .status-badge {
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1;
-    padding: 5px 7px;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  .status-badge.dead {
-    background: #f4d7d7;
-    color: #7a1f1f;
-  }
-
-  .status-badge.unconscious {
-    background: #f4ead7;
-    color: #7a5a1f;
-  }
-
-  .combatant-card.dimmed {
-    background: #f1f2ef;
-    opacity: 0.72;
-  }
-
-  .combatant-card.dimmed .hp-fill {
-    background: #8a9a92;
+  .stat-cell--hp {
+    min-width: 0;
   }
 
   .hp-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 18px;
-  }
-
-  .hp-row > div {
-    border-radius: 7px;
-    background: #eef1ee;
-    padding: 10px;
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: var(--space-3);
+    flex-wrap: wrap;
   }
 
-  .hp-row :global(.hp-value) {
-    font-size: 24px;
+  .hp-cell {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-family: var(--font-mono);
+  }
+
+  .stat-cell--hp :global(.hp-value) {
+    font-size: var(--text-xl);
     font-weight: 700;
-    color: inherit;
+    color: var(--color-ink);
+    font-family: var(--font-mono);
   }
 
-  .hp-row span {
-    color: #526061;
-    font-size: 13px;
+  .stat-cell--hp :global(.temp-hp-value) {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-blue);
+    font-family: var(--font-mono);
+  }
+
+  [data-hp-tone='wounded'] .stat-cell--hp :global(.hp-value) {
+    color: var(--color-amber);
+  }
+
+  [data-hp-tone='critical'] .stat-cell--hp :global(.hp-value) {
+    color: var(--color-red);
+  }
+
+  .hp-max {
+    color: var(--color-ink-mute);
+    font-size: var(--text-sm);
+  }
+
+  .hp-temp-label {
+    color: var(--color-blue);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
   }
 
   .hp-track {
-    height: 10px;
+    height: 6px;
     overflow: hidden;
-    border-radius: 999px;
-    background: #d9dfdb;
-    margin: 12px 0;
+    background: var(--color-hp-bg);
+    border: 1px solid var(--color-rule);
+    margin-top: var(--space-1);
   }
 
   .hp-fill {
     height: 100%;
-    border-radius: inherit;
-    background: #3f7f64;
+    background: var(--color-green);
+    transition: width 0.18s ease, background 0.18s ease;
+  }
+
+  [data-hp-tone='wounded'] .hp-fill {
+    background: var(--color-amber);
+  }
+
+  [data-hp-tone='critical'] .hp-fill {
+    background: var(--color-red);
+  }
+
+  .stat-cell--saves {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+    text-align: center;
+  }
+
+  .save {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .save__value {
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    font-weight: 700;
+    color: var(--color-ink);
   }
 
   .conditions {
     display: flex;
     align-items: center;
     justify-content: start;
-    gap: 6px;
+    gap: var(--space-2);
     flex-wrap: wrap;
-    margin-bottom: 12px;
+    margin-top: var(--space-3);
   }
 
   .conditions-empty {
-    color: #8a9690;
-    font-size: 12px;
+    color: var(--color-ink-mute);
+    font-size: var(--text-sm);
     font-style: italic;
   }
 
   .condition-chip {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    border: 1px solid #cfd6d1;
-    border-radius: 999px;
-    background: #eef1ee;
-    color: #263235;
-    font-size: 12px;
+    gap: 4px;
+    border: var(--border-thin);
+    background: var(--color-panel);
+    color: var(--color-ink);
+    font-size: var(--text-sm);
     font-weight: 600;
-    padding: 3px 5px 3px 10px;
+    padding: 2px var(--space-2);
   }
 
-  .condition-chip.implied {
-    background: #f5f6f3;
+  .condition-chip--implied {
+    background: transparent;
     border-style: dashed;
     opacity: 0.78;
   }
@@ -571,165 +617,69 @@
   }
 
   .condition-duration {
-    color: #627171;
+    color: var(--color-ink-mute);
     font-weight: 500;
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .condition-parent {
-    color: #8a9690;
-    font-size: 11px;
+    color: var(--color-ink-mute);
+    font-size: var(--text-xs);
     font-style: italic;
   }
 
-  .condition-mini {
-    border: 1px solid #b8c3be;
-    border-radius: 4px;
-    background: #ffffff;
-    color: #263235;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
-    min-width: 22px;
-    padding: 2px 6px;
-  }
-
-  .condition-mini.secondary {
-    color: #627171;
-  }
-
   .condition-value {
-    border: 1px solid #b8c3be;
-    border-radius: 4px;
-    background: #ffffff;
-    color: #263235;
+    border: var(--border-thin);
+    background: var(--color-panel);
+    color: var(--color-ink);
     cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 800;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
     line-height: 1;
     min-width: 22px;
     padding: 2px 6px;
   }
 
   .condition-value-input {
-    border: 1px solid #b8c3be;
-    border-radius: 4px;
-    background: #ffffff;
-    color: #1d2528;
+    border: var(--border-thin);
+    background: var(--color-panel);
+    color: var(--color-ink);
     font: inherit;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     padding: 2px 4px;
     width: 48px;
-  }
-
-  .condition-remove {
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: #7a1f1f;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1;
-    padding: 2px 6px;
-  }
-
-  .condition-remove:hover {
-    background: #f4d7d7;
-  }
-
-  .condition-add {
-    border: 1px dashed #9aa7a3;
-    border-radius: 999px;
-    background: transparent;
-    color: #28494c;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 11px;
-  }
-
-  .condition-add:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
   }
 
   .condition-picker {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    border: 1px solid #b8c3be;
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 5px 7px;
+    gap: var(--space-2);
+    border: var(--border-strong);
+    background: var(--color-panel);
+    padding: 4px var(--space-2);
   }
 
-  .condition-picker select {
-    border: 1px solid #b8c3be;
-    border-radius: 4px;
-    background: #ffffff;
-    color: #1d2528;
+  .condition-picker__select {
+    border: var(--border-thin);
+    background: var(--color-panel);
+    color: var(--color-ink);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--text-base);
     padding: 3px 6px;
     max-width: 160px;
-  }
-
-  .condition-apply {
-    border: 1px solid #28494c;
-    border-radius: 4px;
-    background: #28494c;
-    color: #ffffff;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 10px;
-  }
-
-  .condition-apply.secondary {
-    border-color: #9aa7a3;
-    color: #263235;
-    background: #ffffff;
   }
 
   .card-turn-actions {
     display: flex;
     align-items: center;
     justify-content: start;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px dashed #cfd6d1;
-  }
-
-  .card-turn-actions button.turn {
-    min-height: 36px;
-    border: 1px solid #28494c;
-    border-radius: 6px;
-    background: #28494c;
-    color: #ffffff;
-    cursor: pointer;
-    font: inherit;
-    font-weight: 700;
-    padding: 7px 11px;
-  }
-
-  .card-turn-actions button.turn.secondary {
-    border-color: #9aa7a3;
-    color: #263235;
-    background: #ffffff;
-  }
-
-  .card-turn-actions button.turn:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--color-rule);
   }
 
   @media (max-width: 760px) {
@@ -738,8 +688,8 @@
       flex-direction: column;
     }
 
-    .card-turn-actions button.turn {
-      width: 100%;
+    .stat-grid {
+      grid-template-columns: 1fr;
     }
   }
 </style>
