@@ -409,14 +409,6 @@
 </main>
 
 <style>
-  :global(body) {
-    margin: 0;
-    color: #1d2528;
-    background: #edf0ec;
-    font-family:
-      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-
   .shell {
     min-height: 100vh;
     padding: 24px;

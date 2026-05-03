@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import '../styles/global.css';
 
   const SITE_TITLE = 'PF2e Encounter Tracker';
   const SITE_DESCRIPTION =

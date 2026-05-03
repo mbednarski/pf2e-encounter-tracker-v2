@@ -1,0 +1,90 @@
+/*
+ * Design tokens — Direction A ("Reference Sheet" / parchment).
+ *
+ * Values mirror design/direction-a.jsx (A_COLORS, lines 5-20) and the
+ * design/README.md token spec (lines 107-145). Any UI surface that needs
+ * a color, spacing, font, or radius MUST read it from a token here so a
+ * later Direction B (dark "Console") can be added by populating the
+ * [data-theme="dark"] block — no per-component restyle required.
+ */
+
+:root {
+  /* Surfaces */
+  --color-bg: #f5efe2;          /* page parchment */
+  --color-panel: #fbf7ec;       /* brighter parchment — cards, active rows */
+  --color-panel-2: #f1e9d5;     /* header strips, hover */
+  --color-hp-bg: #e8dfc8;       /* HP meter track */
+
+  /* Ink (text & rules) */
+  --color-ink: #1f1a14;         /* primary text, primary borders */
+  --color-ink-soft: #5c5345;    /* secondary text */
+  --color-ink-mute: #8c8270;    /* tertiary text, uppercase labels */
+  --color-rule: #d9cfb6;        /* light dividers */
+  --color-rule-strong: #b5a887; /* medium dividers, frame edges */
+
+  /* Semantic accents */
+  --color-red: #9b2d20;         /* HP critical, damage, crits */
+  --color-red-soft: #c4685c;
+  --color-green: #3f6b3a;       /* healthy HP, success */
+  --color-amber: #a57a1f;       /* wounded HP, condition warnings */
+  --color-blue: #2f5773;        /* PCs, spells, links */
+
+  /* Typography */
+  --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --text-xs: 9px;     /* uppercase micro-labels */
+  --text-sm: 11px;    /* small labels, log timestamps */
+  --text-base: 13px;  /* body */
+  --text-md: 15px;    /* card name, section heading */
+  --text-lg: 18px;    /* statblock heading */
+  --text-xl: 22px;    /* HP digits */
+  --text-2xl: 26px;   /* statblock title, AC */
+  --text-3xl: 32px;   /* init number */
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  --tracking-wide: 0.06em;     /* lightly spaced caps */
+  --tracking-wider: 0.1em;
+  --tracking-widest: 0.14em;   /* uppercase labels per design spec */
+
+  /* Spacing (4-based) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  /* Borders */
+  --border-thin: 1px solid var(--color-rule);
+  --border-strong: 1px solid var(--color-rule-strong);
+  --border-ink: 1px solid var(--color-ink);
+
+  /* Direction A is intentionally flat (no border-radius). A future
+     Direction B can override this token to introduce a 4px radius. */
+  --radius-card: 0;
+  --radius-chip: 0;
+
+  /* Shadows */
+  --shadow-paper: 4px 6px 0 rgba(31, 26, 20, 0.18);
+  --shadow-soft: 0 1px 2px rgba(31, 26, 20, 0.08);
+}
+
+/*
+ * Direction B (dark "Console") palette — stub.
+ * Populate this block in a future PR to enable a [data-theme="dark"]
+ * toggle. Values come from design/direction-b-shared.jsx + README.md
+ * lines 141-145. Intentionally left empty so the cascade falls through
+ * to the :root values until the dark slice ships.
+ */
+[data-theme='dark'] {
+  /* TODO(direction-b): paste dark palette here. */
+}
