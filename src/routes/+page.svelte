@@ -5,8 +5,8 @@
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
   import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
+  import LibraryPane from '../components/LibraryPane.svelte';
   import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
-  import SetupPanel from '../components/SetupPanel.svelte';
   import {
     combatantCardActions,
     currentCombatant,
@@ -346,8 +346,8 @@
   />
 
   <section class="workspace">
-    <aside class="workspace__library">
-      <SetupPanel
+    <div class="workspace__library">
+      <LibraryPane
         {canStart}
         creatures={availableCreatures}
         onAddCreatures={handleAddCreatures}
@@ -356,7 +356,7 @@
         onStart={startEncounter}
         onReset={resetLocal}
       />
-    </aside>
+    </div>
 
     <section class="workspace__track" aria-label="Combatants">
       <PromptResolutionPanel
