@@ -32,13 +32,13 @@ All four must pass before opening a PR.
 
 Dev happens on Windows; CI and Cloudflare build on Linux. `npm install` only writes optional dependencies for the current platform, so a Windows-regenerated lockfile is missing Linux-only packages (e.g. rolldown's `@emnapi/runtime` chain) and `npm ci` on Linux fails with `Missing: ... from lock file`.
 
-Do not commit a Windows-regenerated `package-lock.json`. If `package.json` changes (add/remove a dep, version bump), push the branch and run the `Refresh package-lock.json on Linux` workflow:
+The `Refresh package-lock.json on Linux` workflow handles this automatically. On every push to a non-`master` branch, it does an `npm ci --dry-run` preflight; if the lockfile is in sync, it exits in seconds. If the lockfile is out of sync, it regenerates it on `ubuntu-latest` and pushes the result back to the branch. After it pushes, re-run any failing CI check on the PR (a token-pushed commit does not auto-trigger downstream workflows by GitHub's design).
+
+Manual trigger (once the workflow is on `master`):
 
 ```
 gh workflow run refresh-lockfile.yml --ref <branch-name>
 ```
-
-(or via GitHub UI → Actions → Run workflow). It regenerates the lockfile on `ubuntu-latest` and commits it back to the branch. Then re-run the failing CI check.
 
 ## Architecture (big picture)
 

@@ -7,18 +7,26 @@ name: Refresh package-lock.json on Linux
 #   ubuntu-latest fails with "Missing: ... from lock file".
 #
 #   This workflow regenerates package-lock.json on ubuntu-latest and commits
-#   it back to the branch. It is the canonical fix when Windows dependency
-#   installs cause CI drift.
+#   it back to the branch when the lockfile is out of sync. It is the
+#   canonical fix when Windows dependency installs cause CI drift.
 #
-# How to use:
-#   - GitHub UI: Actions tab → "Refresh package-lock.json on Linux" → Run workflow
-#   - CLI: gh workflow run refresh-lockfile.yml --ref <branch-name>
+# When it runs:
+#   - Automatically on every push to a non-master branch (preflight check
+#     that exits fast if the lockfile is already in sync).
+#   - Manually via workflow_dispatch once this workflow exists on master.
 #
-# After it runs, re-run any failing CI checks on the PR (a token-pushed commit
-# does not auto-trigger downstream workflows by GitHub's design).
+# Loop safety: pushes by github-actions[bot] (the commit this workflow itself
+# creates) do not retrigger workflows by GitHub's design, so the regen push
+# does not loop.
+#
+# After regen pushes a new commit, downstream CI will not auto-rerun on the
+# PR (same GitHub-token-push restriction). Re-run failing CI checks manually.
 
 on:
   workflow_dispatch:
+  push:
+    branches-ignore:
+      - master
 
 permissions:
   contents: write
@@ -43,15 +51,22 @@ jobs:
         with:
           node-version: 22
 
+      - name: Preflight — does npm ci accept the current lockfile?
+        id: preflight
+        continue-on-error: true
+        run: npm ci --dry-run --silent
+
       - name: Regenerate lockfile (lockfile-only, no install)
+        if: steps.preflight.outcome == 'failure'
         run: npm install --package-lock-only --no-audit --no-fund
 
       - name: Check whether lockfile changed
+        if: steps.preflight.outcome == 'failure'
         id: diff
         run: |
           if git diff --quiet package-lock.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "package-lock.json is already in sync — nothing to commit."
+            echo "package-lock.json regen produced no diff — manual investigation may be needed."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "package-lock.json was updated. Diff stat:"
@@ -59,7 +74,7 @@ jobs:
           fi
 
       - name: Commit and push refreshed lockfile
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.preflight.outcome == 'failure' && steps.diff.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
