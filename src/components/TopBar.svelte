@@ -16,6 +16,7 @@
     <span class="status">{phase}</span>
     <span>Round {round}</span>
     <span>{activeName ? `${activeName}'s turn` : 'No active turn'}</span>
+    <a class="settings-link" href="/settings">Settings</a>
   </div>
 </header>
 
@@ -56,11 +57,25 @@
   }
 
   .status-strip span,
-  .status {
+  .status,
+  .settings-link {
     border: 1px solid #c5ccc8;
     border-radius: 6px;
     background: #ffffff;
     padding: 8px 10px;
+  }
+
+  .settings-link {
+    color: #28494c;
+    text-decoration: none;
+    font-weight: 600;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .settings-link:hover {
+    background: #eef2f0;
   }
 
   .status {
