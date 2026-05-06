@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { FeedbackEntry } from '$lib/encounter-app';
+  import type { LogEntry } from '../domain';
 
-  export let entries: FeedbackEntry[];
+  export let entries: LogEntry[];
 
   $: ordered = [...entries].reverse();
 </script>
@@ -12,7 +12,7 @@
   {:else}
     <ol class="entries">
       {#each ordered as entry (entry.id)}
-        <li class="entry entry--{entry.severity}">
+        <li class="entry entry--{entry.tone}">
           <span class="entry__message">{entry.message}</span>
         </li>
       {/each}
@@ -58,7 +58,7 @@
     color: var(--color-ink);
   }
 
-  .entry--warn .entry__message {
+  .entry--danger .entry__message {
     color: var(--color-amber);
   }
 

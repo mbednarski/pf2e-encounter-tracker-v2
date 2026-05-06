@@ -175,9 +175,12 @@ export interface Prompt {
   suggestedValue?: number;
 }
 
+export type LogEntryTone = 'info' | 'success' | 'danger';
+
 export interface LogEntry {
   id: string;
   message: string;
+  tone: LogEntryTone;
 }
 
 export interface EncounterState {

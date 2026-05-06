@@ -9,8 +9,13 @@ import type {
   DomainEvent,
   Duration,
   EffectDefinition,
-  EncounterState
+  EncounterState,
+  LogEntry
 } from '../domain';
+import { formatEvents } from './combat-log/format';
+
+/** Maximum number of log entries retained on EncounterState.combatLog. Older entries are dropped. */
+export const COMBAT_LOG_CAP = 200;
 
 export interface ManualCombatantInput {
   id: string;
@@ -42,7 +47,6 @@ export interface FeedbackEntry {
 
 export interface DispatchResult {
   state: EncounterState;
-  feedback: FeedbackEntry[];
   events: DomainEvent[];
 }
 
@@ -108,17 +112,23 @@ export function toCommand<T extends CommandType>(
   return { id, type, payload: payload ?? {} } as Extract<Command, { type: T }>;
 }
 
-export function dispatchEncounterCommand(
-  state: EncounterState,
-  feedback: FeedbackEntry[],
-  command: Command
-): DispatchResult {
+export function dispatchEncounterCommand(state: EncounterState, command: Command): DispatchResult {
   const result = applyCommand(state, command, effectLibrary);
-  const entry = formatFeedbackEntry(result.events, result.newState, command);
+  const newEntries = formatEvents(result.events, {
+    commandId: command.id,
+    state: result.newState
+  });
+
+  if (newEntries.length === 0) {
+    return { state: result.newState, events: result.events };
+  }
+
+  const merged = [...result.newState.combatLog, ...newEntries];
+  const cappedLog: LogEntry[] =
+    merged.length > COMBAT_LOG_CAP ? merged.slice(merged.length - COMBAT_LOG_CAP) : merged;
 
   return {
-    state: result.newState,
-    feedback: entry ? [...feedback, entry].slice(-12) : feedback,
+    state: { ...result.newState, combatLog: cappedLog },
     events: result.events
   };
 }
@@ -281,62 +291,6 @@ export function combatantCardActions(
     canMarkDead: inEditablePhase && combatant.isAlive,
     canRevive: inEditablePhase && !combatant.isAlive
   };
-}
-
-function formatFeedbackEntry(events: DomainEvent[], state: EncounterState, command: Command): FeedbackEntry | undefined {
-  if (events.length === 0) {
-    return undefined;
-  }
-
-  const rejected = events.find((event): event is Extract<DomainEvent, { type: 'command-rejected' }> => event.type === 'command-rejected');
-
-  return {
-    id: `log-${command.id}`,
-    commandId: command.id,
-    severity: rejected ? 'warn' : 'info',
-    message: rejected ? `${rejected.commandType} rejected: ${rejected.reason}` : formatEvents(events, state, command)
-  };
-}
-
-function formatEvents(events: DomainEvent[], state: EncounterState, command: Command): string {
-  const first = events[0];
-
-  switch (first.type) {
-    case 'combatant-added':
-      return `${first.name} joined the encounter.`;
-    case 'initiative-set':
-      return `Initiative order set: ${first.order.map((id) => combatantName(state, id)).join(', ')}.`;
-    case 'encounter-started': {
-      const turnStarted = events.find((event): event is Extract<DomainEvent, { type: 'turn-started' }> => event.type === 'turn-started');
-      return turnStarted
-        ? `Encounter started. ${combatantName(state, turnStarted.combatantId)} starts round ${turnStarted.round}.`
-        : 'Encounter started.';
-    }
-    case 'hp-changed': {
-      const target = combatantName(state, first.combatantId);
-      if (first.cause === 'damage') {
-        return `${target} took ${first.hpFrom - first.hpTo + first.tempHpFrom - first.tempHpTo} damage.`;
-      }
-      if (first.cause === 'healing') {
-        return `${target} healed ${first.hpTo - first.hpFrom} HP.`;
-      }
-      if (first.cause === 'set-temp') {
-        return `${target} temp HP set to ${first.tempHpTo}.`;
-      }
-      return `${target} HP set to ${first.hpTo}.`;
-    }
-    case 'note-changed': {
-      const target = combatantName(state, first.combatantId);
-      const cleared = command.type === 'SET_NOTE' && command.payload.note === null;
-      return cleared ? `${target} note cleared.` : `${target} note updated.`;
-    }
-    case 'encounter-completed':
-      return 'Encounter completed.';
-    case 'encounter-reset':
-      return 'Encounter reset.';
-    default:
-      return events.map((event) => event.type).join(', ');
-  }
 }
 
 function combatantName(state: EncounterState, combatantId: string): string {

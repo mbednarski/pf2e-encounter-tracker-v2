@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { FeedbackEntry } from '$lib/encounter-app';
+  import type { LogEntry } from '../domain';
   import CombatLog from './CombatLog.svelte';
 
-  export let entries: FeedbackEntry[];
+  export let entries: LogEntry[];
 
   let open = true;
 

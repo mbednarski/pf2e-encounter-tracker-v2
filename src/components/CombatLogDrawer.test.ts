@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import type { FeedbackEntry } from '$lib/encounter-app';
+import type { LogEntry } from '../domain';
 import CombatLogDrawer from './CombatLogDrawer.svelte';
 
-function entry(id: string, message: string): FeedbackEntry {
-  return { id, commandId: id, severity: 'info', message };
+function entry(id: string, message: string): LogEntry {
+  return { id, message, tone: 'info' };
 }
 
 describe('CombatLogDrawer', () => {

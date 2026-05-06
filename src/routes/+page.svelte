@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, LogEntry, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -102,10 +102,21 @@
   });
 
   function runCommand(command: Command) {
-    const result = dispatchEncounterCommand(encounter, feedback, command);
+    const result = dispatchEncounterCommand(encounter, command);
     encounter = result.state;
-    feedback = result.feedback;
     persistence.persist(result.state);
+  }
+
+  $: drawerEntries = mergeDrawerEntries(encounter.combatLog, feedback);
+
+  function mergeDrawerEntries(log: LogEntry[], notices: FeedbackEntry[]): LogEntry[] {
+    if (notices.length === 0) return log;
+    const mapped: LogEntry[] = notices.map((notice) => ({
+      id: `notice-${notice.id}`,
+      message: notice.message,
+      tone: notice.severity === 'warn' ? 'danger' : notice.severity
+    }));
+    return [...log, ...mapped];
   }
 
   onMount(async () => {
@@ -114,7 +125,9 @@
       loadCreatures()
     ]);
     if (restored) {
-      encounter = restored;
+      encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
+      commandCounter = nextCommandCounterFor(encounter.combatLog);
+      combatantCounter = nextCombatantCounterFor(encounter);
     }
     if (loadResult.ok) {
       storedCreatures = loadResult.creatures;
@@ -130,6 +143,41 @@
 
   function nextCommandId() {
     return `cmd-${commandCounter++}`;
+  }
+
+  function dedupeLogById(log: LogEntry[]): LogEntry[] {
+    const seen = new Set<string>();
+    const out: LogEntry[] = [];
+    for (const entry of log) {
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      out.push(entry);
+    }
+    return out;
+  }
+
+  function nextCommandCounterFor(log: LogEntry[]): number {
+    let highest = 0;
+    for (const entry of log) {
+      const match = /^cmd-(\d+)-/.exec(entry.id);
+      if (match) {
+        const n = Number(match[1]);
+        if (n > highest) highest = n;
+      }
+    }
+    return highest + 1;
+  }
+
+  function nextCombatantCounterFor(state: typeof encounter): number {
+    let highest = 0;
+    for (const id of Object.keys(state.combatants)) {
+      const match = /-(\d+)$/.exec(id);
+      if (match) {
+        const n = Number(match[1]);
+        if (n > highest) highest = n;
+      }
+    }
+    return highest + 1;
   }
 
   function addCombatant(combatant: CombatantState) {
@@ -442,7 +490,7 @@
     </aside>
 
     <section class="workspace__log">
-      <CombatLogDrawer entries={feedback} />
+      <CombatLogDrawer entries={drawerEntries} />
     </section>
   </section>
 </main>
