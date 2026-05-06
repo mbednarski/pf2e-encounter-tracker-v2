@@ -15,6 +15,7 @@
   }) => void;
   export let onAddManual: (input: Omit<ManualCombatantInput, 'id'>) => void;
   export let onImportYamlFiles: (files: File[]) => void;
+  export let onRemoveCreature: (id: string) => void;
   export let onStart: () => void;
   export let onReset: () => void;
 
@@ -28,7 +29,7 @@
     <h2 id="library-title">Library</h2>
   </header>
   <PartySection />
-  <BestiarySection {creatures} onAddCreature={quickAdd} />
+  <BestiarySection {creatures} onAddCreature={quickAdd} {onRemoveCreature} />
   <div class="library__configure">
     <SetupPanel
       {canStart}

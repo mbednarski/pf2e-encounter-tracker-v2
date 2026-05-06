@@ -6,6 +6,7 @@
 
   export let creatures: Creature[];
   export let onAddCreature: (creature: Creature) => void;
+  export let onRemoveCreature: ((id: string) => void) | undefined = undefined;
 
   let query = '';
 
@@ -35,7 +36,9 @@
     </Input>
   </div>
 
-  {#if filtered.length === 0}
+  {#if creatures.length === 0}
+    <p class="empty">Import a YAML file to add creatures.</p>
+  {:else if filtered.length === 0}
     <p class="empty">No matching creatures.</p>
   {:else}
     <ul class="rows">
@@ -46,6 +49,21 @@
             <span class="row__name">{creature.name}</span>
             <span class="row__traits">{creature.traits.join(' · ')}</span>
           </span>
+          {#if onRemoveCreature}
+            <span class="row__remove">
+              <IconButton
+                ariaLabel="Remove {creature.name}"
+                title="Remove from library"
+                variant="destructive"
+                size={22}
+                onclick={() => onRemoveCreature?.(creature.id)}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M2 6h8" />
+                </svg>
+              </IconButton>
+            </span>
+          {/if}
           <IconButton
             ariaLabel="Add {creature.name}"
             title="Add to encounter"
@@ -103,7 +121,7 @@
 
   .row {
     display: grid;
-    grid-template-columns: 32px 1fr auto;
+    grid-template-columns: 32px 1fr auto auto;
     gap: var(--space-3);
     align-items: center;
     padding: var(--space-2) 0;
@@ -112,6 +130,18 @@
 
   .row:last-child {
     border-bottom: none;
+  }
+
+  /* Destructive remove is de-emphasized but kept in tab order; hover/focus-within
+     reveals it so quick-add stays the dominant affordance. */
+  .row__remove {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .row:hover .row__remove,
+  .row:focus-within .row__remove {
+    opacity: 1;
   }
 
   .row__level {
