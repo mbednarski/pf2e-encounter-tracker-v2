@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, LogEntry, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, LogEntry, PartyMember, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -14,6 +14,7 @@
     listConditionOptions,
     makeCombatant,
     makeCreatureCombatant,
+    makePartyMemberCombatant,
     newEncounterState,
     toCommand,
     viewAppliedEffects,
@@ -44,8 +45,14 @@
     loadCreatures,
     removeCreature
   } from '$lib/storage/creature-library';
+  import {
+    addPartyMembers,
+    loadPartyMembers,
+    removePartyMember,
+    savePartyMember
+  } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { importCreatureYaml } from '$lib/yaml';
+  import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
 
   const conditionOptions = listConditionOptions();
 
@@ -56,6 +63,7 @@
   let feedbackCounter = 1;
   let selection: Selection = emptySelection;
   let storedCreatures: Creature[] = [];
+  let storedPartyMembers: PartyMember[] = [];
 
   $: availableCreatures = storedCreatures;
 
@@ -120,9 +128,10 @@
   }
 
   onMount(async () => {
-    const [restored, loadResult] = await Promise.all([
+    const [restored, loadResult, partyResult] = await Promise.all([
       persistence.restore(),
-      loadCreatures()
+      loadCreatures(),
+      loadPartyMembers()
     ]);
     if (restored) {
       encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
@@ -137,6 +146,16 @@
         loadResult.reason === 'unavailable'
           ? 'Could not load your creature library: storage is unavailable. Imports this session will not survive a reload.'
           : 'Could not load your creature library from storage. Try reloading the page; if it persists, your saved data may be inaccessible (another tab on a newer version, full storage, or browser policy).'
+      );
+    }
+    if (partyResult.ok) {
+      storedPartyMembers = partyResult.partyMembers;
+    } else {
+      appendFeedback(
+        nextFeedbackId('party-load-fail'),
+        partyResult.reason === 'unavailable'
+          ? 'Could not load your party members: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your party members from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
       );
     }
   });
@@ -307,6 +326,131 @@
     storedCreatures = storedCreatures.filter((c) => c.id !== id);
   }
 
+  async function handleImportPartyMemberYamlFiles(files: File[]) {
+    for (const file of files) {
+      let text: string;
+      try {
+        text = await file.text();
+      } catch (err) {
+        appendFeedback(
+          nextFeedbackId('pm-import-read-fail'),
+          `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+        continue;
+      }
+
+      let partyMembers: PartyMember[];
+      let issues: ReturnType<typeof importPartyMemberYaml>['issues'];
+      let skipped: ReturnType<typeof importPartyMemberYaml>['skipped'];
+      try {
+        ({ partyMembers, issues, skipped } = importPartyMemberYaml(text));
+      } catch (err) {
+        appendFeedback(
+          nextFeedbackId('pm-import-fail'),
+          `Could not import "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+        continue;
+      }
+
+      const persistResult = await addPartyMembers(partyMembers);
+
+      if (!persistResult.ok) {
+        appendFeedback(
+          nextFeedbackId('pm-import-persist-fail'),
+          persistResult.reason === 'unavailable'
+            ? `Could not save party members from "${file.name}": storage is unavailable.`
+            : `Could not save party members from "${file.name}": storage write failed.`
+        );
+        continue;
+      }
+
+      for (const member of persistResult.rejected) {
+        appendFeedback(
+          nextFeedbackId('pm-import-dup'),
+          `Skipped "${member.name}" from "${file.name}": id "${member.id}" is already in your party library.`
+        );
+      }
+
+      if (persistResult.added.length > 0) {
+        storedPartyMembers = [...storedPartyMembers, ...persistResult.added];
+        appendFeedback(
+          nextFeedbackId('pm-import-ok'),
+          `Imported ${persistResult.added.length} party member${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
+          'success'
+        );
+      }
+
+      for (const skip of skipped) {
+        appendFeedback(
+          nextFeedbackId('pm-import-skip'),
+          `"${file.name}" doc ${skip.documentIndex + 1}: skipped — kind "${skip.kind}" is not handled by the party-member importer.`,
+          'info'
+        );
+      }
+
+      for (const issue of issues) {
+        const where = issue.path ? ` at "${issue.path}"` : '';
+        const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
+        appendFeedback(
+          nextFeedbackId('pm-import-issue'),
+          `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
+        );
+      }
+
+      if (
+        persistResult.added.length === 0 &&
+        persistResult.rejected.length === 0 &&
+        issues.length === 0 &&
+        skipped.length === 0 &&
+        partyMembers.length === 0
+      ) {
+        appendFeedback(
+          nextFeedbackId('pm-import-empty'),
+          `"${file.name}" contained no party-member documents.`
+        );
+      }
+    }
+  }
+
+  function handleAddPartyMemberToEncounter(partyMember: PartyMember) {
+    const combatant = makePartyMemberCombatant({
+      partyMember,
+      combatantId: `${partyMember.id}-${combatantCounter++}`
+    });
+    addCombatant(combatant);
+  }
+
+  async function handleRemovePartyMember(id: string) {
+    const result = await removePartyMember(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('pm-remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove party member: storage is unavailable.'
+          : 'Could not remove party member: storage write failed.'
+      );
+      return;
+    }
+    storedPartyMembers = storedPartyMembers.filter((m) => m.id !== id);
+  }
+
+  async function handleSavePartyMember(member: PartyMember) {
+    const result = await savePartyMember(member);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('pm-save-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not save party member: storage is unavailable.'
+          : 'Could not save party member: storage write failed.'
+      );
+      return;
+    }
+    const exists = storedPartyMembers.some((m) => m.id === member.id);
+    storedPartyMembers = exists
+      ? storedPartyMembers.map((m) => (m.id === member.id ? member : m))
+      : [...storedPartyMembers, member];
+  }
+
   function handleAddManual(input: Omit<ManualCombatantInput, 'id'>) {
     const slug = input.name
       .trim()
@@ -431,10 +575,16 @@
       <LibraryPane
         {canStart}
         creatures={availableCreatures}
+        partyMembers={storedPartyMembers}
+        {conditionOptions}
         onAddCreatures={handleAddCreatures}
         onAddManual={handleAddManual}
         onImportYamlFiles={handleImportYamlFiles}
         onRemoveCreature={handleRemoveCreature}
+        onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
+        onRemovePartyMember={handleRemovePartyMember}
+        onSavePartyMember={handleSavePartyMember}
+        onImportPartyMemberYamlFiles={handleImportPartyMemberYamlFiles}
         onStart={startEncounter}
         onReset={resetLocal}
       />

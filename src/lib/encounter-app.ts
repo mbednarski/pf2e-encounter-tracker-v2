@@ -1,4 +1,9 @@
-import { applyCommand, createCombatantFromCreature, effectLibrary } from '../domain';
+import {
+  applyCommand,
+  createCombatantFromCreature,
+  createCombatantFromPartyMember,
+  effectLibrary
+} from '../domain';
 import type {
   AppliedEffect,
   CombatantState,
@@ -10,7 +15,8 @@ import type {
   Duration,
   EffectDefinition,
   EncounterState,
-  LogEntry
+  LogEntry,
+  PartyMember
 } from '../domain';
 import { formatEvents } from './combat-log/format';
 
@@ -70,7 +76,7 @@ export function newEncounterState(): EncounterState {
 export function makeCombatant(input: ManualCombatantInput): CombatantState {
   return {
     id: input.id,
-    creatureId: `${input.id}-manual`,
+    sourceId: `${input.id}-manual`,
     name: input.name,
     sourceType: 'creature',
     baseStats: {
@@ -101,6 +107,20 @@ export function makeCreatureCombatant(input: CreatureCombatantInput): CombatantS
     combatantId: input.combatantId,
     name: input.name,
     adjustment: input.adjustment === 'normal' ? undefined : input.adjustment
+  });
+}
+
+export interface PartyMemberCombatantInput {
+  partyMember: PartyMember;
+  combatantId: string;
+  name?: string;
+}
+
+export function makePartyMemberCombatant(input: PartyMemberCombatantInput): CombatantState {
+  return createCombatantFromPartyMember({
+    partyMember: input.partyMember,
+    combatantId: input.combatantId,
+    name: input.name
   });
 }
 
