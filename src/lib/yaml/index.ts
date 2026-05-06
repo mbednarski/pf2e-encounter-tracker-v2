@@ -4,6 +4,11 @@ import { validateCreature } from './creature-validator';
 
 export type { ValidationIssue } from './envelope';
 export type { ParseOutcome } from './creature-validator';
+export {
+  importPartyMemberYaml,
+  type PartyMemberImportResult,
+  type PartyMemberSkippedDocument
+} from './party-member-import';
 
 export interface SkippedDocument {
   documentIndex: number;
