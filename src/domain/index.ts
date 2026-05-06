@@ -1,5 +1,6 @@
 export { applyCommand } from './reducer';
 export { createCombatantFromCreature } from './creatures/clone';
+export { createCombatantFromPartyMember } from './party/factory';
 export { applyEliteWeak } from './creatures/templates';
 export { effectLibrary } from './effects/library';
 export { deriveStats } from './effects/derivation';
@@ -39,6 +40,7 @@ export type {
   LogEntryTone,
   Modifier,
   ModifyEffectValuePayload,
+  PartyMember,
   Prompt,
   PromptBoundary,
   PromptResolution,
