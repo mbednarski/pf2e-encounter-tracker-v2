@@ -1,10 +1,11 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 export const DB_NAME = 'pf2e-tracker-v2';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 export const ACTIVE_ENCOUNTER_STORE = 'activeEncounter';
 export const SETTINGS_STORE = 'settings';
 export const CREATURE_LIBRARY_STORE = 'creatureLibrary';
+export const PARTY_MEMBER_STORE = 'partyMembers';
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -28,6 +29,9 @@ export function getDb(): Promise<IDBPDatabase> | null {
         }
         if (!db.objectStoreNames.contains(CREATURE_LIBRARY_STORE)) {
           db.createObjectStore(CREATURE_LIBRARY_STORE);
+        }
+        if (!db.objectStoreNames.contains(PARTY_MEMBER_STORE)) {
+          db.createObjectStore(PARTY_MEMBER_STORE);
         }
       }
     }).catch((err) => {

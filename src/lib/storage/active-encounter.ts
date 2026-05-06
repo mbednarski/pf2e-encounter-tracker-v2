@@ -17,6 +17,16 @@ export async function loadActiveEncounter(): Promise<EncounterState | null> {
   const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, KEY)) as EncounterState | undefined;
   if (!stored) return null;
   if (stored.phase === 'COMPLETED') return null;
+  // Back-compat: rename creatureId -> sourceId on combatants saved under DB
+  // versions <= 3. Keeps existing active encounters loadable after the rename.
+  if (stored.combatants) {
+    for (const c of Object.values(stored.combatants)) {
+      const legacy = c as unknown as { sourceId?: string; creatureId?: string };
+      if (legacy.sourceId === undefined && legacy.creatureId !== undefined) {
+        legacy.sourceId = legacy.creatureId;
+      }
+    }
+  }
   return stored;
 }
 

@@ -61,6 +61,31 @@ describe('active encounter storage', () => {
     expect(await loadActiveEncounter()).toBeNull();
   });
 
+  it('back-fills sourceId from a legacy creatureId on load', async () => {
+    // Simulate an encounter saved before the creatureId -> sourceId rename
+    // by mutating the persisted record after save, since current types reject
+    // creatureId at compile time.
+    const state = activeEncounter();
+    await saveActiveEncounter(state);
+
+    const { getDb, ACTIVE_ENCOUNTER_STORE } = await import('./db');
+    const db = await (getDb() as Promise<import('idb').IDBPDatabase>);
+    const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, 'current')) as Record<string, unknown>;
+    const combatants = stored.combatants as Record<string, Record<string, unknown>>;
+    for (const c of Object.values(combatants)) {
+      c.creatureId = c.sourceId;
+      delete c.sourceId;
+    }
+    await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
+
+    const restored = await loadActiveEncounter();
+    expect(restored).not.toBeNull();
+    for (const c of Object.values(restored!.combatants)) {
+      expect(c.sourceId).toBeDefined();
+      expect(c.sourceId).toBe(`${c.id}-creature`);
+    }
+  });
+
 });
 
 describe('active encounter storage when indexedDB is unavailable', () => {
