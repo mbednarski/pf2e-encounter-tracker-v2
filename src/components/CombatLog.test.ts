@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
-import type { FeedbackEntry } from '$lib/encounter-app';
+import type { LogEntry, LogEntryTone } from '../domain';
 import CombatLog from './CombatLog.svelte';
 
-function entry(id: string, message: string, severity: FeedbackEntry['severity'] = 'info'): FeedbackEntry {
-  return { id, commandId: id, severity, message };
+function entry(id: string, message: string, tone: LogEntryTone = 'info'): LogEntry {
+  return { id, message, tone };
 }
 
 describe('CombatLog', () => {
@@ -28,16 +28,16 @@ describe('CombatLog', () => {
     ]);
   });
 
-  test('applies severity modifier classes', () => {
+  test('applies tone modifier classes', () => {
     const entries = [
-      entry('w', 'Watch out', 'warn'),
+      entry('w', 'Watch out', 'danger'),
       entry('s', 'Hit landed', 'success'),
       entry('i', 'Turn started', 'info')
     ];
     const { container } = render(CombatLog, { props: { entries } });
     const lis = container.querySelectorAll('.entry');
     const classes = Array.from(lis).map((li) => li.className);
-    expect(classes.some((c) => c.includes('entry--warn'))).toBe(true);
+    expect(classes.some((c) => c.includes('entry--danger'))).toBe(true);
     expect(classes.some((c) => c.includes('entry--success'))).toBe(true);
     expect(classes.some((c) => c.includes('entry--info'))).toBe(true);
   });

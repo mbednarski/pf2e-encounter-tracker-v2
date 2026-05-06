@@ -36,6 +36,7 @@ export type {
   EncounterState,
   InitiativeState,
   LogEntry,
+  LogEntryTone,
   Modifier,
   ModifyEffectValuePayload,
   Prompt,

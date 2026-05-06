@@ -90,7 +90,7 @@ describe('encounter app boundary', () => {
     });
   });
 
-  test('dispatches domain commands and appends readable event feedback', () => {
+  test('dispatches domain commands and appends readable log entries', () => {
     const goblin = makeCombatant({
       id: 'goblin-1',
       name: 'Goblin Warrior',
@@ -116,43 +116,42 @@ describe('encounter app boundary', () => {
 
     const withGoblin = dispatchEncounterCommand(
       newEncounterState(),
-      [],
       toCommand('ADD_COMBATANT', { combatant: goblin }, 'cmd-1')
     );
     const withFighter = dispatchEncounterCommand(
       withGoblin.state,
-      withGoblin.feedback,
       toCommand('ADD_COMBATANT', { combatant: fighter }, 'cmd-2')
     );
     const ordered = dispatchEncounterCommand(
       withFighter.state,
-      withFighter.feedback,
       toCommand('SET_INITIATIVE_ORDER', { order: ['goblin-1', 'fighter-1'] }, 'cmd-3')
     );
-    const started = dispatchEncounterCommand(ordered.state, ordered.feedback, toCommand('START_ENCOUNTER', undefined, 'cmd-4'));
+    const started = dispatchEncounterCommand(ordered.state, toCommand('START_ENCOUNTER', undefined, 'cmd-4'));
 
     expect(started.state.phase).toBe('ACTIVE');
     expect(started.state.initiative.currentIndex).toBe(0);
-    expect(started.feedback.map((entry) => entry.message)).toEqual([
+    expect(started.state.combatLog.map((entry) => entry.message)).toEqual([
       'Goblin Warrior joined the encounter.',
       'Fighter joined the encounter.',
-      'Initiative order set: Goblin Warrior, Fighter.',
-      'Encounter started. Goblin Warrior starts round 1.'
+      'Initiative order: Goblin Warrior, Fighter.',
+      'Encounter started.',
+      'Phase: PREPARING → ACTIVE.',
+      "Goblin Warrior's turn (round 1)."
     ]);
   });
 
-  test('records rejected commands without changing state', () => {
+  test('records rejected commands without changing other state', () => {
     const state = newEncounterState();
 
-    const result = dispatchEncounterCommand(state, [], toCommand('START_ENCOUNTER', undefined, 'cmd-1'));
+    const result = dispatchEncounterCommand(state, toCommand('START_ENCOUNTER', undefined, 'cmd-1'));
 
-    expect(result.state).toBe(state);
-    expect(result.feedback).toEqual([
+    expect(result.state.phase).toBe(state.phase);
+    expect(result.state.combatants).toBe(state.combatants);
+    expect(result.state.combatLog).toEqual([
       {
-        id: 'log-cmd-1',
-        commandId: 'cmd-1',
-        severity: 'warn',
-        message: 'START_ENCOUNTER rejected: START_ENCOUNTER requires at least 2 combatants'
+        id: 'cmd-1-0',
+        message: 'START_ENCOUNTER rejected: START_ENCOUNTER requires at least 2 combatants.',
+        tone: 'danger'
       }
     ]);
   });
@@ -196,7 +195,6 @@ describe('combatantCardActions', () => {
 
     const reacted = dispatchEncounterCommand(
       started,
-      [],
       toCommand('MARK_REACTION_USED', { combatantId: 'goblin-1' }, 'cmd-react')
     );
 
@@ -214,7 +212,6 @@ describe('combatantCardActions', () => {
 
     const killed = dispatchEncounterCommand(
       started,
-      [],
       toCommand('MARK_DEAD', { combatantId: 'fighter-1' }, 'cmd-kill')
     );
     const after = combatantCardActions(killed.state, 'fighter-1');
@@ -249,7 +246,6 @@ describe('combatantVisualState', () => {
     const state = stateWithTwoCombatants();
     const downed = dispatchEncounterCommand(
       state,
-      [],
       toCommand('APPLY_DAMAGE', { combatantId: 'goblin-1', amount: 999 }, 'cmd-down')
     );
 
@@ -262,7 +258,6 @@ describe('combatantVisualState', () => {
     const state = stateWithTwoCombatants();
     const killed = dispatchEncounterCommand(
       state,
-      [],
       toCommand('MARK_DEAD', { combatantId: 'goblin-1' }, 'cmd-kill')
     );
 
@@ -274,12 +269,10 @@ describe('combatantVisualState', () => {
     const state = stateWithTwoCombatants();
     const killed = dispatchEncounterCommand(
       state,
-      [],
       toCommand('MARK_DEAD', { combatantId: 'goblin-1' }, 'cmd-kill')
     );
     const revived = dispatchEncounterCommand(
       killed.state,
-      killed.feedback,
       toCommand('REVIVE', { combatantId: 'goblin-1' }, 'cmd-revive')
     );
 
@@ -295,38 +288,34 @@ describe('end-to-end turn-control dispatches', () => {
 
     const reacted = dispatchEncounterCommand(
       started,
-      [],
       toCommand('MARK_REACTION_USED', { combatantId: 'goblin-1' }, 'cmd-react')
     );
     expect(reacted.state.combatants['goblin-1'].reactionUsedThisRound).toBe(true);
 
     const ended = dispatchEncounterCommand(
       reacted.state,
-      reacted.feedback,
       toCommand('END_TURN', undefined, 'cmd-end')
     );
     expect(ended.state.initiative.order[ended.state.initiative.currentIndex]).toBe('fighter-1');
 
     const killed = dispatchEncounterCommand(
       ended.state,
-      ended.feedback,
       toCommand('MARK_DEAD', { combatantId: 'fighter-1' }, 'cmd-kill')
     );
     expect(killed.state.combatants['fighter-1'].isAlive).toBe(false);
 
     const revived = dispatchEncounterCommand(
       killed.state,
-      killed.feedback,
       toCommand('REVIVE', { combatantId: 'fighter-1' }, 'cmd-revive')
     );
     expect(revived.state.combatants['fighter-1'].isAlive).toBe(true);
 
-    const allFeedback = revived.feedback.map((entry) => entry.message).join(' | ');
-    expect(allFeedback).toContain('reaction-used');
-    expect(allFeedback).toContain('turn-ended');
-    expect(allFeedback).toContain('combatant-died');
-    expect(allFeedback).toContain('combatant-revived');
-    expect(revived.feedback.every((entry) => entry.severity === 'info')).toBe(true);
+    const allMessages = revived.state.combatLog.map((entry) => entry.message).join(' | ');
+    expect(allMessages).toContain('used a reaction');
+    expect(allMessages).toContain('ended their turn');
+    expect(allMessages).toContain('died');
+    expect(allMessages).toContain('revived');
+    expect(revived.state.combatLog.every((entry) => entry.tone !== 'danger' || entry.message.includes('died'))).toBe(true);
   });
 });
 
@@ -468,7 +457,6 @@ describe('viewAppliedEffects', () => {
     const started = startedState();
     const fightened = dispatchEncounterCommand(
       started,
-      [],
       toCommand('APPLY_EFFECT', {
         effectId: 'frightened',
         targetId: 'fighter-1',
@@ -478,7 +466,6 @@ describe('viewAppliedEffects', () => {
     );
     const dyingApplied = dispatchEncounterCommand(
       fightened.state,
-      fightened.feedback,
       toCommand('APPLY_EFFECT', {
         effectId: 'dying',
         targetId: 'fighter-1',
@@ -573,7 +560,6 @@ describe('end-to-end condition dispatches', () => {
 
     const applied = dispatchEncounterCommand(
       started,
-      [],
       toCommand('APPLY_EFFECT', {
         effectId: 'frightened',
         targetId: 'fighter-1',
@@ -586,7 +572,6 @@ describe('end-to-end condition dispatches', () => {
 
     const decremented = dispatchEncounterCommand(
       applied.state,
-      applied.feedback,
       toCommand('MODIFY_EFFECT_VALUE', {
         targetId: 'fighter-1',
         instanceId: fightenedInstance.instanceId,
@@ -600,7 +585,6 @@ describe('end-to-end condition dispatches', () => {
 
     const removed = dispatchEncounterCommand(
       decremented.state,
-      decremented.feedback,
       toCommand('MODIFY_EFFECT_VALUE', {
         targetId: 'fighter-1',
         instanceId: fightenedInstance.instanceId,
@@ -610,18 +594,18 @@ describe('end-to-end condition dispatches', () => {
 
     expect(removed.state.combatants['fighter-1'].appliedEffects).toEqual([]);
 
-    const firstDecrementFeedback = decremented.feedback
-      .slice(applied.feedback.length)
+    const firstDecrementMessages = decremented.state.combatLog
+      .slice(applied.state.combatLog.length)
       .map((entry) => entry.message)
       .join(' | ');
-    expect(firstDecrementFeedback).toContain('effect-value-changed');
-    expect(firstDecrementFeedback).not.toContain('effect-removed');
+    expect(firstDecrementMessages).toContain('Frightened: 2 → 1');
+    expect(firstDecrementMessages).not.toContain('lost Frightened');
 
-    const autoRemoveFeedback = removed.feedback
-      .slice(decremented.feedback.length)
+    const autoRemoveMessages = removed.state.combatLog
+      .slice(decremented.state.combatLog.length)
       .map((entry) => entry.message)
       .join(' | ');
-    expect(autoRemoveFeedback).toContain('effect-removed');
+    expect(autoRemoveMessages).toContain('lost Frightened');
   });
 
   test('SET_EFFECT_VALUE replaces the current value without removing the effect', () => {
@@ -629,7 +613,6 @@ describe('end-to-end condition dispatches', () => {
 
     const applied = dispatchEncounterCommand(
       started,
-      [],
       toCommand('APPLY_EFFECT', {
         effectId: 'frightened',
         targetId: 'fighter-1',
@@ -641,7 +624,6 @@ describe('end-to-end condition dispatches', () => {
 
     const setTo3 = dispatchEncounterCommand(
       applied.state,
-      applied.feedback,
       toCommand('SET_EFFECT_VALUE', {
         targetId: 'fighter-1',
         instanceId: instance.instanceId,
@@ -660,7 +642,6 @@ describe('end-to-end condition dispatches', () => {
 
     const applied = dispatchEncounterCommand(
       started,
-      [],
       toCommand('APPLY_EFFECT', {
         effectId: 'dying',
         targetId: 'fighter-1',
@@ -679,7 +660,6 @@ describe('end-to-end condition dispatches', () => {
 
     const removed = dispatchEncounterCommand(
       applied.state,
-      applied.feedback,
       toCommand('REMOVE_EFFECT', {
         targetId: 'fighter-1',
         instanceId: dying!.instanceId
@@ -690,35 +670,34 @@ describe('end-to-end condition dispatches', () => {
   });
 });
 
-describe('SET_NOTE feedback formatting', () => {
-  test('a non-null note produces "<name> note updated."', () => {
+describe('SET_NOTE log formatting', () => {
+  test('a non-null note logs "<name> note updated."', () => {
     const prepared = stateWithTwoCombatants();
+    const baseLogLength = prepared.combatLog.length;
     const result = dispatchEncounterCommand(
       prepared,
-      [],
       toCommand('SET_NOTE', { combatantId: 'goblin-1', note: 'Watch the door.' }, 'cmd-note-1')
     );
-    expect(result.feedback).toHaveLength(1);
-    expect(result.feedback[0]).toMatchObject({
-      severity: 'info',
+    const newEntries = result.state.combatLog.slice(baseLogLength);
+    expect(newEntries).toHaveLength(1);
+    expect(newEntries[0]).toMatchObject({
+      tone: 'info',
       message: 'Goblin Warrior note updated.'
     });
   });
 
-  test('a null note produces "<name> note cleared."', () => {
+  test('a null note logs "<name> note cleared."', () => {
     const prepared = stateWithTwoCombatants();
     const noted = dispatchEncounterCommand(
       prepared,
-      [],
       toCommand('SET_NOTE', { combatantId: 'goblin-1', note: 'Set then cleared.' }, 'cmd-note-2a')
     );
     const cleared = dispatchEncounterCommand(
       noted.state,
-      noted.feedback,
       toCommand('SET_NOTE', { combatantId: 'goblin-1', note: null }, 'cmd-note-2b')
     );
-    expect(cleared.feedback.at(-1)).toMatchObject({
-      severity: 'info',
+    expect(cleared.state.combatLog.at(-1)).toMatchObject({
+      tone: 'info',
       message: 'Goblin Warrior note cleared.'
     });
   });
@@ -750,17 +729,14 @@ function stateWithTwoCombatants(): EncounterState {
 
   const withGoblin = dispatchEncounterCommand(
     newEncounterState(),
-    [],
     toCommand('ADD_COMBATANT', { combatant: goblin }, 'setup-1')
   );
   const withFighter = dispatchEncounterCommand(
     withGoblin.state,
-    withGoblin.feedback,
     toCommand('ADD_COMBATANT', { combatant: fighter }, 'setup-2')
   );
   const ordered = dispatchEncounterCommand(
     withFighter.state,
-    withFighter.feedback,
     toCommand('SET_INITIATIVE_ORDER', { order: ['goblin-1', 'fighter-1'] }, 'setup-3')
   );
 
@@ -771,7 +747,6 @@ function startedState() {
   const prepared = stateWithTwoCombatants();
   const started = dispatchEncounterCommand(
     prepared,
-    [],
     toCommand('START_ENCOUNTER', undefined, 'setup-4')
   );
   return started.state;
