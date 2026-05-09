@@ -26,6 +26,7 @@ The schema lives in the repo specs, not in this file. Read these before producin
 1. `pf2e-yaml-schema-spec.md` — the document envelope (`kind: creature`, `schemaVersion: 1`, `data: ...`).
 2. `pf2e-creature-types-spec.md` — the `Creature`, `Attack`, `DamageComponent`, `Ability`, `SpellcastingBlock` shapes; the trait-encoding convention (e.g. `deadly-d10`, `range-60`); the elite/weak rules (do *not* pre-apply).
 3. `docs/sample-creatures.yaml` — three worked examples (Goblin Warrior, Skeleton Guard, Cave Wolf) that round-trip through the validator. Use them as the canonical formatting reference.
+4. `docs/creature-schema-backlog.md` — running list of schema gaps the skill has surfaced. Read it so you know which gaps are already tracked and don't re-explain them in chat.
 
 ## Stage 1 — extract & preview (no file writes)
 
@@ -34,10 +35,12 @@ The schema lives in the repo specs, not in this file. Read these before producin
 3. Below the YAML, list **uncertainty notes**. For every field that required interpretation, prefix with `GUESSED:`. Examples:
    - `GUESSED: traits — source had no traits row; inferred [humanoid, goblin] from name.`
    - `GUESSED: size — not stated; assumed medium.`
-   - `GUESSED: rarity — assumed "common".`
-4. If the statblock contains inline afflictions (poisons, diseases, curses), fold them into the relevant ability's `description` text and **note explicitly** that the structured affliction data was dropped (`effect-definition` import isn't built yet — see `src/lib/yaml/README.md`).
-5. If the statblock has spellcasting, emit `spellcasting` blocks with `spellSlug` references and **note** that the spell index is not populated by this skill — descriptions will be missing in-app until spell YAML is authored separately.
-6. Stop. Wait for the user's review and either approval ("looks good", "ship it", "yes", etc.) or corrections.
+
+   Rarity does *not* need a `GUESSED:` flag when the source has no marker — PF2e convention is that absence of `uncommon`/`rare`/`unique` means common, so the silent default is correct.
+4. If the statblock contains data the schema cannot structurally represent — most commonly **senses** (darkvision, scent, low-light vision) and **ability score modifiers** (Str/Dex/Con/Int/Wis/Cha) — preserve it as free-form text in the top-level `notes` field. **Drop Recall Knowledge entirely** (do not put it in `notes`, do not log it). See *Schema gaps and the backlog file* below.
+5. If the statblock contains inline afflictions (poisons, diseases, curses), fold them into the relevant ability's `description` text and **note explicitly** that the structured affliction data was dropped (`effect-definition` import isn't built yet — see `src/lib/yaml/README.md`).
+6. If the statblock has spellcasting, emit `spellcasting` blocks with `spellSlug` references and **note** that the spell index is not populated by this skill — descriptions will be missing in-app until spell YAML is authored separately.
+7. Stop. Wait for the user's review and either approval ("looks good", "ship it", "yes", etc.) or corrections.
 
 ## Stage 2 — write & validate (after user approval)
 
@@ -45,10 +48,28 @@ The schema lives in the repo specs, not in this file. Read these before producin
 2. Compute the slug: `data.name` lowercased, non-alphanumeric runs replaced with single hyphens, leading/trailing hyphens trimmed. (`Cave Wolf` → `cave-wolf`; `Bug's Eye` → `bug-s-eye`.) The slug must equal `data.id`.
 3. Check whether `creatures/<slug>.yaml.local` already exists. If so, pause and ask: overwrite, append `-2` (or next available numeric suffix), or rename.
 4. Write the YAML to `creatures/<slug>.yaml.local`.
-5. Run `npm run yaml:check -- creatures/<slug>.yaml.local` via Bash.
-6. Report to the user:
+5. Append entries to `docs/creature-schema-backlog.md` for any unmodeled data preserved in `notes`. If the relevant section already exists, add this creature's slug to its **Triggered by** list (don't duplicate). If a new gap appeared (something not yet listed), add a section using the existing ones as a template. See *Schema gaps and the backlog file* below.
+6. Run `npm run yaml:check -- creatures/<slug>.yaml.local` via Bash.
+7. Report to the user:
    - On success (exit 0): file path, accepted-creature count, "ready to import via Setup panel".
    - On failure: surface the issues from the harness output and ask whether to regenerate or edit specific fields.
+
+## Schema gaps and the backlog file
+
+Some statblock data has no home in the current schema. Rather than dropping it silently, the skill preserves it in two places:
+
+- The creature's `notes` field — keeps the data attached to the source creature.
+- `docs/creature-schema-backlog.md` — central log of which gaps exist and which creatures triggered them.
+
+Currently tracked gaps (see the backlog file for the live list):
+
+- **Senses** — `darkvision`, `low-light vision`, `scent`, `tremorsense`, etc.
+- **Ability score modifiers** — Str/Dex/Con/Int/Wis/Cha.
+- **Immunity classification** — current `immunities: string[]` collapses condition vs trait vs damage-type immunities into one list.
+
+Because the backlog already explains these, the skill should not re-explain them in chat each time it parks something in `notes`. A short line like `notes: darkvision (gap tracked in docs/creature-schema-backlog.md#senses)` is sufficient.
+
+**Recall Knowledge data is excluded** from this flow — it isn't preserved in `notes` and isn't tracked in the backlog. The runtime has no use for it.
 
 ## Do NOT do these things
 
@@ -56,7 +77,6 @@ The schema lives in the repo specs, not in this file. Read these before producin
 - **Do not add fields outside the `Creature` interface.** No encounter state, no combatant fields (`pendingPrompts`, `effects`, `currentHp`, etc.).
 - **Do not write `effect-definition` or `spell` YAML files.** Out of scope for V1; the import path doesn't read them.
 - **Do not commit, stage, or push.** Files in `creatures/` are gitignored. Reporting "written and validated" is the end.
-- **Do not paste source prose verbatim into `description` fields.** Paraphrase ability/spell text. Keep redistributable bestiary content out of the output.
 
 ## Failure modes
 
