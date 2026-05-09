@@ -7,6 +7,9 @@ import {
   formatDuration,
   listConditionDefinitions,
   listConditionOptions,
+  listConditionWedgeCounts,
+  listRecentConditionOptions,
+  listRemovableEffects,
   makeCombatant,
   makeCreatureCombatant,
   newEncounterState,
@@ -667,6 +670,94 @@ describe('end-to-end condition dispatches', () => {
     );
 
     expect(removed.state.combatants['fighter-1'].appliedEffects).toEqual([]);
+  });
+});
+
+describe('listConditionWedgeCounts', () => {
+  test('counts effect-library entries by category', () => {
+    const counts = listConditionWedgeCounts();
+    const expectedConditions = Object.values(effectLibrary).filter((d) => d.category === 'condition').length;
+    const expectedPersistent = Object.values(effectLibrary).filter((d) => d.category === 'persistent-damage').length;
+    const expectedAfflictions = Object.values(effectLibrary).filter((d) => d.category === 'affliction').length;
+
+    expect(counts.conditions).toBe(expectedConditions);
+    expect(counts.persistent).toBe(expectedPersistent);
+    expect(counts.afflictions).toBe(expectedAfflictions);
+    expect(counts.buffs).toBe(0);
+  });
+});
+
+describe('listRecentConditionOptions', () => {
+  test('preserves order from recentEffectIds and resolves library names', () => {
+    const state: EncounterState = {
+      ...newEncounterState(),
+      recentEffectIds: ['frightened', 'off-guard']
+    };
+
+    const options = listRecentConditionOptions(state);
+
+    expect(options.map((o) => o.id)).toEqual(['frightened', 'off-guard']);
+    expect(options[0]).toMatchObject({ name: 'Frightened', value: { kind: 'valued' } });
+    expect(options[1]).toMatchObject({ name: 'Off-Guard', value: { kind: 'unvalued' } });
+  });
+
+  test('drops unknown effect ids without throwing', () => {
+    const state: EncounterState = {
+      ...newEncounterState(),
+      recentEffectIds: ['no-such-effect', 'frightened']
+    };
+
+    const options = listRecentConditionOptions(state);
+
+    expect(options.map((o) => o.id)).toEqual(['frightened']);
+  });
+});
+
+describe('listRemovableEffects', () => {
+  test('omits implied / cascade children so removal of a parent cascades to them', () => {
+    const started = startedState();
+    const applied = dispatchEncounterCommand(
+      started,
+      toCommand('APPLY_EFFECT', {
+        effectId: 'dying',
+        targetId: 'fighter-1',
+        value: 1,
+        duration: { type: 'unlimited' }
+      }, 'cmd-apply-dying')
+    );
+
+    const fighter = applied.state.combatants['fighter-1'];
+    expect(fighter.appliedEffects.some((effect) => effect.effectId === 'unconscious')).toBe(true);
+    expect(fighter.appliedEffects.some((effect) => effect.effectId === 'off-guard')).toBe(true);
+
+    const removable = listRemovableEffects(fighter, applied.state);
+    const ids = removable.map((option) => option.effectId);
+
+    expect(ids).toEqual(['dying']);
+    expect(removable[0]).toMatchObject({
+      effectId: 'dying',
+      name: 'Dying',
+      valueLabel: '1',
+      durationLabel: 'unlimited',
+      source: { kind: 'direct' }
+    });
+  });
+
+  test('returns valueLabel only for valued effects', () => {
+    const started = startedState();
+    const applied = dispatchEncounterCommand(
+      started,
+      toCommand('APPLY_EFFECT', {
+        effectId: 'off-guard',
+        targetId: 'fighter-1',
+        duration: { type: 'unlimited' }
+      }, 'cmd-apply-off-guard')
+    );
+
+    const removable = listRemovableEffects(applied.state.combatants['fighter-1'], applied.state);
+
+    expect(removable).toHaveLength(1);
+    expect(removable[0].valueLabel).toBeUndefined();
   });
 });
 

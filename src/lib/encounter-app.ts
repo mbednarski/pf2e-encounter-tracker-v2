@@ -69,7 +69,8 @@ export function newEncounterState(): EncounterState {
     },
     combatants: {},
     pendingPrompts: [],
-    combatLog: []
+    combatLog: [],
+    recentEffectIds: []
   };
 }
 
@@ -315,4 +316,79 @@ export function combatantCardActions(
 
 function combatantName(state: EncounterState, combatantId: string): string {
   return state.combatants[combatantId]?.name ?? combatantId;
+}
+
+export interface ConditionWedgeCounts {
+  conditions: number;
+  persistent: number;
+  buffs: number;
+  afflictions: number;
+}
+
+export type ConditionWedgeCategory = keyof ConditionWedgeCounts;
+
+export function listConditionWedgeCounts(): ConditionWedgeCounts {
+  const counts: ConditionWedgeCounts = { conditions: 0, persistent: 0, buffs: 0, afflictions: 0 };
+  for (const definition of Object.values(effectLibrary)) {
+    switch (definition.category) {
+      case 'condition':
+        counts.conditions++;
+        break;
+      case 'persistent-damage':
+        counts.persistent++;
+        break;
+      case 'affliction':
+        counts.afflictions++;
+        break;
+      // 'spell' and 'custom' are not exposed as wedges; 'buff' has no library data yet.
+    }
+  }
+  return counts;
+}
+
+export function listRecentConditionOptions(state: EncounterState): ConditionOption[] {
+  const options: ConditionOption[] = [];
+  for (const effectId of state.recentEffectIds) {
+    const definition = effectLibrary[effectId];
+    if (!definition) continue;
+    options.push({
+      id: definition.id,
+      name: definition.name,
+      value: definition.hasValue
+        ? { kind: 'valued', defaultValue: 1, maxValue: definition.maxValue }
+        : { kind: 'unvalued' },
+      description: definition.description
+    });
+  }
+  return options;
+}
+
+export interface RemovableEffectOption {
+  instanceId: string;
+  effectId: string;
+  name: string;
+  valueLabel?: string;
+  durationLabel: string;
+  source: AppliedEffectSource;
+}
+
+export function listRemovableEffects(
+  combatant: CombatantState,
+  state: EncounterState
+): RemovableEffectOption[] {
+  return combatant.appliedEffects
+    .filter((effect) => !effect.parentInstanceId)
+    .map((effect) => {
+      const definition = effectLibrary[effect.effectId];
+      const valueLabel =
+        definition?.hasValue && typeof effect.value === 'number' ? String(effect.value) : undefined;
+      return {
+        instanceId: effect.instanceId,
+        effectId: effect.effectId,
+        name: definition?.name ?? effect.effectId,
+        valueLabel,
+        durationLabel: formatDuration(effect.duration, state),
+        source: { kind: 'direct' as const }
+      };
+    });
 }

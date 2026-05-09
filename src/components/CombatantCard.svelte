@@ -37,6 +37,57 @@
   export let isLast: boolean = false;
   export let isSelected: boolean = false;
   export let onSelect: ((id: string) => void) | undefined = undefined;
+  export let onRequestRadial:
+    | ((id: string, anchor: { x: number; y: number }) => void)
+    | undefined = undefined;
+
+  const LONG_PRESS_MS = 400;
+  const LONG_PRESS_TOLERANCE_PX = 6;
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressStart: { x: number; y: number } | null = null;
+  let longPressFired = false;
+
+  function clearLongPress() {
+    if (longPressTimer !== null) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    longPressStart = null;
+  }
+
+  function handleContextMenu(event: MouseEvent) {
+    if (!onRequestRadial) return;
+    event.preventDefault();
+    onRequestRadial(combatant.id, { x: event.clientX, y: event.clientY });
+  }
+
+  function handleArticlePointerDown(event: PointerEvent) {
+    if (!onRequestRadial) return;
+    if (event.pointerType !== 'touch') return;
+    if (event.target !== event.currentTarget) return;
+    longPressFired = false;
+    longPressStart = { x: event.clientX, y: event.clientY };
+    longPressTimer = setTimeout(() => {
+      longPressFired = true;
+      longPressTimer = null;
+      if (longPressStart) {
+        onRequestRadial?.(combatant.id, { x: longPressStart.x, y: longPressStart.y });
+      }
+    }, LONG_PRESS_MS);
+  }
+
+  function handleArticlePointerMove(event: PointerEvent) {
+    if (longPressTimer === null || longPressStart === null) return;
+    const dx = event.clientX - longPressStart.x;
+    const dy = event.clientY - longPressStart.y;
+    if (Math.hypot(dx, dy) > LONG_PRESS_TOLERANCE_PX) {
+      clearLongPress();
+    }
+  }
+
+  function handleArticlePointerEnd() {
+    clearLongPress();
+  }
 
   let pickerOpen = false;
   let pickerEffectId = '';
@@ -137,6 +188,11 @@
   data-visual-state={visualState}
   data-hp-tone={hpTone}
   class="combatant-card"
+  oncontextmenu={handleContextMenu}
+  onpointerdown={handleArticlePointerDown}
+  onpointermove={handleArticlePointerMove}
+  onpointerup={handleArticlePointerEnd}
+  onpointercancel={handleArticlePointerEnd}
 >
   <div class="card-heading">
     <div class="card-heading__main">

@@ -27,6 +27,9 @@ export async function loadActiveEncounter(): Promise<EncounterState | null> {
       }
     }
   }
+  if (!Array.isArray((stored as { recentEffectIds?: unknown }).recentEffectIds)) {
+    stored.recentEffectIds = [];
+  }
   return stored;
 }
 

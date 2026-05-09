@@ -7,11 +7,15 @@
   import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
   import LibraryPane from '../components/LibraryPane.svelte';
   import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
+  import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import {
     combatantCardActions,
     currentCombatant,
     dispatchEncounterCommand,
     listConditionOptions,
+    listConditionWedgeCounts,
+    listRecentConditionOptions,
+    listRemovableEffects,
     makeCombatant,
     makeCreatureCombatant,
     makePartyMemberCombatant,
@@ -55,6 +59,11 @@
   import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
 
   const conditionOptions = listConditionOptions();
+  const wedgeCounts = listConditionWedgeCounts();
+
+  let radialOpen = false;
+  let radialAnchor = { x: 0, y: 0 };
+  let radialCombatantId: string | null = null;
 
   let encounter = newEncounterState();
   let feedback: FeedbackEntry[] = [];
@@ -77,6 +86,11 @@
   $: selection = reconcileWithCombatants(selection, combatantIdSet);
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
+
+  $: radialCombatant = radialCombatantId ? encounter.combatants[radialCombatantId] : undefined;
+  $: radialRecentOptions = radialCombatant ? listRecentConditionOptions(encounter) : [];
+  $: radialRemovable = radialCombatant ? listRemovableEffects(radialCombatant, encounter) : [];
+  $: if (radialOpen && !radialCombatant) closeRadial();
 
   function appendFeedback(
     id: string,
@@ -527,6 +541,29 @@
     runCommand(toCommand('REMOVE_EFFECT', { targetId: combatantId, instanceId }, nextCommandId()));
   }
 
+  function openRadial(id: string, anchor: { x: number; y: number }) {
+    radialCombatantId = id;
+    radialAnchor = anchor;
+    radialOpen = true;
+  }
+
+  function closeRadial() {
+    radialOpen = false;
+    radialCombatantId = null;
+  }
+
+  function radialApply(choice: ApplyConditionChoice) {
+    if (!radialCombatantId) return;
+    applyCondition(radialCombatantId, choice);
+    closeRadial();
+  }
+
+  function radialRemove(instanceId: string) {
+    if (!radialCombatantId) return;
+    removeCondition(radialCombatantId, instanceId);
+    closeRadial();
+  }
+
   function modifyConditionValue(combatantId: string, instanceId: string, delta: number) {
     runCommand(
       toCommand('MODIFY_EFFECT_VALUE', { targetId: combatantId, instanceId, delta }, nextCommandId())
@@ -628,6 +665,7 @@
             onSetConditionValue={setConditionValue}
             onMove={moveCombatant}
             onSelect={selectCombatant}
+            onRequestRadial={openRadial}
             isFirst={index === 0}
             isLast={index === orderedCombatants.length - 1}
           />
@@ -644,6 +682,22 @@
     </section>
   </section>
 </main>
+
+{#if radialOpen && radialCombatant}
+  <RadialConditionMenu
+    combatantId={radialCombatant.id}
+    combatantName={radialCombatant.name}
+    combatantHpLabel={`${radialCombatant.currentHp}/${radialCombatant.baseStats.hp} HP`}
+    anchor={radialAnchor}
+    {conditionOptions}
+    recentOptions={radialRecentOptions}
+    removableEffects={radialRemovable}
+    {wedgeCounts}
+    onApply={radialApply}
+    onRemove={radialRemove}
+    onClose={closeRadial}
+  />
+{/if}
 
 <style>
   .shell {
