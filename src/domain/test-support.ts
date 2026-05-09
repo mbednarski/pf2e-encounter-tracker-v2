@@ -89,7 +89,8 @@ export function encounter(overrides: Partial<EncounterState> = {}): EncounterSta
     initiative: {
       order: [],
       currentIndex: -1,
-      delaying: []
+      delaying: [],
+      scores: {}
     },
     combatants: {},
     pendingPrompts: [],
@@ -107,7 +108,8 @@ export function preparingEncounter(overrides: Partial<EncounterState> = {}): Enc
     initiative: {
       order: Object.keys(combatants),
       currentIndex: -1,
-      delaying: []
+      delaying: [],
+      scores: {}
     },
     ...overrides
   });
@@ -120,7 +122,8 @@ export function activeEncounter(overrides: Partial<EncounterState> = {}): Encoun
     initiative: {
       order: ['goblin-1', 'fighter-1'],
       currentIndex: 0,
-      delaying: []
+      delaying: [],
+      scores: {}
     },
     ...overrides
   });
@@ -150,7 +153,8 @@ export function completedEncounter(overrides: Partial<EncounterState> = {}): Enc
     initiative: {
       order: ['goblin-1', 'fighter-1'],
       currentIndex: 1,
-      delaying: []
+      delaying: [],
+      scores: {}
     },
     ...overrides
   });

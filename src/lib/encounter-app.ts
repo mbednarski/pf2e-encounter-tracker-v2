@@ -65,7 +65,8 @@ export function newEncounterState(): EncounterState {
     initiative: {
       order: [],
       currentIndex: -1,
-      delaying: []
+      delaying: [],
+      scores: {}
     },
     combatants: {},
     pendingPrompts: [],

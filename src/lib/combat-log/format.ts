@@ -52,6 +52,13 @@ export function formatEvent(event: DomainEvent, options: FormatOptions): LogEntr
         `${nameOf(state, event.combatantId)} moved to position ${event.newIndex + 1} in the order.`,
         'info'
       );
+    case 'initiative-scores-changed': {
+      const parts = Object.entries(event.scores).map(([cid, score]) =>
+        score === null ? `${nameOf(state, cid)} cleared` : `${nameOf(state, cid)}: ${score}`
+      );
+      if (parts.length === 0) return null;
+      return entry(id, `Initiative — ${parts.join(', ')}.`, 'info');
+    }
     case 'combatant-delayed':
       return entry(id, `${nameOf(state, event.combatantId)} is delaying.`, 'info');
     case 'combatant-resumed-from-delay':

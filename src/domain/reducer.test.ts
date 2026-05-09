@@ -56,7 +56,8 @@ describe('applyCommand lifecycle and initiative slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: -1,
-        delaying: []
+        delaying: [],
+        scores: {}
       }
     });
 
@@ -96,7 +97,7 @@ describe('applyCommand lifecycle and initiative slice', () => {
   test('rejects starting an encounter without at least two combatants and initiative order', () => {
     const state = encounter({
       combatants: { 'goblin-1': combatant('goblin-1') },
-      initiative: { order: ['goblin-1'], currentIndex: -1, delaying: [] }
+      initiative: { order: ['goblin-1'], currentIndex: -1, delaying: [], scores: {} }
     });
 
     const result = applyCommand(state, command('START_ENCOUNTER'), emptyEffects);
@@ -821,7 +822,8 @@ describe('applyCommand turn advancement slice', () => {
       initiative: {
         order: ['goblin-1', 'fallen-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -848,7 +850,8 @@ describe('applyCommand turn advancement slice', () => {
       initiative: {
         order: ['goblin-1', 'fallen-1', 'fighter-1'],
         currentIndex: 2,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
@@ -875,7 +878,8 @@ describe('applyCommand turn advancement slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1', { isAlive: false }),
@@ -899,7 +903,8 @@ describe('applyCommand turn advancement slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 8,
-        delaying: []
+        delaying: [],
+        scores: {}
       }
     });
 
@@ -986,7 +991,8 @@ describe('applyCommand turn advancement slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 1,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1', {
@@ -1093,7 +1099,8 @@ describe('applyCommand turn advancement slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1185,7 +1192,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1', 'cleric-1'],
         currentIndex: 1,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1199,7 +1207,8 @@ describe('applyCommand delay and resume slice', () => {
     expect(result.newState.initiative).toEqual({
       order: ['goblin-1', 'cleric-1'],
       currentIndex: 1,
-      delaying: ['fighter-1']
+      delaying: ['fighter-1'],
+        scores: {}
     });
     expect(result.newState.round).toBe(1);
     expect(result.newState.combatants['cleric-1'].reactionUsedThisRound).toBe(false);
@@ -1216,7 +1225,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1', 'cleric-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1230,7 +1240,8 @@ describe('applyCommand delay and resume slice', () => {
     expect(result.newState.initiative).toEqual({
       order: ['fighter-1', 'cleric-1'],
       currentIndex: 0,
-      delaying: ['goblin-1']
+      delaying: ['goblin-1'],
+        scores: {}
     });
     expect(result.newState.round).toBe(1);
     expectEvents(result, [
@@ -1247,7 +1258,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1', 'cleric-1'],
         currentIndex: 2,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
@@ -1261,7 +1273,8 @@ describe('applyCommand delay and resume slice', () => {
     expect(result.newState.initiative).toEqual({
       order: ['goblin-1', 'fighter-1'],
       currentIndex: 0,
-      delaying: ['cleric-1']
+      delaying: ['cleric-1'],
+        scores: {}
     });
     expect(result.newState.round).toBe(5);
     expect(result.newState.combatants['goblin-1'].reactionUsedThisRound).toBe(false);
@@ -1279,7 +1292,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'fallen-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1293,7 +1307,8 @@ describe('applyCommand delay and resume slice', () => {
     expect(result.newState.initiative).toEqual({
       order: ['fallen-1', 'fighter-1'],
       currentIndex: 1,
-      delaying: ['goblin-1']
+      delaying: ['goblin-1'],
+        scores: {}
     });
     expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
     expectEvents(result, [
@@ -1309,7 +1324,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: -1,
-        delaying: []
+        delaying: [],
+        scores: {}
       }
     });
 
@@ -1323,7 +1339,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'cleric-1'],
         currentIndex: 0,
-        delaying: ['fighter-1']
+        delaying: ['fighter-1'],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1341,7 +1358,8 @@ describe('applyCommand delay and resume slice', () => {
     expect(result.newState.initiative).toEqual({
       order: ['goblin-1', 'fighter-1', 'cleric-1'],
       currentIndex: 1,
-      delaying: []
+      delaying: [],
+        scores: {}
     });
     expect(result.newState.round).toBe(1);
     expect(result.newState.combatants['fighter-1'].reactionUsedThisRound).toBe(false);
@@ -1358,7 +1376,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'cleric-1'],
         currentIndex: 1,
-        delaying: ['fighter-1', 'ranger-1']
+        delaying: ['fighter-1', 'ranger-1'],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1377,7 +1396,8 @@ describe('applyCommand delay and resume slice', () => {
     expect(result.newState.initiative).toEqual({
       order: ['goblin-1', 'cleric-1', 'fighter-1'],
       currentIndex: 2,
-      delaying: ['ranger-1']
+      delaying: ['ranger-1'],
+        scores: {}
     });
     expectEvents(result, [
       { type: 'turn-ended', combatantId: 'cleric-1' },
@@ -1392,7 +1412,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       }
     });
 
@@ -1410,7 +1431,8 @@ describe('applyCommand delay and resume slice', () => {
       initiative: {
         order: ['goblin-1', 'cleric-1'],
         currentIndex: 0,
-        delaying: ['fighter-1']
+        delaying: ['fighter-1'],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1501,7 +1523,8 @@ describe('applyCommand combat state slice', () => {
       initiative: {
         order: ['goblin-1', 'fallen-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -1529,7 +1552,8 @@ describe('applyCommand combat state slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 1,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
@@ -1557,7 +1581,8 @@ describe('applyCommand combat state slice', () => {
       initiative: {
         order: ['goblin-1', 'fighter-1'],
         currentIndex: 0,
-        delaying: []
+        delaying: [],
+        scores: {}
       },
       combatants: {
         'goblin-1': combatant('goblin-1'),
@@ -2161,7 +2186,8 @@ describe('applyCommand effect slice', () => {
         initiative: {
           order: ['goblin-1', 'fighter-1'],
           currentIndex: 1,
-          delaying: []
+          delaying: [],
+        scores: {}
         },
         combatants: {
           'goblin-1': combatant('goblin-1', { reactionUsedThisRound: true }),
@@ -2328,7 +2354,7 @@ describe('REMOVE_COMBATANT', () => {
         'goblin-1': combatant('goblin-1'),
         'fighter-1': combatant('fighter-1')
       },
-      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: -1, delaying: [] }
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: -1, delaying: [], scores: {} }
     });
 
     const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
@@ -2347,7 +2373,7 @@ describe('REMOVE_COMBATANT', () => {
         'fighter-1': combatant('fighter-1', { name: 'Fighter' }),
         'wizard-1': combatant('wizard-1', { name: 'Wizard' })
       },
-      initiative: { order: ['goblin-1', 'fighter-1', 'wizard-1'], currentIndex: 2, delaying: [] }
+      initiative: { order: ['goblin-1', 'fighter-1', 'wizard-1'], currentIndex: 2, delaying: [], scores: {} }
     });
 
     const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
@@ -2363,7 +2389,7 @@ describe('REMOVE_COMBATANT', () => {
         'fighter-1': combatant('fighter-1'),
         'wizard-1': combatant('wizard-1')
       },
-      initiative: { order: ['goblin-1', 'fighter-1', 'wizard-1'], currentIndex: 0, delaying: [] }
+      initiative: { order: ['goblin-1', 'fighter-1', 'wizard-1'], currentIndex: 0, delaying: [], scores: {} }
     });
 
     const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'wizard-1' }), emptyEffects);
@@ -2378,7 +2404,7 @@ describe('REMOVE_COMBATANT', () => {
         'goblin-1': combatant('goblin-1'),
         'fighter-1': combatant('fighter-1')
       },
-      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, delaying: [] }
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, delaying: [], scores: {} }
     });
 
     const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'fighter-1' }), emptyEffects);
@@ -2394,7 +2420,7 @@ describe('REMOVE_COMBATANT', () => {
         'fighter-1': combatant('fighter-1'),
         'wizard-1': combatant('wizard-1')
       },
-      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 0, delaying: ['wizard-1'] }
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 0, delaying: ['wizard-1'], scores: {} }
     });
 
     const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'wizard-1' }), emptyEffects);
@@ -2409,7 +2435,7 @@ describe('REMOVE_COMBATANT', () => {
       combatants: {
         'goblin-1': combatant('goblin-1', { name: 'Goblin Warrior' })
       },
-      initiative: { order: ['goblin-1'], currentIndex: -1, delaying: [] }
+      initiative: { order: ['goblin-1'], currentIndex: -1, delaying: [], scores: {} }
     });
 
     const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
@@ -2537,5 +2563,177 @@ describe('recent effects tracking', () => {
     expect(effectIds).toContain('confused');
     expect(effectIds).toContain('off-guard');
     expect(result.newState.recentEffectIds).toEqual(['confused']);
+  });
+});
+
+describe('SET_INITIATIVE_SCORES', () => {
+  function threeCombatantPrep() {
+    return encounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1', { name: 'Goblin' }),
+        'fighter-1': combatant('fighter-1', { name: 'Fighter' }),
+        'wizard-1': combatant('wizard-1', { name: 'Wizard' })
+      },
+      initiative: {
+        order: ['goblin-1', 'fighter-1', 'wizard-1'],
+        currentIndex: -1,
+        delaying: [],
+        scores: {}
+      }
+    });
+  }
+
+  test('setting a single score re-sorts the order so highest is first', () => {
+    const state = threeCombatantPrep();
+    const result = applyCommand(
+      state,
+      command('SET_INITIATIVE_SCORES', { scores: { 'wizard-1': 22 } }),
+      emptyEffects
+    );
+
+    expect(result.newState.initiative.scores).toEqual({ 'wizard-1': 22 });
+    expect(result.newState.initiative.order).toEqual(['wizard-1', 'goblin-1', 'fighter-1']);
+  });
+
+  test('multi-entry payload sorts every scored combatant correctly', () => {
+    const state = threeCombatantPrep();
+    const result = applyCommand(
+      state,
+      command('SET_INITIATIVE_SCORES', {
+        scores: { 'goblin-1': 10, 'fighter-1': 18, 'wizard-1': 14 }
+      }),
+      emptyEffects
+    );
+
+    expect(result.newState.initiative.order).toEqual(['fighter-1', 'wizard-1', 'goblin-1']);
+  });
+
+  test('unscored combatants land after all scored ones in their existing relative order', () => {
+    const state = threeCombatantPrep();
+    const result = applyCommand(
+      state,
+      command('SET_INITIATIVE_SCORES', { scores: { 'wizard-1': 5 } }),
+      emptyEffects
+    );
+
+    expect(result.newState.initiative.order).toEqual(['wizard-1', 'goblin-1', 'fighter-1']);
+  });
+
+  test('ties preserve existing relative order (stable sort)', () => {
+    const state = threeCombatantPrep();
+    const result = applyCommand(
+      state,
+      command('SET_INITIATIVE_SCORES', {
+        scores: { 'goblin-1': 12, 'fighter-1': 12, 'wizard-1': 12 }
+      }),
+      emptyEffects
+    );
+
+    expect(result.newState.initiative.order).toEqual(['goblin-1', 'fighter-1', 'wizard-1']);
+  });
+
+  test('null clears a score and the combatant moves to the unscored tail', () => {
+    const seeded = applyCommand(
+      threeCombatantPrep(),
+      command('SET_INITIATIVE_SCORES', {
+        scores: { 'goblin-1': 10, 'fighter-1': 18, 'wizard-1': 14 }
+      }),
+      emptyEffects
+    ).newState;
+
+    const cleared = applyCommand(
+      seeded,
+      command('SET_INITIATIVE_SCORES', { scores: { 'fighter-1': null } }),
+      emptyEffects
+    );
+
+    expect(cleared.newState.initiative.scores).toEqual({ 'goblin-1': 10, 'wizard-1': 14 });
+    expect(cleared.newState.initiative.order).toEqual(['wizard-1', 'goblin-1', 'fighter-1']);
+  });
+
+  test('emits initiative-scores-changed event with the patch and the new order', () => {
+    const state = threeCombatantPrep();
+    const result = applyCommand(
+      state,
+      command('SET_INITIATIVE_SCORES', { scores: { 'wizard-1': 22 } }),
+      emptyEffects
+    );
+
+    expectEvents(result, [
+      {
+        type: 'initiative-scores-changed',
+        scores: { 'wizard-1': 22 },
+        order: ['wizard-1', 'goblin-1', 'fighter-1']
+      }
+    ]);
+  });
+
+  test('rejects unknown combatant ids', () => {
+    const state = threeCombatantPrep();
+    expectRejected(
+      applyCommand(
+        state,
+        command('SET_INITIATIVE_SCORES', { scores: { 'ghost-1': 10 } }),
+        emptyEffects
+      ),
+      'SET_INITIATIVE_SCORES',
+      'Combatant ghost-1 not found'
+    );
+  });
+
+  test('rejects non-finite scores', () => {
+    const state = threeCombatantPrep();
+    expectRejected(
+      applyCommand(
+        state,
+        command('SET_INITIATIVE_SCORES', { scores: { 'goblin-1': Number.NaN } }),
+        emptyEffects
+      ),
+      'SET_INITIATIVE_SCORES',
+      'Initiative score must be a finite number or null'
+    );
+  });
+
+  test('rejects in ACTIVE phase (PREPARING-only command)', () => {
+    expectRejected(
+      applyCommand(
+        activeEncounter(),
+        command('SET_INITIATIVE_SCORES', { scores: { 'goblin-1': 10 } }),
+        emptyEffects
+      ),
+      'SET_INITIATIVE_SCORES',
+      'SET_INITIATIVE_SCORES is not legal during ACTIVE'
+    );
+  });
+
+  test('preserves existing scores when patch only mentions some combatants', () => {
+    const seeded = applyCommand(
+      threeCombatantPrep(),
+      command('SET_INITIATIVE_SCORES', { scores: { 'goblin-1': 10, 'fighter-1': 18 } }),
+      emptyEffects
+    ).newState;
+
+    const update = applyCommand(
+      seeded,
+      command('SET_INITIATIVE_SCORES', { scores: { 'wizard-1': 14 } }),
+      emptyEffects
+    );
+
+    expect(update.newState.initiative.scores).toEqual({
+      'goblin-1': 10,
+      'fighter-1': 18,
+      'wizard-1': 14
+    });
+    expect(update.newState.initiative.order).toEqual(['fighter-1', 'wizard-1', 'goblin-1']);
+  });
+
+  test('keeps the new state JSON-serializable', () => {
+    const state = threeCombatantPrep();
+    const result = applyCommand(
+      state,
+      command('SET_INITIATIVE_SCORES', { scores: { 'goblin-1': 10 } }),
+      emptyEffects
+    );
+    expectSerializable(result.newState);
   });
 });
