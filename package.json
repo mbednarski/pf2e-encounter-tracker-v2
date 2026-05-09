@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.domain.json --noEmit",
     "test:run": "vitest run",
+    "yaml:check": "tsx scripts/validate-creature-yaml.ts",
     "audit": "npm audit --audit-level=moderate",
     "audit:low": "npm audit --audit-level=low"
   },
@@ -25,6 +26,7 @@
     "jsdom": "^29.1.1",
     "svelte": "^5.38.0",
     "svelte-check": "^4.3.1",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
     "vitest": "^4.0.0"
