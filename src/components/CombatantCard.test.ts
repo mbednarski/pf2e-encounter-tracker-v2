@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { combatant } from '../domain/test-support';
 import CombatantCard from './CombatantCard.svelte';
 
@@ -78,5 +78,31 @@ describe('CombatantCard select affordance', () => {
       'aria-pressed',
       'false'
     );
+  });
+
+  test('clicking the card body calls onSelect with the combatant id', async () => {
+    const onSelect = vi.fn();
+    const { container } = render(CombatantCard, { props: baseProps({ onSelect }) });
+    const article = container.querySelector('article.combatant-card') as HTMLElement;
+    expect(article).not.toBeNull();
+    await fireEvent.click(article);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('goblin-1');
+  });
+
+  test('clicking the inner name button does not double-fire onSelect from the card handler', async () => {
+    const onSelect = vi.fn();
+    render(CombatantCard, { props: baseProps({ onSelect }) });
+    await fireEvent.click(screen.getByRole('button', { name: 'Goblin Warrior' }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  test('pressing Enter on the focused card calls onSelect', async () => {
+    const onSelect = vi.fn();
+    const { container } = render(CombatantCard, { props: baseProps({ onSelect }) });
+    const article = container.querySelector('article.combatant-card') as HTMLElement;
+    await fireEvent.keyDown(article, { key: 'Enter' });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('goblin-1');
   });
 });
