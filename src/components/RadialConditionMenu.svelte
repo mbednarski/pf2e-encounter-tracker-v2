@@ -5,7 +5,7 @@
     type ApplyConditionChoice,
     type ConditionOption,
     type ConditionWedgeCounts,
-    type RemovableEffectOption
+    type EffectModalTab
   } from '$lib/encounter-app';
 
   export let combatantId: string;
@@ -13,12 +13,11 @@
   export let combatantHpLabel: string;
   export let combatantSubtitle: string | undefined = undefined;
   export let anchor: { x: number; y: number };
-  export let conditionOptions: ConditionOption[];
   export let recentOptions: ConditionOption[];
-  export let removableEffects: RemovableEffectOption[];
+  export let appliedCount: number;
   export let wedgeCounts: ConditionWedgeCounts;
   export let onApply: (choice: ApplyConditionChoice) => void;
-  export let onRemove: (instanceId: string) => void;
+  export let onOpenModal: (tab: EffectModalTab) => void;
   export let onClose: () => void;
 
   // Geometry — ported verbatim from design/radial-menu.jsx.
@@ -36,29 +35,35 @@
   const HALF = RADIAL_DIAMETER / 2;
   const PADDING = 8;
 
-  type WedgeId = 'recent' | 'conditions' | 'persistent' | 'remove' | 'buffs' | 'afflict';
-  type ActiveWedgeId = 'recent' | 'conditions' | 'remove';
+  type WedgeId =
+    | 'recent'
+    | 'conditions'
+    | 'persistent'
+    | 'manage'
+    | 'effects'
+    | 'afflict';
+  // Only Recent fans out as a sub-arc; the others open the modal.
+  type SubArcWedgeId = 'recent';
   interface WedgeDef {
     id: WedgeId;
     icon: string;
     label: string;
-    active: boolean;
-    danger: boolean;
+    modalTab: EffectModalTab | null;
   }
 
   const WEDGES: readonly WedgeDef[] = [
-    { id: 'recent', icon: '↺', label: 'Recent', active: true, danger: false },
-    { id: 'conditions', icon: '✦', label: 'Conditions', active: true, danger: false },
-    { id: 'persistent', icon: '✷', label: 'Persistent', active: false, danger: false },
-    { id: 'remove', icon: '✕', label: 'Remove', active: true, danger: true },
-    { id: 'buffs', icon: '✚', label: 'Buffs', active: false, danger: false },
-    { id: 'afflict', icon: '☣', label: 'Afflictions', active: false, danger: false }
+    { id: 'recent', icon: '↺', label: 'Recent', modalTab: null },
+    { id: 'conditions', icon: '✦', label: 'Conditions', modalTab: 'conditions' },
+    { id: 'persistent', icon: '✷', label: 'Persistent', modalTab: 'persistent' },
+    { id: 'manage', icon: '⚙', label: 'Manage', modalTab: 'applied' },
+    { id: 'effects', icon: '✚', label: 'Effects', modalTab: 'effects' },
+    { id: 'afflict', icon: '☣', label: 'Afflictions', modalTab: 'afflictions' }
   ];
 
   type Phase =
     | { kind: 'hub' }
-    | { kind: 'subarc'; wedge: ActiveWedgeId }
-    | { kind: 'scrub'; wedge: ActiveWedgeId; option: ConditionOption; value: number };
+    | { kind: 'subarc'; wedge: SubArcWedgeId }
+    | { kind: 'scrub'; wedge: SubArcWedgeId; option: ConditionOption; value: number };
 
   let phase: Phase = { kind: 'hub' };
   let hoveredWedgeId: WedgeId | null = null;
@@ -122,22 +127,14 @@
     return WEDGES[i]?.id ?? null;
   }
 
-  $: subItems = currentSubItems(phase, recentOptions, conditionOptions, removableEffects);
+  $: subItems = currentSubItems(phase, recentOptions);
 
   function currentSubItems(
     p: Phase,
-    recent: ConditionOption[],
-    conditions: ConditionOption[],
-    removable: RemovableEffectOption[]
-  ): readonly { id: string; name: string; valueLabel?: string }[] {
+    recent: ConditionOption[]
+  ): readonly { id: string; name: string }[] {
     if (p.kind === 'hub') return [];
-    const wedge = p.wedge;
-    if (wedge === 'recent') return recent.map((o) => ({ id: o.id, name: o.name }));
-    if (wedge === 'conditions') return conditions.map((o) => ({ id: o.id, name: o.name }));
-    return removable.map((o) => ({
-      id: o.instanceId,
-      name: o.valueLabel ? `${o.name} ${o.valueLabel}` : o.name
-    }));
+    return recent.map((o) => ({ id: o.id, name: o.name }));
   }
 
   $: subSpan = computeSubSpan(subItems.length);
@@ -147,7 +144,7 @@
     return Math.min(240, Math.max(110, 9 * (count - 1)));
   }
 
-  function subItemAngle(index: number, count: number, wedge: ActiveWedgeId): number {
+  function subItemAngle(index: number, count: number, wedge: SubArcWedgeId): number {
     const wedgeIdx = wedgeIndexFor(wedge);
     const mid = wedgeAngles(wedgeIdx).mid;
     if (count === 1) return mid;
@@ -160,25 +157,22 @@
     onApply(resolveApplyChoice(option, rawValue));
   }
 
-  function selectActiveWedge(wedgeId: WedgeId) {
+  function selectWedge(wedgeId: WedgeId) {
     const wedge = WEDGES.find((w) => w.id === wedgeId);
-    if (!wedge || !wedge.active) return;
-    phase = { kind: 'subarc', wedge: wedgeId as ActiveWedgeId };
+    if (!wedge) return;
+    if (wedge.modalTab) {
+      onOpenModal(wedge.modalTab);
+      onClose();
+      return;
+    }
+    // Recent wedge: fan out the sub-arc.
+    phase = { kind: 'subarc', wedge: 'recent' };
     hoveredItemIndex = null;
   }
 
   function handleSubItemActivate(index: number) {
     if (phase.kind !== 'subarc') return;
-    const wedge = phase.wedge;
-
-    if (wedge === 'remove') {
-      const target = removableEffects[index];
-      if (target) onRemove(target.instanceId);
-      return;
-    }
-
-    const list = wedge === 'recent' ? recentOptions : conditionOptions;
-    const option = list[index];
+    const option = recentOptions[index];
     if (!option) return;
 
     if (option.value.kind === 'unvalued') {
@@ -186,11 +180,11 @@
       return;
     }
 
-    phase = { kind: 'scrub', wedge, option, value: 1 };
+    phase = { kind: 'scrub', wedge: phase.wedge, option, value: 1 };
   }
 
   function handleHubKey(event: KeyboardEvent) {
-    const activeIds = WEDGES.filter((w) => w.active).map((w) => w.id);
+    const ids = WEDGES.map((w) => w.id);
     if (event.key === 'Escape') {
       event.preventDefault();
       onClose();
@@ -199,24 +193,20 @@
     if (event.key === 'Enter' || event.key === ' ') {
       if (hoveredWedgeId) {
         event.preventDefault();
-        selectActiveWedge(hoveredWedgeId);
+        selectWedge(hoveredWedgeId);
       }
       return;
     }
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
       event.preventDefault();
-      const current = hoveredWedgeId && activeIds.includes(hoveredWedgeId)
-        ? activeIds.indexOf(hoveredWedgeId)
-        : -1;
-      hoveredWedgeId = activeIds[(current + 1) % activeIds.length];
+      const current = hoveredWedgeId ? ids.indexOf(hoveredWedgeId) : -1;
+      hoveredWedgeId = ids[(current + 1) % ids.length];
       return;
     }
     if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
       event.preventDefault();
-      const current = hoveredWedgeId && activeIds.includes(hoveredWedgeId)
-        ? activeIds.indexOf(hoveredWedgeId)
-        : 0;
-      hoveredWedgeId = activeIds[(current - 1 + activeIds.length) % activeIds.length];
+      const current = hoveredWedgeId ? ids.indexOf(hoveredWedgeId) : 0;
+      hoveredWedgeId = ids[(current - 1 + ids.length) % ids.length];
       return;
     }
   }
@@ -302,8 +292,7 @@
       let bestDiff = Infinity;
       for (let i = 0; i < count; i++) {
         const target = subItemAngle(i, count, phase.wedge);
-        let diff = Math.abs(((ang - target + 540) % 360) - 180);
-        diff = 180 - diff;
+        const diff = Math.abs(((ang - target + 540) % 360) - 180);
         if (diff < bestDiff) {
           bestDiff = diff;
           bestIdx = i;
@@ -317,10 +306,9 @@
     const scrubPhase = phase;
     if (scrubPhase.kind !== 'scrub') return;
     if (scrubPhase.option.value.kind !== 'valued') return;
-    const list = scrubPhase.wedge === 'recent' ? recentOptions : conditionOptions;
-    const idx = list.findIndex((o) => o.id === scrubPhase.option.id);
+    const idx = recentOptions.findIndex((o) => o.id === scrubPhase.option.id);
     if (idx === -1) return;
-    const baseAngle = subItemAngle(idx, list.length, scrubPhase.wedge);
+    const baseAngle = subItemAngle(idx, recentOptions.length, scrubPhase.wedge);
     let delta = ang - baseAngle;
     delta = ((delta + 540) % 360) - 180;
     const max = scrubPhase.option.value.maxValue ?? 99;
@@ -344,21 +332,13 @@
     if (r < INNER_R + 4 || r > RING_R) return;
     const id = wedgeIdAtAngle(angleOf(x, y));
     if (!id) return;
-    selectActiveWedge(id);
+    selectWedge(id);
   }
 
   function handleSubarcPointerDown(event: PointerEvent, index: number) {
     event.stopPropagation();
     if (phase.kind !== 'subarc') return;
-    const wedge = phase.wedge;
-
-    if (wedge === 'remove') {
-      handleSubItemActivate(index);
-      return;
-    }
-
-    const list = wedge === 'recent' ? recentOptions : conditionOptions;
-    const option = list[index];
+    const option = recentOptions[index];
     if (!option) return;
 
     if (option.value.kind === 'unvalued') {
@@ -367,7 +347,7 @@
     }
 
     // Enter scrub mode and capture pointer for the drag gesture.
-    phase = { kind: 'scrub', wedge, option, value: 1 };
+    phase = { kind: 'scrub', wedge: phase.wedge, option, value: 1 };
     if (svgEl && event.pointerId !== undefined) {
       try {
         svgEl.setPointerCapture(event.pointerId);
@@ -403,8 +383,8 @@
     if (id === 'recent') return recentOptions.length;
     if (id === 'conditions') return wedgeCounts.conditions;
     if (id === 'persistent') return wedgeCounts.persistent;
-    if (id === 'remove') return removableEffects.length;
-    if (id === 'buffs') return wedgeCounts.buffs;
+    if (id === 'manage') return appliedCount;
+    if (id === 'effects') return wedgeCounts.spells;
     return wedgeCounts.afflictions;
   }
 
@@ -423,7 +403,7 @@
           option: phase.option,
           value: phase.value,
           maxValue: phase.option.value.maxValue ?? 4,
-          list: phase.wedge === 'recent' ? recentOptions : conditionOptions,
+          list: recentOptions,
           wedge: phase.wedge
         }
       : null;
@@ -469,19 +449,15 @@
       {@const labelPos = polar(angles.mid, LABEL_R)}
       {@const isActiveWedge = (phase.kind === 'subarc' || phase.kind === 'scrub') && phase.wedge === w.id}
       {@const isDimmed = (phase.kind === 'subarc' || phase.kind === 'scrub') && phase.wedge !== w.id}
-      {@const isHover = phase.kind === 'hub' && hoveredWedgeId === w.id && w.active}
+      {@const isHover = phase.kind === 'hub' && hoveredWedgeId === w.id}
       <g
-        class="wedge"
-        class:wedge-active={w.active}
-        class:wedge-disabled={!w.active}
-        class:wedge-danger={w.danger}
+        class="wedge wedge-active"
         class:wedge-hover={isHover}
         class:wedge-selected={isActiveWedge}
         class:wedge-dim={isDimmed}
         role="menuitem"
         tabindex="-1"
-        aria-label={`${w.label}${w.active ? '' : ' (coming soon)'} ${wedgeCount(w.id)}`}
-        aria-disabled={!w.active}
+        aria-label={`${w.label} ${wedgeCount(w.id)}`}
       >
         <path
           class="wedge-fill"
@@ -621,16 +597,6 @@
 
   .wedge-active {
     cursor: pointer;
-  }
-
-  .wedge-disabled {
-    cursor: not-allowed;
-    opacity: 0.42;
-  }
-
-  .wedge-danger .wedge-icon,
-  .wedge-danger .wedge-label {
-    fill: var(--color-red);
   }
 
   .wedge-hover .wedge-fill,

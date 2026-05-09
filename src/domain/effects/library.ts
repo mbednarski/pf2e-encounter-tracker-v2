@@ -33,6 +33,14 @@ function persistentDamage(type: string, name: string): EffectDefinition {
   };
 }
 
+function affliction(definition: Omit<EffectDefinition, 'category'>): EffectDefinition {
+  return { category: 'affliction', ...definition };
+}
+
+function spellEffect(definition: Omit<EffectDefinition, 'category'>): EffectDefinition {
+  return { category: 'spell', ...definition };
+}
+
 export const effectLibrary: EffectLibrary = {
   frightened: condition({
     id: 'frightened',
@@ -342,5 +350,114 @@ export const effectLibrary: EffectLibrary = {
   'persistent-mental': persistentDamage('mental', 'Mental'),
   'persistent-bludgeoning': persistentDamage('bludgeoning', 'Bludgeoning'),
   'persistent-piercing': persistentDamage('piercing', 'Piercing'),
-  'persistent-slashing': persistentDamage('slashing', 'Slashing')
+  'persistent-slashing': persistentDamage('slashing', 'Slashing'),
+
+  'ghoul-fever': affliction({
+    id: 'ghoul-fever',
+    name: 'Ghoul Fever',
+    hasValue: true,
+    maxValue: 4,
+    modifiers: [],
+    description:
+      'Disease (DC 17 Fortitude). Stage 1: carrier (1 day). Stage 2: 3d8 negative damage and enfeebled 2 (1 day). Stage 3: 3d8 negative damage and enfeebled 2 (1 day). Stage 4: as stage 3, and the creature dies if reduced to 0 HP, rising as a ghoul on the next midnight.'
+  }),
+  'goblin-pox': affliction({
+    id: 'goblin-pox',
+    name: 'Goblin Pox',
+    hasValue: true,
+    maxValue: 3,
+    modifiers: [],
+    description:
+      'Disease (DC 17 Fortitude). Stage 1: sickened 1 (1 round). Stage 2: sickened 2 and slowed 1 (1 round). Stage 3: sickened 2 (1 day). Goblins and goblin dogs are immune.'
+  }),
+  'drow-sleep-poison': affliction({
+    id: 'drow-sleep-poison',
+    name: 'Drow Sleep Poison',
+    hasValue: true,
+    maxValue: 3,
+    modifiers: [],
+    description:
+      'Poison (DC 18 Fortitude). Stage 1: enfeebled 1 (1 round). Stage 2: fall unconscious (1 minute, with normal Perception checks to wake).'
+  }),
+  'spider-venom': affliction({
+    id: 'spider-venom',
+    name: 'Spider Venom',
+    hasValue: true,
+    maxValue: 3,
+    modifiers: [],
+    description:
+      'Poison (DC 22 Fortitude). Stage 1: 1d4 poison damage and enfeebled 1 (1 round). Stage 2: 1d4 poison damage and enfeebled 2 (1 round). Stage 3: 2d4 poison damage and enfeebled 2 (1 round).'
+  }),
+
+  bless: spellEffect({
+    id: 'bless',
+    name: 'Bless',
+    hasValue: false,
+    modifiers: [],
+    description: 'Allies in a 5-foot emanation gain a +1 status bonus to attack rolls. Sustained; emanation grows by 10 ft each turn (max 30 ft).'
+  }),
+  bane: spellEffect({
+    id: 'bane',
+    name: 'Bane',
+    hasValue: false,
+    modifiers: [],
+    description: 'Enemies in a 5-foot emanation that fail Will save take a -1 status penalty to attack rolls. Sustained; emanation grows.'
+  }),
+  haste: spellEffect({
+    id: 'haste',
+    name: 'Haste',
+    hasValue: false,
+    modifiers: [],
+    description: 'Target gains an extra Strike or Stride action each turn. 1 minute.'
+  }),
+  slow: spellEffect({
+    id: 'slow',
+    name: 'Slow (spell)',
+    hasValue: false,
+    modifiers: [],
+    description: 'Target loses an action each turn (1 round on success, 1 minute on failure, plus slowed 2 on critical failure).'
+  }),
+  heroism: spellEffect({
+    id: 'heroism',
+    name: 'Heroism',
+    hasValue: true,
+    maxValue: 3,
+    modifiers: [],
+    description: 'Target gains a status bonus to attack rolls, Perception, saves, and skill checks (+1 at rank 3, +2 at rank 6, +3 at rank 9). 10 minutes.'
+  }),
+  'inspire-courage': spellEffect({
+    id: 'inspire-courage',
+    name: 'Inspire Courage',
+    hasValue: false,
+    modifiers: [],
+    description: 'Allies in a 60-foot emanation gain a +1 status bonus to attack rolls, damage rolls, and saves vs fear. Composition cantrip; 1 round.'
+  }),
+  'inspire-defense': spellEffect({
+    id: 'inspire-defense',
+    name: 'Inspire Defense',
+    hasValue: false,
+    modifiers: [],
+    description: 'Allies in a 60-foot emanation gain a +1 status bonus to AC and saves, plus resistance equal to half the bardic level to physical damage. Composition cantrip; 1 round.'
+  }),
+  'mage-armor': spellEffect({
+    id: 'mage-armor',
+    name: 'Mage Armor',
+    hasValue: false,
+    modifiers: [],
+    description: 'Target gains a +1 item bonus to AC and a maximum Dex cap of +5. 24 hours.'
+  }),
+  shield: spellEffect({
+    id: 'shield',
+    name: 'Shield (spell)',
+    hasValue: false,
+    modifiers: [],
+    description: 'Conjures a shield (Hardness scales with rank). Can be Raised or used to Shield Block; broken shield cannot be cast again for 10 minutes.'
+  }),
+  soothe: spellEffect({
+    id: 'soothe',
+    name: 'Soothe',
+    hasValue: false,
+    modifiers: [],
+    description: 'Target regains HP and gains +2 status bonus to saves vs mental effects. 1 minute.'
+  })
 };

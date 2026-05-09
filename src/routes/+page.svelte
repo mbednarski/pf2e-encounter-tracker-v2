@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, Duration, LogEntry, PartyMember, PromptResolution } from '../domain';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -8,14 +8,19 @@
   import LibraryPane from '../components/LibraryPane.svelte';
   import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
+  import EffectModal from '../components/EffectModal.svelte';
   import {
     combatantCardActions,
     currentCombatant,
     dispatchEncounterCommand,
+    groupConditionsByCategory,
+    listAfflictionOptions,
     listConditionOptions,
     listConditionWedgeCounts,
+    listPersistentDamageOptions,
     listRecentConditionOptions,
     listRemovableEffects,
+    listSpellEffectOptions,
     makeCombatant,
     makeCreatureCombatant,
     makePartyMemberCombatant,
@@ -23,6 +28,7 @@
     toCommand,
     viewAppliedEffects,
     type ApplyConditionChoice,
+    type EffectModalTab,
     type FeedbackEntry,
     type ManualCombatantInput,
     type TemplateAdjustmentChoice
@@ -59,11 +65,17 @@
   import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
 
   const conditionOptions = listConditionOptions();
+  const conditionGroups = groupConditionsByCategory();
+  const persistentOptions = listPersistentDamageOptions();
+  const afflictionOptions = listAfflictionOptions();
+  const spellOptions = listSpellEffectOptions();
   const wedgeCounts = listConditionWedgeCounts();
 
   let radialOpen = false;
   let radialAnchor = { x: 0, y: 0 };
   let radialCombatantId: string | null = null;
+
+  let effectModal: { combatantId: string; tab: EffectModalTab } | null = null;
 
   let encounter = newEncounterState();
   let feedback: FeedbackEntry[] = [];
@@ -91,6 +103,13 @@
   $: radialRecentOptions = radialCombatant ? listRecentConditionOptions(encounter) : [];
   $: radialRemovable = radialCombatant ? listRemovableEffects(radialCombatant, encounter) : [];
   $: if (radialOpen && !radialCombatant) closeRadial();
+
+  $: effectModalCombatant = effectModal ? encounter.combatants[effectModal.combatantId] : undefined;
+  $: effectModalApplied = effectModalCombatant ? viewAppliedEffects(effectModalCombatant, encounter) : [];
+  $: otherCombatantsForDuration = effectModalCombatant
+    ? Object.values(encounter.combatants).map((c) => ({ id: c.id, name: c.name }))
+    : [];
+  $: if (effectModal && !effectModalCombatant) closeEffectModal();
 
   function appendFeedback(
     id: string,
@@ -530,8 +549,23 @@
           effectId: choice.effectId,
           targetId: combatantId,
           value: choice.kind === 'valued' ? choice.value : undefined,
-          duration: { type: 'unlimited' }
+          duration: { type: 'unlimited' },
+          note: choice.note
         },
+        nextCommandId()
+      )
+    );
+  }
+
+  function setConditionDuration(
+    combatantId: string,
+    instanceId: string,
+    newDuration: Duration
+  ) {
+    runCommand(
+      toCommand(
+        'SET_EFFECT_DURATION',
+        { targetId: combatantId, instanceId, newDuration },
         nextCommandId()
       )
     );
@@ -552,15 +586,43 @@
     radialCombatantId = null;
   }
 
+  function openEffectModal(combatantId: string, tab: EffectModalTab) {
+    effectModal = { combatantId, tab };
+  }
+
+  function closeEffectModal() {
+    effectModal = null;
+  }
+
+  function radialOpenModal(tab: EffectModalTab) {
+    const id = radialCombatantId;
+    closeRadial();
+    if (id) openEffectModal(id, tab);
+  }
+
+  function modalApply(choice: ApplyConditionChoice) {
+    if (!effectModal) return;
+    applyCondition(effectModal.combatantId, choice);
+  }
+
+  function modalRemove(instanceId: string) {
+    if (!effectModal) return;
+    removeCondition(effectModal.combatantId, instanceId);
+  }
+
+  function modalModifyValue(instanceId: string, delta: number) {
+    if (!effectModal) return;
+    modifyConditionValue(effectModal.combatantId, instanceId, delta);
+  }
+
+  function modalSetDuration(instanceId: string, newDuration: Duration) {
+    if (!effectModal) return;
+    setConditionDuration(effectModal.combatantId, instanceId, newDuration);
+  }
+
   function radialApply(choice: ApplyConditionChoice) {
     if (!radialCombatantId) return;
     applyCondition(radialCombatantId, choice);
-    closeRadial();
-  }
-
-  function radialRemove(instanceId: string) {
-    if (!radialCombatantId) return;
-    removeCondition(radialCombatantId, instanceId);
     closeRadial();
   }
 
@@ -689,13 +751,31 @@
     combatantName={radialCombatant.name}
     combatantHpLabel={`${radialCombatant.currentHp}/${radialCombatant.baseStats.hp} HP`}
     anchor={radialAnchor}
-    {conditionOptions}
     recentOptions={radialRecentOptions}
-    removableEffects={radialRemovable}
+    appliedCount={radialRemovable.length}
     {wedgeCounts}
     onApply={radialApply}
-    onRemove={radialRemove}
+    onOpenModal={radialOpenModal}
     onClose={closeRadial}
+  />
+{/if}
+
+{#if effectModal && effectModalCombatant}
+  <EffectModal
+    combatantName={effectModalCombatant.name}
+    combatantHpLabel={`${effectModalCombatant.currentHp}/${effectModalCombatant.baseStats.hp} HP`}
+    initialTab={effectModal.tab}
+    appliedEffects={effectModalApplied}
+    {conditionGroups}
+    {persistentOptions}
+    {afflictionOptions}
+    effectOptions={spellOptions}
+    otherCombatants={otherCombatantsForDuration}
+    onApply={modalApply}
+    onModifyValue={modalModifyValue}
+    onSetDuration={modalSetDuration}
+    onRemove={modalRemove}
+    onClose={closeEffectModal}
   />
 {/if}
 
