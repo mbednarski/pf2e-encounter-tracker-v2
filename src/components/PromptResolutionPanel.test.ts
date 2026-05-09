@@ -2,6 +2,7 @@ import { describe, expect, test, vi, type Mock } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { combatant, prompt } from '../domain/test-support';
 import type {
+  AppliedEffect,
   CombatantState,
   EncounterPhase,
   Prompt,
@@ -10,6 +11,7 @@ import type {
 import PromptResolutionPanel from './PromptResolutionPanel.svelte';
 
 type ResolveHandler = (promptId: string, resolution: PromptResolution) => void;
+type ApplyDamageHandler = (combatantId: string, amount: number, damageType: string) => void;
 
 const goblin: CombatantState = combatant('goblin-1', { name: 'Goblin Warrior' });
 const fighter: CombatantState = combatant('fighter-1', { name: 'Fighter' });
@@ -18,22 +20,30 @@ const combatants: Record<string, CombatantState> = {
   'fighter-1': fighter
 };
 
+function withEffect(c: CombatantState, effect: AppliedEffect): CombatantState {
+  return { ...c, appliedEffects: [...c.appliedEffects, effect] };
+}
+
 function renderPanel(props: {
   prompts: Prompt[];
   phase?: EncounterPhase;
   combatantsById?: Record<string, CombatantState>;
   onResolve?: Mock<ResolveHandler>;
+  onApplyPersistentDamage?: Mock<ApplyDamageHandler>;
 }) {
   const onResolve: Mock<ResolveHandler> = props.onResolve ?? vi.fn<ResolveHandler>();
+  const onApplyPersistentDamage: Mock<ApplyDamageHandler> =
+    props.onApplyPersistentDamage ?? vi.fn<ApplyDamageHandler>();
   const utils = render(PromptResolutionPanel, {
     props: {
       prompts: props.prompts,
       combatantsById: props.combatantsById ?? combatants,
       phase: props.phase ?? 'RESOLVING',
-      onResolve: onResolve as unknown as ResolveHandler
+      onResolve: onResolve as unknown as ResolveHandler,
+      onApplyPersistentDamage: onApplyPersistentDamage as unknown as ApplyDamageHandler
     }
   });
-  return { ...utils, onResolve };
+  return { ...utils, onResolve, onApplyPersistentDamage };
 }
 
 describe('PromptResolutionPanel', () => {
@@ -300,6 +310,176 @@ describe('PromptResolutionPanel', () => {
 
     const input = screen.getByRole('spinbutton') as HTMLInputElement;
     expect(input.value).toBe('0');
+  });
+
+  describe('persistent-damage prompts', () => {
+    function persistentEffect(overrides: Partial<AppliedEffect> = {}): AppliedEffect {
+      return {
+        instanceId: 'instance-1',
+        effectId: 'persistent-fire',
+        duration: { type: 'unlimited' },
+        note: '1d6',
+        ...overrides
+      };
+    }
+
+    function persistentPrompt(overrides: Parameters<typeof prompt>[0] = {}): Prompt {
+      return prompt({
+        id: 'prompt-pd',
+        ownerId: 'goblin-1',
+        targetId: 'goblin-1',
+        effectInstanceId: 'instance-1',
+        effectName: 'Persistent Fire',
+        suggestionType: { type: 'promptResolution', description: 'Take 1d6 fire damage.' },
+        ...overrides
+      });
+    }
+
+    test('renders Roll, damage field, Apply damage, Dismiss, Remove effect (no Accept, no Set)', () => {
+      renderPanel({
+        prompts: [persistentPrompt()],
+        combatantsById: {
+          'goblin-1': withEffect(goblin, persistentEffect())
+        }
+      });
+
+      expect(screen.getByRole('button', { name: 'Roll 1d6' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Apply damage' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove effect' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Set' })).toBeNull();
+      expect(screen.getByText('fire')).toBeInTheDocument();
+    });
+
+    test('Roll fills the damage field with a deterministic value', async () => {
+      const spy = vi.spyOn(Math, 'random').mockReturnValue(0.5); // mid roll
+      try {
+        renderPanel({
+          prompts: [persistentPrompt()],
+          combatantsById: {
+            'goblin-1': withEffect(goblin, persistentEffect({ note: '1d6' }))
+          }
+        });
+
+        const input = screen.getByRole('spinbutton', {
+          name: 'Damage amount for Persistent Fire'
+        }) as HTMLInputElement;
+        expect(input.value).toBe('');
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Roll 1d6' }));
+        expect(input.value).toBe('4');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test('Apply damage dispatches onApplyPersistentDamage with combatantId, amount and damage type', async () => {
+      const onApplyPersistentDamage = vi.fn<ApplyDamageHandler>();
+      renderPanel({
+        prompts: [persistentPrompt()],
+        combatantsById: {
+          'goblin-1': withEffect(goblin, persistentEffect({ effectId: 'persistent-bleed', note: '1d8' }))
+        },
+        onApplyPersistentDamage
+      });
+
+      const input = screen.getByRole('spinbutton') as HTMLInputElement;
+      await fireEvent.input(input, { target: { value: '7' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Apply damage' }));
+
+      expect(onApplyPersistentDamage).toHaveBeenCalledWith('goblin-1', 7, 'bleed');
+    });
+
+    test('Apply damage with no value or zero is ignored', async () => {
+      const onApplyPersistentDamage = vi.fn<ApplyDamageHandler>();
+      renderPanel({
+        prompts: [persistentPrompt()],
+        combatantsById: {
+          'goblin-1': withEffect(goblin, persistentEffect())
+        },
+        onApplyPersistentDamage
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Apply damage' }));
+      expect(onApplyPersistentDamage).not.toHaveBeenCalled();
+
+      const input = screen.getByRole('spinbutton') as HTMLInputElement;
+      await fireEvent.input(input, { target: { value: '0' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Apply damage' }));
+      expect(onApplyPersistentDamage).not.toHaveBeenCalled();
+    });
+
+    test('Manual entry: GM types a value without rolling and applies it', async () => {
+      const onApplyPersistentDamage = vi.fn<ApplyDamageHandler>();
+      renderPanel({
+        prompts: [persistentPrompt()],
+        combatantsById: {
+          'goblin-1': withEffect(goblin, persistentEffect())
+        },
+        onApplyPersistentDamage
+      });
+
+      const input = screen.getByRole('spinbutton') as HTMLInputElement;
+      await fireEvent.input(input, { target: { value: '5' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Apply damage' }));
+      expect(onApplyPersistentDamage).toHaveBeenCalledWith('goblin-1', 5, 'fire');
+    });
+
+    test('formula-less effect: no Roll button; manual-only', () => {
+      renderPanel({
+        prompts: [persistentPrompt()],
+        combatantsById: {
+          'goblin-1': withEffect(goblin, persistentEffect({ note: undefined }))
+        }
+      });
+
+      expect(screen.queryByRole('button', { name: /^Roll/ })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Apply damage' })).toBeInTheDocument();
+      expect(screen.getByRole('spinbutton')).toBeInTheDocument();
+    });
+
+    test('Apply damage does not auto-resolve the prompt; Remove effect still works', async () => {
+      const onResolve = vi.fn<ResolveHandler>();
+      const onApplyPersistentDamage = vi.fn<ApplyDamageHandler>();
+      renderPanel({
+        prompts: [persistentPrompt()],
+        combatantsById: {
+          'goblin-1': withEffect(goblin, persistentEffect())
+        },
+        onResolve,
+        onApplyPersistentDamage
+      });
+
+      const input = screen.getByRole('spinbutton') as HTMLInputElement;
+      await fireEvent.input(input, { target: { value: '4' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Apply damage' }));
+      expect(onApplyPersistentDamage).toHaveBeenCalled();
+      expect(onResolve).not.toHaveBeenCalled();
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Remove effect' }));
+      expect(onResolve).toHaveBeenCalledWith('prompt-pd', { type: 'remove' });
+    });
+
+    test('non-persistent promptResolution prompts still get the legacy Accept/Set controls', () => {
+      renderPanel({
+        prompts: [
+          prompt({
+            id: 'prompt-dying',
+            effectName: 'Dying',
+            suggestionType: { type: 'promptResolution', description: 'Recovery check.' },
+            currentValue: 1,
+            suggestedValue: 1
+          })
+        ],
+        combatantsById: combatants
+      });
+
+      expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Set' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Roll/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Apply damage' })).toBeNull();
+    });
   });
 
   test('preserves typed drafts across re-renders and drops drafts for resolved prompts', async () => {

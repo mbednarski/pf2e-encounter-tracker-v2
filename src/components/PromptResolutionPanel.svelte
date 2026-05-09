@@ -1,11 +1,13 @@
 <script lang="ts">
   import type {
+    AppliedEffect,
     CombatantState,
     EncounterPhase,
     Prompt,
     PromptResolution,
     TurnBoundarySuggestion
   } from '../domain';
+  import { rollDiceFormula } from '$lib/dice/formula';
   import Button from './ui/Button.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
 
@@ -13,21 +15,74 @@
   export let combatantsById: Record<string, CombatantState>;
   export let phase: EncounterPhase;
   export let onResolve: (promptId: string, resolution: PromptResolution) => void;
+  export let onApplyPersistentDamage: (
+    combatantId: string,
+    amount: number,
+    damageType: string
+  ) => void = () => {};
 
   $: focused = phase === 'RESOLVING' && prompts.length > 0;
 
-  let setValueDrafts: Record<string, number> = {};
+  interface PersistentDamageBranch {
+    damageType: string;
+    formula: string | null;
+  }
 
-  $: setValueDrafts = reconcileDrafts(prompts, setValueDrafts);
+  let setValueDrafts: Record<string, number> = {};
+  let damageDrafts: Record<string, number | null> = {};
+
+  $: persistentBranches = computePersistentBranches(prompts, combatantsById);
+  $: setValueDrafts = reconcileDrafts(prompts, persistentBranches, setValueDrafts);
+  $: damageDrafts = reconcileDamageDrafts(prompts, persistentBranches, damageDrafts);
+
+  function findEffect(p: Prompt): AppliedEffect | undefined {
+    return combatantsById[p.targetId]?.appliedEffects.find(
+      (effect) => effect.instanceId === p.effectInstanceId
+    );
+  }
+
+  function computePersistentBranches(
+    list: Prompt[],
+    byId: Record<string, CombatantState>
+  ): Record<string, PersistentDamageBranch> {
+    const next: Record<string, PersistentDamageBranch> = {};
+    for (const p of list) {
+      if (p.suggestionType.type !== 'promptResolution') continue;
+      const effect = byId[p.targetId]?.appliedEffects.find(
+        (e) => e.instanceId === p.effectInstanceId
+      );
+      if (!effect || !effect.effectId.startsWith('persistent-')) continue;
+      next[p.id] = {
+        damageType: effect.effectId.slice('persistent-'.length),
+        formula: effect.note?.trim() ? effect.note.trim() : null
+      };
+    }
+    return next;
+  }
 
   function reconcileDrafts(
     list: Prompt[],
+    branches: Record<string, PersistentDamageBranch>,
     current: Record<string, number>
   ): Record<string, number> {
     const next: Record<string, number> = {};
     for (const p of list) {
+      if (branches[p.id]) continue;
       if (!supportsSetValue(p.suggestionType)) continue;
       next[p.id] = current[p.id] ?? defaultSetValue(p);
+    }
+    return next;
+  }
+
+  function reconcileDamageDrafts(
+    list: Prompt[],
+    branches: Record<string, PersistentDamageBranch>,
+    current: Record<string, number | null>
+  ): Record<string, number | null> {
+    const next: Record<string, number | null> = {};
+    for (const p of list) {
+      if (!branches[p.id]) continue;
+      next[p.id] = p.id in current ? current[p.id] : null;
     }
     return next;
   }
@@ -90,6 +145,19 @@
     if (!Number.isFinite(value)) return;
     onResolve(p.id, { type: 'setValue', value });
   }
+
+  function handleRoll(p: Prompt, formula: string) {
+    const rolled = rollDiceFormula(formula);
+    if (rolled === null) return;
+    damageDrafts = { ...damageDrafts, [p.id]: rolled };
+  }
+
+  function handleApplyDamage(p: Prompt, branch: PersistentDamageBranch) {
+    const amount = damageDrafts[p.id];
+    if (amount === null || amount === undefined || !Number.isFinite(amount) || amount <= 0) return;
+    onApplyPersistentDamage(p.targetId, amount, branch.damageType);
+    damageDrafts = { ...damageDrafts, [p.id]: null };
+  }
 </script>
 
 {#if focused}
@@ -115,45 +183,87 @@
           </div>
           <p class="prompt__description">{prompt.description}</p>
           <div class="prompt__actions">
-            {#if showAccept(prompt.suggestionType)}
-              <Button
-                size="sm"
-                variant="primary"
-                ariaLabel={acceptLabel(prompt.suggestionType)}
-                onclick={() => handleAccept(prompt)}
-              >{acceptLabel(prompt.suggestionType)}</Button>
-            {/if}
-            {#if supportsSetValue(prompt.suggestionType)}
-              <span class="set-value">
-                <label>
-                  Set to
-                  <input
-                    type="number"
-                    aria-label={`Set value for ${prompt.effectName}`}
-                    bind:value={setValueDrafts[prompt.id]}
-                  />
-                </label>
+            {#if persistentBranches[prompt.id]}
+              {@const branch = persistentBranches[prompt.id]}
+              {#if branch.formula}
                 <Button
                   size="sm"
-                  variant="secondary"
-                  ariaLabel="Set"
-                  onclick={() => handleSetValue(prompt)}
-                >Set</Button>
+                  variant="primary"
+                  ariaLabel={`Roll ${branch.formula}`}
+                  onclick={() => handleRoll(prompt, branch.formula!)}
+                >Roll {branch.formula}</Button>
+              {/if}
+              <span class="set-value">
+                <label>
+                  Damage
+                  <input
+                    type="number"
+                    min="0"
+                    aria-label={`Damage amount for ${prompt.effectName}`}
+                    bind:value={damageDrafts[prompt.id]}
+                  />
+                </label>
+                <span class="damage-type">{branch.damageType}</span>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  ariaLabel="Apply damage"
+                  onclick={() => handleApplyDamage(prompt, branch)}
+                >Apply damage</Button>
               </span>
-            {/if}
-            <Button
-              size="sm"
-              variant="secondary"
-              ariaLabel="Dismiss"
-              onclick={() => handleDismiss(prompt)}
-            >Dismiss</Button>
-            {#if showRemove(prompt.suggestionType)}
+              <Button
+                size="sm"
+                variant="secondary"
+                ariaLabel="Dismiss"
+                onclick={() => handleDismiss(prompt)}
+              >Dismiss</Button>
               <Button
                 size="sm"
                 variant="destructive"
                 ariaLabel="Remove effect"
                 onclick={() => handleRemove(prompt)}
               >Remove effect</Button>
+            {:else}
+              {#if showAccept(prompt.suggestionType)}
+                <Button
+                  size="sm"
+                  variant="primary"
+                  ariaLabel={acceptLabel(prompt.suggestionType)}
+                  onclick={() => handleAccept(prompt)}
+                >{acceptLabel(prompt.suggestionType)}</Button>
+              {/if}
+              {#if supportsSetValue(prompt.suggestionType)}
+                <span class="set-value">
+                  <label>
+                    Set to
+                    <input
+                      type="number"
+                      aria-label={`Set value for ${prompt.effectName}`}
+                      bind:value={setValueDrafts[prompt.id]}
+                    />
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    ariaLabel="Set"
+                    onclick={() => handleSetValue(prompt)}
+                  >Set</Button>
+                </span>
+              {/if}
+              <Button
+                size="sm"
+                variant="secondary"
+                ariaLabel="Dismiss"
+                onclick={() => handleDismiss(prompt)}
+              >Dismiss</Button>
+              {#if showRemove(prompt.suggestionType)}
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  ariaLabel="Remove effect"
+                  onclick={() => handleRemove(prompt)}
+                >Remove effect</Button>
+              {/if}
             {/if}
           </div>
         </li>
@@ -275,5 +385,11 @@
     outline: 2px solid var(--color-blue);
     outline-offset: 1px;
     border-color: var(--color-ink);
+  }
+
+  .damage-type {
+    font-size: var(--text-sm);
+    color: var(--color-ink-soft);
+    text-transform: lowercase;
   }
 </style>
