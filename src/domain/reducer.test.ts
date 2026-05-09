@@ -2313,3 +2313,119 @@ describe('applyCommand effect slice', () => {
     ]);
   });
 });
+
+describe('recent effects tracking', () => {
+  test('initial state has no recent effects', () => {
+    const state = activeEncounter();
+    expect(state.recentEffectIds).toEqual([]);
+  });
+
+  test('records the effect id of an explicit APPLY_EFFECT', () => {
+    const state = activeEncounter();
+
+    const result = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1' }),
+      effectLibrary
+    );
+
+    expect(result.newState.recentEffectIds).toEqual(['frightened']);
+  });
+
+  test('dedupes when the same effect is applied twice', () => {
+    const state = activeEncounter();
+
+    const first = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1' }),
+      effectLibrary
+    );
+    const second = applyCommand(
+      first.newState,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'goblin-1' }),
+      effectLibrary
+    );
+
+    expect(second.newState.recentEffectIds).toEqual(['frightened']);
+  });
+
+  test('caps the list at six entries with oldest evicted and newest first', () => {
+    const ids = ['frightened', 'sickened', 'clumsy', 'enfeebled', 'stupefied', 'drained', 'doomed', 'slowed'];
+    let state = activeEncounter();
+
+    for (const effectId of ids) {
+      state = applyCommand(
+        state,
+        command('APPLY_EFFECT', { effectId, targetId: 'fighter-1' }),
+        effectLibrary
+      ).newState;
+    }
+
+    expect(state.recentEffectIds).toEqual(['slowed', 'doomed', 'drained', 'stupefied', 'enfeebled', 'clumsy']);
+    expect(state.recentEffectIds.length).toBe(6);
+  });
+
+  test('reapplying a previously recorded effect moves it to the front', () => {
+    let state = activeEncounter();
+    for (const effectId of ['frightened', 'sickened', 'clumsy']) {
+      state = applyCommand(
+        state,
+        command('APPLY_EFFECT', { effectId, targetId: 'fighter-1' }),
+        effectLibrary
+      ).newState;
+    }
+    expect(state.recentEffectIds).toEqual(['clumsy', 'sickened', 'frightened']);
+
+    state = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'goblin-1' }),
+      effectLibrary
+    ).newState;
+
+    expect(state.recentEffectIds).toEqual(['frightened', 'clumsy', 'sickened']);
+  });
+
+  test('RESET_ENCOUNTER clears recent effects', () => {
+    const state = activeEncounter();
+    const applied = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'frightened', targetId: 'fighter-1' }),
+      effectLibrary
+    ).newState;
+    expect(applied.recentEffectIds).toEqual(['frightened']);
+
+    const completed = applyCommand(applied, command('COMPLETE_ENCOUNTER'), effectLibrary).newState;
+    const reset = applyCommand(completed, command('RESET_ENCOUNTER'), effectLibrary);
+
+    expect(reset.newState.recentEffectIds).toEqual([]);
+  });
+
+  test('rejected APPLY_EFFECT does not record the effect id', () => {
+    const state = activeEncounter();
+
+    const result = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'missing-effect', targetId: 'fighter-1' }),
+      effectLibrary
+    );
+
+    expectRejected(result, 'APPLY_EFFECT', 'Effect missing-effect not found', state);
+    expect(result.newState.recentEffectIds).toEqual([]);
+  });
+
+  test('implied / cascade effects do not pollute recent effects', () => {
+    const state = activeEncounter();
+
+    const result = applyCommand(
+      state,
+      command('APPLY_EFFECT', { effectId: 'confused', targetId: 'fighter-1' }),
+      effectLibrary
+    );
+
+    const applied = result.newState.combatants['fighter-1'].appliedEffects;
+    const effectIds = applied.map((effect) => effect.effectId);
+    expect(effectIds).toContain('confused');
+    expect(effectIds).toContain('off-guard');
+    expect(result.newState.recentEffectIds).toEqual(['confused']);
+  });
+});

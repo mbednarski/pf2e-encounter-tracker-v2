@@ -94,6 +94,7 @@ export function encounter(overrides: Partial<EncounterState> = {}): EncounterSta
     combatants: {},
     pendingPrompts: [],
     combatLog: [],
+    recentEffectIds: [],
     ...overrides
   };
 }

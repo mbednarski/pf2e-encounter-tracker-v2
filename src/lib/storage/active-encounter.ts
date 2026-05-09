@@ -17,6 +17,9 @@ export async function loadActiveEncounter(): Promise<EncounterState | null> {
   const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, KEY)) as EncounterState | undefined;
   if (!stored) return null;
   if (stored.phase === 'COMPLETED') return null;
+  if (!Array.isArray((stored as { recentEffectIds?: unknown }).recentEffectIds)) {
+    stored.recentEffectIds = [];
+  }
   return stored;
 }
 

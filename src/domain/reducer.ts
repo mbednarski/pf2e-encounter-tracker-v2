@@ -724,7 +724,8 @@ function resetEncounter(state: EncounterState): CommandResult {
       initiative: { order: [], currentIndex: -1, delaying: [] },
       combatants: resetCombatants,
       pendingPrompts: [],
-      combatLog: []
+      combatLog: [],
+      recentEffectIds: []
     },
     events: [
       { type: 'encounter-reset' },
@@ -870,7 +871,14 @@ function applyEffect(
     return reject(state, 'APPLY_EFFECT', created.error);
   }
 
-  return updateCombatant(state, { ...target, appliedEffects }, events);
+  const result = updateCombatant(state, { ...target, appliedEffects }, events);
+  return {
+    ...result,
+    newState: {
+      ...result.newState,
+      recentEffectIds: pushRecent(state.recentEffectIds, command.payload.effectId)
+    }
+  };
 }
 
 interface AppendAppliedEffectInput {
@@ -1607,6 +1615,13 @@ function updateCombatant(state: EncounterState, combatant: CombatantState, event
     },
     events
   };
+}
+
+const RECENT_EFFECTS_CAP = 6;
+
+function pushRecent(current: readonly string[], effectId: string): string[] {
+  const next = [effectId, ...current.filter((id) => id !== effectId)];
+  return next.length > RECENT_EFFECTS_CAP ? next.slice(0, RECENT_EFFECTS_CAP) : next;
 }
 
 function isPositive(value: number): boolean {

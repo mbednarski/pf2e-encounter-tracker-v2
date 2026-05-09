@@ -193,6 +193,11 @@ export interface EncounterState {
   pendingPrompts: Prompt[];
   turnResolution?: TurnResolutionContinuation;
   combatLog: LogEntry[];
+  /**
+   * Effect IDs most recently applied via APPLY_EFFECT, newest first, deduped,
+   * capped at RECENT_EFFECTS_CAP. Implied / cascade children are not pushed.
+   */
+  recentEffectIds: string[];
 }
 
 interface BaseCommand<TType extends CommandType, TPayload> {
