@@ -5,11 +5,15 @@ import {
   combatantVisualState,
   dispatchEncounterCommand,
   formatDuration,
+  groupConditionsByCategory,
+  listAfflictionOptions,
   listConditionDefinitions,
   listConditionOptions,
   listConditionWedgeCounts,
+  listPersistentDamageOptions,
   listRecentConditionOptions,
   listRemovableEffects,
+  listSpellEffectOptions,
   makeCombatant,
   makeCreatureCombatant,
   newEncounterState,
@@ -679,11 +683,12 @@ describe('listConditionWedgeCounts', () => {
     const expectedConditions = Object.values(effectLibrary).filter((d) => d.category === 'condition').length;
     const expectedPersistent = Object.values(effectLibrary).filter((d) => d.category === 'persistent-damage').length;
     const expectedAfflictions = Object.values(effectLibrary).filter((d) => d.category === 'affliction').length;
+    const expectedSpells = Object.values(effectLibrary).filter((d) => d.category === 'spell').length;
 
     expect(counts.conditions).toBe(expectedConditions);
     expect(counts.persistent).toBe(expectedPersistent);
     expect(counts.afflictions).toBe(expectedAfflictions);
-    expect(counts.buffs).toBe(0);
+    expect(counts.spells).toBe(expectedSpells);
   });
 });
 
@@ -878,3 +883,101 @@ function creatureTemplate(overrides: Partial<Creature> = {}): Creature {
     ...overrides
   };
 }
+
+describe('listPersistentDamageOptions', () => {
+  test('returns persistent-damage entries from the library, sorted by name, all unvalued', () => {
+    const options = listPersistentDamageOptions();
+    const expected = Object.values(effectLibrary).filter((d) => d.category === 'persistent-damage').length;
+    expect(options.length).toBe(expected);
+    for (const option of options) expect(option.value.kind).toBe('unvalued');
+
+    const sortedNames = [...options].map((o) => o.name).sort((a, b) => a.localeCompare(b));
+    expect(options.map((o) => o.name)).toEqual(sortedNames);
+  });
+});
+
+describe('listAfflictionOptions', () => {
+  test('returns affliction entries from the library', () => {
+    const options = listAfflictionOptions();
+    const expected = Object.values(effectLibrary).filter((d) => d.category === 'affliction').length;
+    expect(options.length).toBe(expected);
+    expect(options.length).toBeGreaterThan(0);
+  });
+});
+
+describe('listSpellEffectOptions', () => {
+  test('returns spell entries from the library', () => {
+    const options = listSpellEffectOptions();
+    const expected = Object.values(effectLibrary).filter((d) => d.category === 'spell').length;
+    expect(options.length).toBe(expected);
+    expect(options.length).toBeGreaterThan(0);
+  });
+});
+
+describe('groupConditionsByCategory', () => {
+  test('returns groups in declared order with every condition assigned exactly once', () => {
+    const groups = groupConditionsByCategory();
+    const declaredOrder = ['Common', 'Diminishment', 'Detection', 'Disabling', 'Mental', 'Other'];
+    const observedOrder = groups.map((g) => g.label);
+    for (let i = 1; i < observedOrder.length; i++) {
+      const a = declaredOrder.indexOf(observedOrder[i - 1]);
+      const b = declaredOrder.indexOf(observedOrder[i]);
+      expect(a).toBeLessThan(b);
+    }
+
+    const conditionDefinitions = listConditionDefinitions();
+    const groupedIds = new Set<string>();
+    for (const group of groups) {
+      expect(group.options.length).toBeGreaterThan(0);
+      for (const option of group.options) {
+        expect(groupedIds.has(option.id)).toBe(false);
+        groupedIds.add(option.id);
+      }
+    }
+    expect(groupedIds.size).toBe(conditionDefinitions.length);
+  });
+});
+
+describe('resolveApplyChoice with note', () => {
+  test('forwards note when provided for both unvalued and valued conditions', () => {
+    const unvalued: ConditionOption = {
+      id: 'persistent-fire',
+      name: 'Persistent Fire',
+      value: { kind: 'unvalued' }
+    };
+    const valued: ConditionOption = {
+      id: 'frightened',
+      name: 'Frightened',
+      value: { kind: 'valued', defaultValue: 1, maxValue: 4 }
+    };
+    expect(resolveApplyChoice(unvalued, 1, '2d6')).toEqual({
+      kind: 'unvalued',
+      effectId: 'persistent-fire',
+      note: '2d6'
+    });
+    expect(resolveApplyChoice(valued, 3, 'from Demoralize')).toEqual({
+      kind: 'valued',
+      effectId: 'frightened',
+      value: 3,
+      note: 'from Demoralize'
+    });
+  });
+
+  test('omits note when blank or not provided', () => {
+    const unvalued: ConditionOption = {
+      id: 'off-guard',
+      name: 'Off-Guard',
+      value: { kind: 'unvalued' }
+    };
+    expect(resolveApplyChoice(unvalued, 1)).toEqual({
+      kind: 'unvalued',
+      effectId: 'off-guard',
+      note: undefined
+    });
+    expect(resolveApplyChoice(unvalued, 1, '   ')).toEqual({
+      kind: 'unvalued',
+      effectId: 'off-guard',
+      note: undefined
+    });
+  });
+});

@@ -198,13 +198,22 @@ export interface AppliedEffectView {
   effectId: string;
   name: string;
   value: AppliedEffectValue;
+  duration: Duration;
   durationLabel: string;
+  note?: string;
   source: AppliedEffectSource;
 }
 
 export type ApplyConditionChoice =
-  | { kind: 'valued'; effectId: string; value: number }
-  | { kind: 'unvalued'; effectId: string };
+  | { kind: 'valued'; effectId: string; value: number; note?: string }
+  | { kind: 'unvalued'; effectId: string; note?: string };
+
+export type EffectModalTab =
+  | 'applied'
+  | 'conditions'
+  | 'persistent'
+  | 'afflictions'
+  | 'effects';
 
 export function listConditionDefinitions(): EffectDefinition[] {
   return Object.values(effectLibrary)
@@ -230,14 +239,20 @@ export function clampValue(value: number, maxValue: number | undefined): number 
   return maxValue !== undefined ? Math.min(lowerBounded, maxValue) : lowerBounded;
 }
 
-export function resolveApplyChoice(option: ConditionOption, rawValue: number): ApplyConditionChoice {
+export function resolveApplyChoice(
+  option: ConditionOption,
+  rawValue: number,
+  note?: string
+): ApplyConditionChoice {
+  const trimmedNote = note?.trim() ? note : undefined;
   if (option.value.kind === 'unvalued') {
-    return { kind: 'unvalued', effectId: option.id };
+    return { kind: 'unvalued', effectId: option.id, note: trimmedNote };
   }
   return {
     kind: 'valued',
     effectId: option.id,
-    value: clampValue(rawValue, option.value.maxValue)
+    value: clampValue(rawValue, option.value.maxValue),
+    note: trimmedNote
   };
 }
 
@@ -287,7 +302,9 @@ function toAppliedEffectView(
     effectId: effect.effectId,
     name: definition?.name ?? effect.effectId,
     value,
+    duration: effect.duration,
     durationLabel: formatDuration(effect.duration, state),
+    note: effect.note,
     source
   };
 }
@@ -321,14 +338,14 @@ function combatantName(state: EncounterState, combatantId: string): string {
 export interface ConditionWedgeCounts {
   conditions: number;
   persistent: number;
-  buffs: number;
+  spells: number;
   afflictions: number;
 }
 
 export type ConditionWedgeCategory = keyof ConditionWedgeCounts;
 
 export function listConditionWedgeCounts(): ConditionWedgeCounts {
-  const counts: ConditionWedgeCounts = { conditions: 0, persistent: 0, buffs: 0, afflictions: 0 };
+  const counts: ConditionWedgeCounts = { conditions: 0, persistent: 0, spells: 0, afflictions: 0 };
   for (const definition of Object.values(effectLibrary)) {
     switch (definition.category) {
       case 'condition':
@@ -340,7 +357,9 @@ export function listConditionWedgeCounts(): ConditionWedgeCounts {
       case 'affliction':
         counts.afflictions++;
         break;
-      // 'spell' and 'custom' are not exposed as wedges; 'buff' has no library data yet.
+      case 'spell':
+        counts.spells++;
+        break;
     }
   }
   return counts;
@@ -361,6 +380,106 @@ export function listRecentConditionOptions(state: EncounterState): ConditionOpti
     });
   }
   return options;
+}
+
+function definitionToOption(definition: EffectDefinition): ConditionOption {
+  return {
+    id: definition.id,
+    name: definition.name,
+    value: definition.hasValue
+      ? { kind: 'valued', defaultValue: 1, maxValue: definition.maxValue }
+      : { kind: 'unvalued' },
+    description: definition.description
+  };
+}
+
+function listOptionsByCategory(category: EffectDefinition['category']): ConditionOption[] {
+  return Object.values(effectLibrary)
+    .filter((definition) => definition.category === category)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(definitionToOption);
+}
+
+export function listPersistentDamageOptions(): ConditionOption[] {
+  return listOptionsByCategory('persistent-damage');
+}
+
+export function listAfflictionOptions(): ConditionOption[] {
+  return listOptionsByCategory('affliction');
+}
+
+export function listSpellEffectOptions(): ConditionOption[] {
+  return listOptionsByCategory('spell');
+}
+
+export interface ConditionGroup {
+  label: string;
+  options: ConditionOption[];
+}
+
+const CONDITION_GROUP_ORDER = [
+  'Common',
+  'Diminishment',
+  'Detection',
+  'Disabling',
+  'Mental',
+  'Other'
+] as const;
+
+type ConditionGroupLabel = (typeof CONDITION_GROUP_ORDER)[number];
+
+// Maps condition id → group label. Anything not listed falls into 'Other'.
+const CONDITION_GROUPS: Record<string, ConditionGroupLabel> = {
+  'off-guard': 'Common',
+  frightened: 'Common',
+  sickened: 'Common',
+  stunned: 'Common',
+  slowed: 'Common',
+  prone: 'Common',
+  dying: 'Common',
+  wounded: 'Common',
+
+  clumsy: 'Diminishment',
+  enfeebled: 'Diminishment',
+  drained: 'Diminishment',
+  stupefied: 'Diminishment',
+  doomed: 'Diminishment',
+
+  concealed: 'Detection',
+  hidden: 'Detection',
+  invisible: 'Detection',
+  observed: 'Detection',
+  undetected: 'Detection',
+  unnoticed: 'Detection',
+
+  paralyzed: 'Disabling',
+  petrified: 'Disabling',
+  unconscious: 'Disabling',
+  restrained: 'Disabling',
+  grabbed: 'Disabling',
+  immobilized: 'Disabling',
+  encumbered: 'Disabling',
+  quickened: 'Disabling',
+
+  confused: 'Mental',
+  controlled: 'Mental',
+  fascinated: 'Mental',
+  fleeing: 'Mental',
+  fatigued: 'Mental'
+};
+
+export function groupConditionsByCategory(): ConditionGroup[] {
+  const buckets = new Map<ConditionGroupLabel, ConditionOption[]>();
+  for (const label of CONDITION_GROUP_ORDER) buckets.set(label, []);
+
+  for (const definition of listConditionDefinitions()) {
+    const label: ConditionGroupLabel = CONDITION_GROUPS[definition.id] ?? 'Other';
+    buckets.get(label)!.push(definitionToOption(definition));
+  }
+
+  return CONDITION_GROUP_ORDER
+    .map((label) => ({ label, options: buckets.get(label) ?? [] }))
+    .filter((group) => group.options.length > 0);
 }
 
 export interface RemovableEffectOption {
