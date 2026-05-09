@@ -89,6 +89,32 @@
     clearLongPress();
   }
 
+  function isInnerInteractive(target: EventTarget | null, card: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    const hit = target.closest(
+      'button, a, input, select, textarea, [role="button"], [contenteditable="true"]'
+    );
+    return hit !== null && hit !== card;
+  }
+
+  function handleArticleClick(event: MouseEvent) {
+    if (!onSelect) return;
+    if (isInnerInteractive(event.target, event.currentTarget)) return;
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
+    onSelect(combatant.id);
+  }
+
+  function handleArticleKeyDown(event: KeyboardEvent) {
+    if (!onSelect) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (isInnerInteractive(event.target, event.currentTarget)) return;
+    event.preventDefault();
+    onSelect(combatant.id);
+  }
+
   let pickerOpen = false;
   let pickerEffectId = '';
   let pickerValue = 1;
@@ -181,18 +207,25 @@
       : 'Revive is unavailable in this phase';
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <article
   class:current-card={isCurrent}
   class:selected-card={isSelected}
+  class:selectable={Boolean(onSelect)}
   class:dimmed={visualState !== 'alive'}
   data-visual-state={visualState}
   data-hp-tone={hpTone}
   class="combatant-card"
+  role={onSelect ? 'button' : undefined}
+  tabindex={onSelect ? 0 : -1}
+  aria-label={onSelect ? `Select ${combatant.name}` : undefined}
   oncontextmenu={handleContextMenu}
   onpointerdown={handleArticlePointerDown}
   onpointermove={handleArticlePointerMove}
   onpointerup={handleArticlePointerEnd}
   onpointercancel={handleArticlePointerEnd}
+  onclick={handleArticleClick}
+  onkeydown={handleArticleKeyDown}
 >
   <div class="card-heading">
     <div class="card-heading__main">
@@ -438,11 +471,20 @@
   }
 
   .selected-card {
-    box-shadow: inset 3px 0 0 var(--color-blue), 0 1px 2px rgba(31, 26, 20, 0.08);
+    box-shadow: inset 0 0 0 2px var(--color-blue), 0 1px 2px rgba(31, 26, 20, 0.08);
   }
 
   .selected-card.current-card {
-    box-shadow: inset 3px 0 0 var(--color-blue), var(--shadow-soft);
+    box-shadow: inset 0 0 0 2px var(--color-blue), var(--shadow-soft);
+  }
+
+  .combatant-card.selectable {
+    cursor: pointer;
+  }
+
+  .combatant-card:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
   }
 
   .combatant-card.dimmed {
