@@ -54,7 +54,7 @@ export function prompt(overrides: PromptOverrides = {}): Prompt {
 export function combatant(id: string, overrides: Partial<CombatantState> = {}): CombatantState {
   return {
     id,
-    creatureId: `${id}-creature`,
+    sourceId: `${id}-creature`,
     name: id,
     sourceType: 'creature',
     baseStats: {

@@ -18,7 +18,7 @@ const goblinAndFighter = stateWith({
 function makeCombatant(id: string, name: string) {
   return {
     id,
-    creatureId: `${id}-creature`,
+    sourceId: `${id}-creature`,
     name,
     sourceType: 'creature' as const,
     baseStats: { hp: 10, ac: 15, fortitude: 5, reflex: 5, will: 5, perception: 5, speed: 25, skills: {} },

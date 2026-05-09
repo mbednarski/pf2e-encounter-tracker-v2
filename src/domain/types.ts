@@ -119,6 +119,34 @@ export interface Creature {
   notes?: string;
 }
 
+export interface PartyMember {
+  id: string;
+  name: string;
+  playerName?: string;
+  level: number;
+  ancestry?: string;
+  class?: string;
+
+  ac: number;
+  fortitude: number;
+  reflex: number;
+  will: number;
+  perception: number;
+  hp: number;
+
+  speed?: Record<string, number>;
+  skills?: Record<string, number>;
+  resistances?: { type: string; value: number }[];
+  weaknesses?: { type: string; value: number }[];
+  immunities?: string[];
+
+  persistentEffects: AppliedEffect[];
+  companionIds: string[];
+
+  notes?: string;
+  tags: string[];
+}
+
 export type Duration =
   | { type: 'untilTurnEnd'; combatantId: CombatantId }
   | { type: 'untilTurnStart'; combatantId: CombatantId }
@@ -139,7 +167,7 @@ export interface AppliedEffect {
 
 export interface CombatantState {
   id: CombatantId;
-  creatureId: string;
+  sourceId: string;
   name: string;
   sourceType: SourceType;
   masterId?: CombatantId;

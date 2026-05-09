@@ -18,7 +18,7 @@ export function createCombatantFromCreature({
 
   return {
     id: combatantId,
-    creatureId: creature.id,
+    sourceId: creature.id,
     name: name ?? combatantCreature.name,
     sourceType: 'creature',
     baseStats: {

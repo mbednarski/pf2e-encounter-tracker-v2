@@ -6,6 +6,7 @@ import {
   activeEncounter,
   combatant,
   command,
+  completedEncounter,
   emptyEffects,
   encounter,
   expectEvents,
@@ -2311,6 +2312,115 @@ describe('applyCommand effect slice', () => {
         reason: 'cascade'
       }
     ]);
+  });
+});
+
+describe('REMOVE_COMBATANT', () => {
+  test('rejects when the combatant does not exist', () => {
+    const state = encounter();
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'ghost' }), emptyEffects);
+    expectRejected(result, 'REMOVE_COMBATANT', 'Combatant ghost not found', state);
+  });
+
+  test('removes a combatant from a PREPARING encounter and prunes initiative.order', () => {
+    const state = encounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1')
+      },
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: -1, delaying: [] }
+    });
+
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
+
+    expect(result.newState.combatants['goblin-1']).toBeUndefined();
+    expect(result.newState.combatants['fighter-1']).toBeDefined();
+    expect(result.newState.initiative.order).toEqual(['fighter-1']);
+    expect(result.newState.initiative.currentIndex).toBe(-1);
+    expectEvents(result, [{ type: 'combatant-removed', combatantId: 'goblin-1', name: 'goblin-1' }]);
+  });
+
+  test('decrements currentIndex when removing a combatant before the active one in ACTIVE phase', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1', { name: 'Goblin' }),
+        'fighter-1': combatant('fighter-1', { name: 'Fighter' }),
+        'wizard-1': combatant('wizard-1', { name: 'Wizard' })
+      },
+      initiative: { order: ['goblin-1', 'fighter-1', 'wizard-1'], currentIndex: 2, delaying: [] }
+    });
+
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
+
+    expect(result.newState.initiative.order).toEqual(['fighter-1', 'wizard-1']);
+    expect(result.newState.initiative.currentIndex).toBe(1);
+  });
+
+  test('leaves currentIndex unchanged when removing a combatant after the active one', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'wizard-1': combatant('wizard-1')
+      },
+      initiative: { order: ['goblin-1', 'fighter-1', 'wizard-1'], currentIndex: 0, delaying: [] }
+    });
+
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'wizard-1' }), emptyEffects);
+
+    expect(result.newState.initiative.order).toEqual(['goblin-1', 'fighter-1']);
+    expect(result.newState.initiative.currentIndex).toBe(0);
+  });
+
+  test('clamps currentIndex when removing the active combatant', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1')
+      },
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, delaying: [] }
+    });
+
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'fighter-1' }), emptyEffects);
+
+    expect(result.newState.initiative.order).toEqual(['goblin-1']);
+    expect(result.newState.initiative.currentIndex).toBe(0);
+  });
+
+  test('removes a combatant from initiative.delaying as well as combatants', () => {
+    const state = activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1'),
+        'wizard-1': combatant('wizard-1')
+      },
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 0, delaying: ['wizard-1'] }
+    });
+
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'wizard-1' }), emptyEffects);
+
+    expect(result.newState.combatants['wizard-1']).toBeUndefined();
+    expect(result.newState.initiative.delaying).toEqual([]);
+    expect(result.newState.initiative.order).toEqual(['goblin-1', 'fighter-1']);
+  });
+
+  test('emits a combatant-removed event with the original display name', () => {
+    const state = encounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1', { name: 'Goblin Warrior' })
+      },
+      initiative: { order: ['goblin-1'], currentIndex: -1, delaying: [] }
+    });
+
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
+
+    expectEvents(result, [{ type: 'combatant-removed', combatantId: 'goblin-1', name: 'Goblin Warrior' }]);
+  });
+
+  test('rejects in COMPLETED phase via the allowedPhases guard', () => {
+    const state = completedEncounter();
+    const result = applyCommand(state, command('REMOVE_COMBATANT', { combatantId: 'goblin-1' }), emptyEffects);
+    expect(result.events[0].type).toBe('command-rejected');
   });
 });
 
