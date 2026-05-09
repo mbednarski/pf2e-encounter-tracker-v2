@@ -15,7 +15,7 @@ describe('createCombatantFromCreature', () => {
 
     expect(combatant).toMatchObject({
       id: 'goblin-1',
-      creatureId: 'goblin-warrior',
+      sourceId: 'goblin-warrior',
       name: 'Goblin Warrior 1',
       sourceType: 'creature',
       baseStats: {
@@ -150,7 +150,7 @@ describe('createCombatantFromCreature', () => {
 
     expect(combatant).toMatchObject({
       id: 'elite-goblin-1',
-      creatureId: 'goblin-warrior',
+      sourceId: 'goblin-warrior',
       name: 'Goblin Warrior',
       baseStats: {
         hp: 28,

@@ -65,6 +65,8 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
   switch (command.type) {
     case 'ADD_COMBATANT':
       return addCombatant(state, command.payload.combatant);
+    case 'REMOVE_COMBATANT':
+      return removeCombatant(state, command.payload.combatantId);
     case 'SET_INITIATIVE_ORDER':
       return setInitiativeOrder(state, command.payload.order);
     case 'START_ENCOUNTER':
@@ -160,6 +162,44 @@ function addCombatant(state: EncounterState, combatant: CombatantState): Command
   }
 
   return { newState, events: [event] };
+}
+
+function removeCombatant(state: EncounterState, combatantId: CombatantId): CommandResult {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return reject(state, 'REMOVE_COMBATANT', `Combatant ${combatantId} not found`);
+  }
+
+  const { [combatantId]: _removed, ...remainingCombatants } = state.combatants;
+
+  const removedIndex = state.initiative.order.indexOf(combatantId);
+  const newOrder = state.initiative.order.filter((id) => id !== combatantId);
+  const newDelaying = state.initiative.delaying.filter((id) => id !== combatantId);
+
+  let newCurrentIndex = state.initiative.currentIndex;
+  if (state.phase === 'ACTIVE' && removedIndex !== -1) {
+    if (removedIndex < state.initiative.currentIndex) {
+      newCurrentIndex = state.initiative.currentIndex - 1;
+    } else if (removedIndex === state.initiative.currentIndex) {
+      newCurrentIndex = newOrder.length === 0 ? 0 : Math.min(state.initiative.currentIndex, newOrder.length - 1);
+    }
+  }
+
+  const newState: EncounterState = {
+    ...state,
+    combatants: remainingCombatants,
+    initiative: {
+      ...state.initiative,
+      order: newOrder,
+      delaying: newDelaying,
+      currentIndex: newCurrentIndex
+    }
+  };
+
+  return {
+    newState,
+    events: [{ type: 'combatant-removed', combatantId, name: combatant.name }]
+  };
 }
 
 function setInitiativeOrder(state: EncounterState, order: CombatantId[]): CommandResult {

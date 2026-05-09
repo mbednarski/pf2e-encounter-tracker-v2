@@ -4,6 +4,7 @@ import {
   ACTIVE_ENCOUNTER_STORE,
   CREATURE_LIBRARY_STORE,
   DB_NAME,
+  PARTY_MEMBER_STORE,
   SETTINGS_STORE
 } from './db';
 
@@ -51,11 +52,39 @@ describe('IndexedDB schema migration', () => {
     openConnections.push(db);
 
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE].sort()
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
       sentinel: 'v1-data'
     });
+  });
+
+  it('preserves prior records when upgrading from v3 to v4 and adds the partyMembers store', async () => {
+    const v3 = await openDB(DB_NAME, 3, {
+      upgrade(db) {
+        db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
+        db.createObjectStore(SETTINGS_STORE);
+        db.createObjectStore(CREATURE_LIBRARY_STORE);
+      }
+    });
+    await v3.put(ACTIVE_ENCOUNTER_STORE, { sentinel: 'v3-active' }, 'current');
+    await v3.put(SETTINGS_STORE, 'sk-test', 'llmApiKey');
+    await v3.put(CREATURE_LIBRARY_STORE, { id: 'goblin', name: 'Goblin' }, 'goblin');
+    v3.close();
+
+    const { getDb } = await import('./db');
+    const db = await getDb()!;
+    openConnections.push(db);
+
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
+    );
+    expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
+      sentinel: 'v3-active'
+    });
+    expect(await db.get(SETTINGS_STORE, 'llmApiKey')).toBe('sk-test');
+    expect(await db.getAll(CREATURE_LIBRARY_STORE)).toEqual([{ id: 'goblin', name: 'Goblin' }]);
+    expect(await db.getAll(PARTY_MEMBER_STORE)).toEqual([]);
   });
 
   it('preserves prior activeEncounter + settings records when upgrading from v2 to v3', async () => {
@@ -75,7 +104,7 @@ describe('IndexedDB schema migration', () => {
     openConnections.push(db);
 
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE].sort()
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
       sentinel: 'v2-active'
@@ -89,7 +118,7 @@ describe('IndexedDB schema migration', () => {
     const db = await getDb()!;
     openConnections.push(db);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE].sort()
+      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
     );
   });
 });

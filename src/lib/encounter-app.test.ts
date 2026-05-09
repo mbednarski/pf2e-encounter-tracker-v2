@@ -29,7 +29,7 @@ describe('encounter app boundary', () => {
 
     expect(combatant).toMatchObject({
       id: 'goblin-1',
-      creatureId: 'goblin-warrior',
+      sourceId: 'goblin-warrior',
       name: 'Goblin Scout',
       currentHp: 18,
       baseStats: {

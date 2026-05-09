@@ -1,12 +1,18 @@
 <script lang="ts">
-  import type { Creature } from '../domain';
-  import type { ManualCombatantInput, TemplateAdjustmentChoice } from '$lib/encounter-app';
+  import type { Creature, PartyMember } from '../domain';
+  import type {
+    ConditionOption,
+    ManualCombatantInput,
+    TemplateAdjustmentChoice
+  } from '$lib/encounter-app';
   import BestiarySection from './BestiarySection.svelte';
   import PartySection from './PartySection.svelte';
   import SetupPanel from './SetupPanel.svelte';
 
   export let canStart: boolean;
   export let creatures: Creature[];
+  export let partyMembers: PartyMember[];
+  export let conditionOptions: ConditionOption[];
   export let onAddCreatures: (input: {
     creature: Creature;
     adjustment: TemplateAdjustmentChoice;
@@ -16,6 +22,10 @@
   export let onAddManual: (input: Omit<ManualCombatantInput, 'id'>) => void;
   export let onImportYamlFiles: (files: File[]) => void;
   export let onRemoveCreature: (id: string) => void;
+  export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
+  export let onRemovePartyMember: (id: string) => void;
+  export let onSavePartyMember: (partyMember: PartyMember) => void;
+  export let onImportPartyMemberYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
   export let onReset: () => void;
 
@@ -28,7 +38,14 @@
   <header class="library__header">
     <h2 id="library-title">Library</h2>
   </header>
-  <PartySection />
+  <PartySection
+    {partyMembers}
+    {conditionOptions}
+    {onAddPartyMemberToEncounter}
+    {onRemovePartyMember}
+    {onSavePartyMember}
+    {onImportPartyMemberYamlFiles}
+  />
   <BestiarySection {creatures} onAddCreature={quickAdd} {onRemoveCreature} />
   <div class="library__configure">
     <SetupPanel
