@@ -231,13 +231,17 @@ describe('computeEncounterXP', () => {
     expect(noEnemies.xpAward).toBe(0);
   });
 
-  it('4 PCs L5 vs one L5 elite → 60 XP, Low (elite shifts effective level +1)', () => {
+  // CombatantState.level is the *post-adjustment* level (set by applyEliteWeak
+  // inside createCombatantFromCreature). The XP calculator must NOT shift it
+  // again — doing so double-counts the adjustment.
+
+  it('4 PCs L5 vs an Elite basilisk (base L5 → stored L6) → 60 XP, Low', () => {
     const state = makeEncounter([
       pc('p1', 5),
       pc('p2', 5),
       pc('p3', 5),
       pc('p4', 5),
-      enemy('e1', 5, { templateAdjustment: 'elite' })
+      enemy('e1', 6, { templateAdjustment: 'elite' })
     ]);
     const result = computeEncounterXP(state);
     expect(result.totalXP).toBe(60);
@@ -246,7 +250,7 @@ describe('computeEncounterXP', () => {
     expect(result.contributions[0].delta).toBe(1);
   });
 
-  it('4 PCs L5 vs one L4 weak → 20 XP (weak shifts effective level -1)', () => {
+  it('4 PCs L5 vs a Weak basilisk (base L5 → stored L4) → 30 XP, Trivial', () => {
     const state = makeEncounter([
       pc('p1', 5),
       pc('p2', 5),
@@ -255,10 +259,24 @@ describe('computeEncounterXP', () => {
       enemy('e1', 4, { templateAdjustment: 'weak' })
     ]);
     const result = computeEncounterXP(state);
-    expect(result.contributions[0].effectiveLevel).toBe(3);
-    expect(result.contributions[0].delta).toBe(-2);
-    expect(result.totalXP).toBe(20);
+    expect(result.contributions[0].effectiveLevel).toBe(4);
+    expect(result.contributions[0].delta).toBe(-1);
+    expect(result.totalXP).toBe(30);
     expect(result.difficulty).toBe('Trivial');
+  });
+
+  it('4 PCs L5 vs Normal + Weak + Elite basilisks (party L5) → 130 XP', () => {
+    const state = makeEncounter([
+      pc('p1', 5),
+      pc('p2', 5),
+      pc('p3', 5),
+      pc('p4', 5),
+      enemy('e1', 5),
+      enemy('e2', 4, { templateAdjustment: 'weak' }),
+      enemy('e3', 6, { templateAdjustment: 'elite' })
+    ]);
+    const result = computeEncounterXP(state);
+    expect(result.totalXP).toBe(130);
   });
 
   it('5 PCs L4 vs L5+L5+L7 → uses party-5 thresholds', () => {

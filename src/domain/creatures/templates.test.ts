@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { expectSerializable } from '../test-support';
 import type { Creature } from '../types';
-import { applyEliteWeak } from './templates';
+import { adjustedLevel, applyEliteWeak } from './templates';
 
 describe('applyEliteWeak', () => {
   test('applies elite numeric, strike, and spellcasting adjustments without mutating the source creature', () => {
@@ -91,6 +91,21 @@ describe('applyEliteWeak', () => {
 
     expect(applyEliteWeak(creatureTemplate({ level: 1 }), 'weak').level).toBe(-1);
     expect(applyEliteWeak(creatureTemplate({ level: 2 }), 'weak').level).toBe(1);
+  });
+});
+
+describe('adjustedLevel', () => {
+  test('elite adds +1, or +2 when starting at level <= 0', () => {
+    expect(adjustedLevel(5, 'elite')).toBe(6);
+    expect(adjustedLevel(1, 'elite')).toBe(2);
+    expect(adjustedLevel(0, 'elite')).toBe(2);
+    expect(adjustedLevel(-1, 'elite')).toBe(1);
+  });
+
+  test('weak subtracts 1, or 2 when starting at level 1', () => {
+    expect(adjustedLevel(5, 'weak')).toBe(4);
+    expect(adjustedLevel(2, 'weak')).toBe(1);
+    expect(adjustedLevel(1, 'weak')).toBe(-1);
   });
 });
 
