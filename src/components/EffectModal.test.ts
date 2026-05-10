@@ -153,6 +153,18 @@ describe('EffectModal', () => {
     expect(onApply).toHaveBeenCalledWith({ kind: 'unvalued', effectId: 'persistent-fire', note: '2d6' });
   });
 
+  test('Persistent tab: chip strips the "Persistent" prefix from its visible label but keeps the full name as accessible name', () => {
+    const { container } = render(
+      EffectModal,
+      { props: baseProps({ initialTab: 'persistent' as EffectModalTab }) }
+    );
+    const chip = container.querySelector('[data-option-id="persistent-fire"]') as HTMLButtonElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent ?? '').not.toMatch(/Persistent/i);
+    expect(chip.textContent ?? '').toMatch(/Fire/);
+    expect(chip.getAttribute('aria-label')).toBe('Persistent Fire');
+  });
+
   test('Escape and backdrop click both call onClose', async () => {
     const onClose = vi.fn();
     const { container } = render(EffectModal, { props: baseProps({ onClose }) });

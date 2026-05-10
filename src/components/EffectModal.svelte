@@ -8,6 +8,8 @@
     type ConditionOption,
     type EffectModalTab
   } from '$lib/encounter-app';
+  import { persistentEffectIdToDamageType } from '$lib/effects/damage-type-glyph';
+  import DamageTypeGlyph from './ui/DamageTypeGlyph.svelte';
   import type { Duration } from '../domain';
 
   export let combatantName: string;
@@ -93,6 +95,10 @@
   function startPersistent(option: ConditionOption) {
     persistentFormulaForId = option.id;
     persistentFormula = DEFAULT_PERSISTENT_FORMULA;
+  }
+
+  function persistentChipLabel(name: string): string {
+    return name.replace(/^Persistent\s+/i, '');
   }
 
   function selectQuickPick(formula: string) {
@@ -366,15 +372,21 @@
           <p class="hint">Pick a damage type, then click a formula (or type a custom one).</p>
           <div class="chip-row">
             {#each persistentOptions as option (option.id)}
+              {@const damageType = persistentEffectIdToDamageType(option.id)}
               <div class="chip-wrap">
                 <button
                   type="button"
-                  class="chip"
+                  class="chip persistent-chip"
                   class:chip-active={persistentFormulaForId === option.id}
                   data-option-id={option.id}
+                  aria-label={option.name}
+                  title={option.name}
                   onclick={() => startPersistent(option)}
                 >
-                  {option.name}
+                  {#if damageType}
+                    <DamageTypeGlyph type={damageType} />
+                  {/if}
+                  <span>{persistentChipLabel(option.name)}</span>
                 </button>
                 {#if persistentFormulaForId === option.id}
                   <div class="formula-picker" data-formula-picker>
@@ -787,6 +799,12 @@
     background: var(--color-ink);
     color: var(--color-bg);
     border-color: var(--color-ink);
+  }
+
+  .persistent-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .value-picker {
