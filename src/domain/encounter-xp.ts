@@ -112,10 +112,7 @@ export function classifyDifficulty(
 }
 
 function effectiveCreatureLevel(c: CombatantState): number | null {
-  if (c.level == null) return null;
-  if (c.templateAdjustment === 'elite') return c.level + 1;
-  if (c.templateAdjustment === 'weak') return c.level - 1;
-  return c.level;
+  return c.level ?? null;
 }
 
 export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
