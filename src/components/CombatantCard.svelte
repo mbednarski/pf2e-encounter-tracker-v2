@@ -40,6 +40,8 @@
   export let onRequestRadial:
     | ((id: string, anchor: { x: number; y: number }) => void)
     | undefined = undefined;
+  export let initiativeScore: number | undefined = undefined;
+  export let onSetInitiative: ((id: string, value: number | null) => void) | undefined = undefined;
 
   const LONG_PRESS_MS = 400;
   const LONG_PRESS_TOLERANCE_PX = 6;
@@ -113,6 +115,44 @@
     if (isInnerInteractive(event.target, event.currentTarget)) return;
     event.preventDefault();
     onSelect(combatant.id);
+  }
+
+  let initiativeDraft: number | null = null;
+  let lastSyncedScore: number | undefined = undefined;
+  $: if (initiativeScore !== lastSyncedScore) {
+    initiativeDraft = initiativeScore ?? null;
+    lastSyncedScore = initiativeScore;
+  }
+
+  function commitInitiativeDraft() {
+    if (!onSetInitiative) return;
+    if (initiativeDraft === null) {
+      if (initiativeScore !== undefined) onSetInitiative(combatant.id, null);
+      return;
+    }
+    if (!Number.isFinite(initiativeDraft)) {
+      initiativeDraft = initiativeScore ?? null;
+      return;
+    }
+    if (initiativeDraft === initiativeScore) return;
+    onSetInitiative(combatant.id, initiativeDraft);
+  }
+
+  function handleInitiativeKey(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      (event.target as HTMLInputElement).blur();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      initiativeDraft = initiativeScore ?? null;
+      (event.target as HTMLInputElement).blur();
+    }
+  }
+
+  function rollInitiative() {
+    if (!onSetInitiative) return;
+    const die = Math.floor(Math.random() * 20) + 1;
+    onSetInitiative(combatant.id, die + combatant.baseStats.perception);
   }
 
   let pickerOpen = false;
@@ -255,6 +295,30 @@
       <Chip variant={isCurrent ? 'success' : 'default'}>
         {isCurrent ? 'Turn' : phase}
       </Chip>
+      {#if phase === 'PREPARING' && onSetInitiative}
+        <div class="card-initiative" aria-label="Initiative">
+          <SectionLabel>Init</SectionLabel>
+          <input
+            type="number"
+            class="card-initiative__input"
+            aria-label={`Initiative for ${combatant.name}`}
+            placeholder="—"
+            bind:value={initiativeDraft}
+            onblur={commitInitiativeDraft}
+            onkeydown={handleInitiativeKey}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            ariaLabel={`Roll initiative for ${combatant.name}`}
+            onclick={rollInitiative}
+          >Roll</Button>
+          <span
+            class="card-initiative__hint"
+            aria-label={`Perception modifier ${combatant.baseStats.perception >= 0 ? '+' : ''}${combatant.baseStats.perception}`}
+          >({combatant.baseStats.perception >= 0 ? '+' : ''}{combatant.baseStats.perception} Perception)</span>
+        </div>
+      {/if}
       <div class="card-reorder" aria-label="Reorder">
         <IconButton
           ariaLabel={`Move ${combatant.name} up`}
@@ -553,6 +617,40 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .card-initiative {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    background: var(--color-panel);
+    border: var(--border-thin);
+    border-radius: var(--radius-card, 4px);
+  }
+
+  .card-initiative__input {
+    width: 56px;
+    padding: 2px 6px;
+    font: inherit;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    text-align: right;
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 3px;
+    background: var(--color-bg);
+    color: inherit;
+  }
+
+  .card-initiative__input:focus-visible {
+    outline: 2px solid var(--color-blue, var(--color-amber));
+    outline-offset: 1px;
+  }
+
+  .card-initiative__hint {
+    font-size: 11px;
+    color: var(--color-ink-mute);
+    white-space: nowrap;
   }
 
   .stat-grid {

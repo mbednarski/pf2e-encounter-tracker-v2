@@ -25,6 +25,7 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   REMOVE_COMBATANT: ['PREPARING', 'ACTIVE'],
   RENAME_COMBATANT: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   SET_INITIATIVE_ORDER: ['PREPARING', 'ACTIVE'],
+  SET_INITIATIVE_SCORES: ['PREPARING'],
   REORDER_COMBATANT: ['PREPARING', 'ACTIVE'],
   END_TURN: ['ACTIVE'],
   DELAY: ['ACTIVE'],
@@ -69,6 +70,8 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
       return removeCombatant(state, command.payload.combatantId);
     case 'SET_INITIATIVE_ORDER':
       return setInitiativeOrder(state, command.payload.order);
+    case 'SET_INITIATIVE_SCORES':
+      return setInitiativeScores(state, command.payload.scores);
     case 'START_ENCOUNTER':
       return startEncounter(state, effectLibrary);
     case 'END_TURN':
@@ -232,6 +235,57 @@ function setInitiativeOrder(state: EncounterState, order: CombatantId[]): Comman
       }
     },
     events: [{ type: 'initiative-set', order: [...order] }]
+  };
+}
+
+function setInitiativeScores(
+  state: EncounterState,
+  patch: Record<CombatantId, number | null>
+): CommandResult {
+  for (const combatantId of Object.keys(patch)) {
+    if (!state.combatants[combatantId]) {
+      return reject(state, 'SET_INITIATIVE_SCORES', `Combatant ${combatantId} not found`);
+    }
+  }
+
+  for (const value of Object.values(patch)) {
+    if (value !== null && !Number.isFinite(value)) {
+      return reject(state, 'SET_INITIATIVE_SCORES', 'Initiative score must be a finite number or null');
+    }
+  }
+
+  const nextScores: Record<CombatantId, number> = { ...state.initiative.scores };
+  for (const [combatantId, value] of Object.entries(patch)) {
+    if (value === null) delete nextScores[combatantId];
+    else nextScores[combatantId] = value;
+  }
+
+  const indexed = state.initiative.order.map((id, index) => ({ id, index }));
+  indexed.sort((a, b) => {
+    const sa = nextScores[a.id];
+    const sb = nextScores[b.id];
+    const aHas = sa !== undefined;
+    const bHas = sb !== undefined;
+    if (aHas && bHas) {
+      if (sa !== sb) return sb - sa;
+      return a.index - b.index;
+    }
+    if (aHas) return -1;
+    if (bHas) return 1;
+    return a.index - b.index;
+  });
+  const nextOrder = indexed.map((entry) => entry.id);
+
+  return {
+    newState: {
+      ...state,
+      initiative: {
+        ...state.initiative,
+        order: nextOrder,
+        scores: nextScores
+      }
+    },
+    events: [{ type: 'initiative-scores-changed', scores: { ...patch }, order: [...nextOrder] }]
   };
 }
 
@@ -761,7 +815,7 @@ function resetEncounter(state: EncounterState): CommandResult {
       ...state,
       phase: 'PREPARING',
       round: 0,
-      initiative: { order: [], currentIndex: -1, delaying: [] },
+      initiative: { order: [], currentIndex: -1, delaying: [], scores: {} },
       combatants: resetCombatants,
       pendingPrompts: [],
       combatLog: [],

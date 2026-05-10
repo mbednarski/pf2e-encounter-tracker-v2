@@ -6,6 +6,7 @@ export interface InitiativeState {
   order: CombatantId[];
   currentIndex: number;
   delaying: CombatantId[];
+  scores: Record<CombatantId, number>;
 }
 
 export interface CreatureBaseStats {
@@ -294,6 +295,7 @@ export type Command =
   | BaseCommand<'REMOVE_COMBATANT', { combatantId: CombatantId }>
   | BaseCommand<'RENAME_COMBATANT', { combatantId: CombatantId; newName: string }>
   | BaseCommand<'SET_INITIATIVE_ORDER', { order: CombatantId[] }>
+  | BaseCommand<'SET_INITIATIVE_SCORES', { scores: Record<CombatantId, number | null> }>
   | BaseCommand<'REORDER_COMBATANT', { combatantId: CombatantId; newIndex: number }>
   | BaseCommand<'END_TURN', Record<string, never>>
   | BaseCommand<'DELAY', Record<string, never>>
@@ -332,6 +334,7 @@ export type CommandType =
   | 'REMOVE_COMBATANT'
   | 'RENAME_COMBATANT'
   | 'SET_INITIATIVE_ORDER'
+  | 'SET_INITIATIVE_SCORES'
   | 'REORDER_COMBATANT'
   | 'END_TURN'
   | 'DELAY'
@@ -374,6 +377,7 @@ export type DomainEvent =
   | { type: 'combatant-renamed'; combatantId: CombatantId; oldName: string; newName: string }
   | { type: 'initiative-set'; order: CombatantId[] }
   | { type: 'initiative-changed'; combatantId: CombatantId; newIndex: number }
+  | { type: 'initiative-scores-changed'; scores: Record<CombatantId, number | null>; order: CombatantId[] }
   | { type: 'combatant-delayed'; combatantId: CombatantId }
   | { type: 'combatant-resumed-from-delay'; combatantId: CombatantId; insertIndex: number }
   | { type: 'turn-started'; combatantId: CombatantId; round: number }

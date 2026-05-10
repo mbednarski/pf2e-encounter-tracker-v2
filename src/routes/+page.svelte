@@ -511,6 +511,25 @@
     runCommand(toCommand('START_ENCOUNTER', undefined, nextCommandId()));
   }
 
+  function setInitiativeScore(combatantId: string, value: number | null) {
+    runCommand(
+      toCommand('SET_INITIATIVE_SCORES', { scores: { [combatantId]: value } }, nextCommandId())
+    );
+  }
+
+  function rollAllInitiative() {
+    const patch: Record<string, number> = {};
+    for (const id of encounter.initiative.order) {
+      if (encounter.initiative.scores[id] !== undefined) continue;
+      const c = encounter.combatants[id];
+      if (!c) continue;
+      const die = Math.floor(Math.random() * 20) + 1;
+      patch[id] = die + c.baseStats.perception;
+    }
+    if (Object.keys(patch).length === 0) return;
+    runCommand(toCommand('SET_INITIATIVE_SCORES', { scores: patch }, nextCommandId()));
+  }
+
   function applyHpEdit(combatantId: string, field: HpEditField, parsed: CommittableEdit) {
     const combatant = encounter.combatants[combatantId];
     if (!combatant) return;
@@ -706,6 +725,14 @@
           </ul>
         </div>
       {/if}
+      {#if encounter.phase === 'PREPARING' && orderedCombatants.length > 0}
+        <div class="initiative-bar" aria-label="Initiative actions">
+          <button type="button" class="initiative-bar__roll" onclick={rollAllInitiative}>
+            Roll all initiative
+          </button>
+          <span class="initiative-bar__hint">Rolls only blanks. Click a combatant's Roll button to re-roll one.</span>
+        </div>
+      {/if}
       <div class="cards">
         {#each orderedCombatants as combatant, index (combatant.id)}
           <CombatantCard
@@ -728,6 +755,8 @@
             onMove={moveCombatant}
             onSelect={selectCombatant}
             onRequestRadial={openRadial}
+            initiativeScore={encounter.initiative.scores[combatant.id]}
+            onSetInitiative={setInitiativeScore}
             isFirst={index === 0}
             isLast={index === orderedCombatants.length - 1}
           />
@@ -818,6 +847,39 @@
   .cards {
     display: grid;
     gap: 10px;
+  }
+
+  .initiative-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--color-panel, #fbfcfa);
+    border: 1px solid var(--color-rule, #cfd6d1);
+    border-radius: 8px;
+  }
+
+  .initiative-bar__roll {
+    background: var(--color-ink, #263235);
+    color: var(--color-bg, #fff);
+    border: 0;
+    border-radius: 4px;
+    padding: 6px 14px;
+    font: inherit;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .initiative-bar__roll:focus-visible {
+    outline: 2px solid var(--color-blue, var(--color-amber, #b88a2c));
+    outline-offset: 2px;
+  }
+
+  .initiative-bar__hint {
+    color: var(--color-ink-mute, #627171);
+    font-size: 12px;
   }
 
   .not-yet-rolled {
