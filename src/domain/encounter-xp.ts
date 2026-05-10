@@ -26,18 +26,24 @@ export interface EncounterXPSummary {
   totalXP: number;
   difficulty: EncounterDifficulty | null;
   thresholds: DifficultyThresholds | null;
-  /** Per-character XP award based on the encounter's difficulty band (PF2e GM Core). */
-  xpPerPlayer: number;
+  /**
+   * XP awarded to the party for this encounter — the canonical (4-PC) budget
+   * value for the qualified difficulty band. Independent of party size: a
+   * party-of-3 Moderate encounter and a party-of-5 Moderate encounter both
+   * award 80 XP. Party-size adjustment only shifts the thresholds used to
+   * decide which band the encounter qualifies as.
+   */
+  xpAward: number;
   hasOutOfRange: boolean;
   contributions: CreatureXPContribution[];
 }
 
-export const XP_PER_PLAYER_BY_DIFFICULTY: Record<EncounterDifficulty, number> = {
-  Trivial: 10,
-  Low: 15,
-  Moderate: 20,
-  Severe: 30,
-  Extreme: 40
+export const XP_AWARD_BY_DIFFICULTY: Record<EncounterDifficulty, number> = {
+  Trivial: 40,
+  Low: 60,
+  Moderate: 80,
+  Severe: 120,
+  Extreme: 160
 };
 
 const DELTA_XP: Record<number, number> = {
@@ -135,7 +141,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
       totalXP: 0,
       difficulty: null,
       thresholds,
-      xpPerPlayer: 0,
+      xpAward: 0,
       hasOutOfRange: false,
       contributions: []
     };
@@ -163,7 +169,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
 
   const difficulty =
     enemyCount > 0 && thresholds ? classifyDifficulty(totalXP, thresholds) : null;
-  const xpPerPlayer = difficulty ? XP_PER_PLAYER_BY_DIFFICULTY[difficulty] : 0;
+  const xpAward = difficulty ? XP_AWARD_BY_DIFFICULTY[difficulty] : 0;
 
   return {
     partyLevel,
@@ -172,7 +178,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
     totalXP,
     difficulty,
     thresholds,
-    xpPerPlayer,
+    xpAward,
     hasOutOfRange,
     contributions
   };

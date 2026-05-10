@@ -47,9 +47,9 @@
       </div>
       <div class="meter__divider" aria-hidden="true"></div>
       <div class="meter__number">
-        <span class="meter__label">Players earn</span>
+        <span class="meter__label">Awarded to party</span>
         <span class="meter__value">
-          {summary.xpPerPlayer}<span class="meter__unit">XP each</span>
+          {summary.xpAward}<span class="meter__unit">XP</span>
         </span>
       </div>
       <div class="meter__party">

@@ -126,7 +126,7 @@ describe('classifyDifficulty', () => {
 });
 
 describe('computeEncounterXP', () => {
-  it('4 PCs L3 vs three L3 creatures → 120 XP, Severe, 30 XP/PC', () => {
+  it('4 PCs L3 vs three L3 creatures → 120 XP raw, Severe, 120 XP awarded', () => {
     const state = makeEncounter([
       pc('p1', 3),
       pc('p2', 3),
@@ -142,57 +142,90 @@ describe('computeEncounterXP', () => {
     expect(result.enemyCount).toBe(3);
     expect(result.totalXP).toBe(120);
     expect(result.difficulty).toBe('Severe');
-    expect(result.xpPerPlayer).toBe(30);
+    expect(result.xpAward).toBe(120);
     expect(result.hasOutOfRange).toBe(false);
   });
 
-  it('xpPerPlayer maps each difficulty band to its canonical PF2e award', () => {
-    // Trivial → 10
+  it('xpAward maps each difficulty band to the canonical 4-PC budget value', () => {
+    // Trivial → 40
     const trivial = computeEncounterXP(
       makeEncounter([pc('p1', 5), pc('p2', 5), pc('p3', 5), pc('p4', 5), enemy('e1', 1)])
     );
     expect(trivial.difficulty).toBe('Trivial');
-    expect(trivial.xpPerPlayer).toBe(10);
+    expect(trivial.xpAward).toBe(40);
 
-    // Low → 15 (one L+1 creature = 60 XP exactly = Low threshold for party-4)
+    // Low → 60
     const low = computeEncounterXP(
       makeEncounter([pc('p1', 5), pc('p2', 5), pc('p3', 5), pc('p4', 5), enemy('e1', 6)])
     );
     expect(low.difficulty).toBe('Low');
-    expect(low.xpPerPlayer).toBe(15);
+    expect(low.xpAward).toBe(60);
 
-    // Moderate → 20 (one L+2 creature = 80 XP exactly = Moderate threshold)
+    // Moderate → 80
     const moderate = computeEncounterXP(
       makeEncounter([pc('p1', 5), pc('p2', 5), pc('p3', 5), pc('p4', 5), enemy('e1', 7)])
     );
     expect(moderate.difficulty).toBe('Moderate');
-    expect(moderate.xpPerPlayer).toBe(20);
+    expect(moderate.xpAward).toBe(80);
 
-    // Severe → 30 (one L+3 creature = 120 XP exactly = Severe threshold)
+    // Severe → 120
     const severe = computeEncounterXP(
       makeEncounter([pc('p1', 5), pc('p2', 5), pc('p3', 5), pc('p4', 5), enemy('e1', 8)])
     );
     expect(severe.difficulty).toBe('Severe');
-    expect(severe.xpPerPlayer).toBe(30);
+    expect(severe.xpAward).toBe(120);
 
-    // Extreme → 40 (one L+4 creature = 160 XP exactly = Extreme threshold)
+    // Extreme → 160
     const extreme = computeEncounterXP(
       makeEncounter([pc('p1', 5), pc('p2', 5), pc('p3', 5), pc('p4', 5), enemy('e1', 9)])
     );
     expect(extreme.difficulty).toBe('Extreme');
-    expect(extreme.xpPerPlayer).toBe(40);
+    expect(extreme.xpAward).toBe(160);
   });
 
-  it('xpPerPlayer is 0 when difficulty is null (no party or no enemies)', () => {
+  it('xpAward is independent of party size — 3 PCs at 60 XP raw → Moderate, awarded 80 XP', () => {
+    // 3 PCs at L3 vs three L3 creatures = 120 XP raw at canonical 4-PC rates.
+    // For party-3 thresholds (Trivial 30, Low 45, Moderate 60, Severe 90, Extreme 120),
+    // 120 XP qualifies as Extreme, awarding the canonical Extreme = 160.
+    const extremeFor3 = computeEncounterXP(
+      makeEncounter([pc('p1', 3), pc('p2', 3), pc('p3', 3), enemy('e1', 3), enemy('e2', 3), enemy('e3', 3)])
+    );
+    expect(extremeFor3.partySize).toBe(3);
+    expect(extremeFor3.totalXP).toBe(120);
+    expect(extremeFor3.difficulty).toBe('Extreme');
+    expect(extremeFor3.xpAward).toBe(160);
+
+    // 3 PCs at L3 vs one L+1 creature (L4) = 60 XP raw.
+    // Party-3 Moderate threshold is 60 → qualifies as Moderate.
+    // Award is the canonical Moderate value = 80, NOT the raw total.
+    const moderateFor3 = computeEncounterXP(
+      makeEncounter([pc('p1', 3), pc('p2', 3), pc('p3', 3), enemy('e1', 4)])
+    );
+    expect(moderateFor3.partySize).toBe(3);
+    expect(moderateFor3.totalXP).toBe(60);
+    expect(moderateFor3.difficulty).toBe('Moderate');
+    expect(moderateFor3.xpAward).toBe(80);
+
+    // Same raw 60 XP, but for 4 PCs → Low threshold is 60 → Low → award 60.
+    const lowFor4 = computeEncounterXP(
+      makeEncounter([pc('p1', 3), pc('p2', 3), pc('p3', 3), pc('p4', 3), enemy('e1', 4)])
+    );
+    expect(lowFor4.partySize).toBe(4);
+    expect(lowFor4.totalXP).toBe(60);
+    expect(lowFor4.difficulty).toBe('Low');
+    expect(lowFor4.xpAward).toBe(60);
+  });
+
+  it('xpAward is 0 when difficulty is null (no party or no enemies)', () => {
     const noParty = computeEncounterXP(makeEncounter([enemy('e1', 3)]));
     expect(noParty.difficulty).toBe(null);
-    expect(noParty.xpPerPlayer).toBe(0);
+    expect(noParty.xpAward).toBe(0);
 
     const noEnemies = computeEncounterXP(
       makeEncounter([pc('p1', 3), pc('p2', 3), pc('p3', 3), pc('p4', 3)])
     );
     expect(noEnemies.difficulty).toBe(null);
-    expect(noEnemies.xpPerPlayer).toBe(0);
+    expect(noEnemies.xpAward).toBe(0);
   });
 
   it('4 PCs L5 vs one L5 elite → 60 XP, Low (elite shifts effective level +1)', () => {
