@@ -2737,3 +2737,259 @@ describe('SET_INITIATIVE_SCORES', () => {
     expectSerializable(result.newState);
   });
 });
+
+describe('spellcasting commands', () => {
+  function casterEncounter(extras: Partial<import('./types').CombatantState> = {}) {
+    const caster = combatant('yaashka', {
+      name: 'Yaashka',
+      spellcasting: [
+        {
+          blockId: 'yaashka-prepared',
+          name: 'Divine Prepared Spells',
+          tradition: 'divine',
+          type: 'prepared',
+          dc: 24,
+          attackModifier: 16,
+          slots: { 1: 2, 3: 1 },
+          entries: [
+            { spellSlug: 'harm', name: 'Harm', level: 3 },
+            { spellSlug: 'command', name: 'Command', level: 1 }
+          ]
+        },
+        {
+          blockId: 'yaashka-focus',
+          name: 'Cleric Domain Spells',
+          tradition: 'divine',
+          type: 'focus',
+          dc: 24,
+          focusPoints: 1,
+          usedFocusPoints: 0,
+          entries: [{ spellSlug: 'athletic-rush', name: 'Athletic Rush', level: 3 }]
+        },
+        {
+          blockId: 'yaashka-innate',
+          name: 'Demon Innate',
+          tradition: 'divine',
+          type: 'innate',
+          dc: 22,
+          entries: [
+            {
+              spellSlug: 'wall-of-fire',
+              name: 'Wall of Fire',
+              level: 4,
+              frequency: { type: 'perDay', uses: 2 }
+            },
+            { spellSlug: 'detect-magic', name: 'Detect Magic', level: 1, frequency: { type: 'atWill' } }
+          ]
+        }
+      ],
+      ...extras
+    });
+
+    return activeEncounter({
+      combatants: { yaashka: caster },
+      initiative: { order: ['yaashka'], currentIndex: 0, delaying: [], scores: {} }
+    });
+  }
+
+  test('USE_SPELL_SLOT decrements remaining slots and emits event', () => {
+    const state = casterEncounter();
+    const result = applyCommand(
+      state,
+      command('USE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 3 }),
+      emptyEffects
+    );
+
+    expectEvents(result, [
+      {
+        type: 'spell-usage-changed',
+        combatantId: 'yaashka',
+        blockId: 'yaashka-prepared',
+        blockName: 'Divine Prepared Spells',
+        kind: 'slot',
+        action: 'used',
+        rank: 3
+      }
+    ]);
+    expect(result.newState.combatants.yaashka.spellcasting?.[0].usedSlots).toEqual({ 3: 1 });
+  });
+
+  test('USE_SPELL_SLOT rejects when no slots remain', () => {
+    const state = casterEncounter();
+    const after = applyCommand(
+      state,
+      command('USE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 3 }),
+      emptyEffects
+    ).newState;
+    const result = applyCommand(
+      after,
+      command('USE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 3 }),
+      emptyEffects
+    );
+    expectRejected(result, 'USE_SPELL_SLOT', 'No rank 3 slots remaining');
+  });
+
+  test('USE_SPELL_SLOT rejects unknown rank', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('USE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 9 }),
+      emptyEffects
+    );
+    expectRejected(result, 'USE_SPELL_SLOT', 'Block yaashka-prepared has no rank 9 slots');
+  });
+
+  test('RESTORE_SPELL_SLOT undoes a use', () => {
+    const used = applyCommand(
+      casterEncounter(),
+      command('USE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 1 }),
+      emptyEffects
+    ).newState;
+    const restored = applyCommand(
+      used,
+      command('RESTORE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 1 }),
+      emptyEffects
+    );
+    expect(restored.newState.combatants.yaashka.spellcasting?.[0].usedSlots).toEqual({ 1: 0 });
+    expect(restored.events[0]).toMatchObject({
+      type: 'spell-usage-changed',
+      kind: 'slot',
+      action: 'restored',
+      rank: 1
+    });
+  });
+
+  test('RESTORE_SPELL_SLOT rejects when none used', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('RESTORE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 1 }),
+      emptyEffects
+    );
+    expectRejected(result, 'RESTORE_SPELL_SLOT', 'No rank 1 slots used');
+  });
+
+  test('USE_FOCUS_POINT decrements pool and rejects on second use', () => {
+    const state = casterEncounter();
+    const after = applyCommand(
+      state,
+      command('USE_FOCUS_POINT', { combatantId: 'yaashka', blockId: 'yaashka-focus' }),
+      emptyEffects
+    );
+    expect(after.newState.combatants.yaashka.spellcasting?.[1].usedFocusPoints).toBe(1);
+
+    const second = applyCommand(
+      after.newState,
+      command('USE_FOCUS_POINT', { combatantId: 'yaashka', blockId: 'yaashka-focus' }),
+      emptyEffects
+    );
+    expectRejected(second, 'USE_FOCUS_POINT', 'No focus points remaining');
+  });
+
+  test('RESTORE_FOCUS_POINT rejects on prepared/innate blocks', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('RESTORE_FOCUS_POINT', { combatantId: 'yaashka', blockId: 'yaashka-prepared' }),
+      emptyEffects
+    );
+    expectRejected(result, 'RESTORE_FOCUS_POINT', 'Block yaashka-prepared is not a focus block');
+  });
+
+  test('USE_INNATE_SPELL tracks per-spell uses', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('USE_INNATE_SPELL', {
+        combatantId: 'yaashka',
+        blockId: 'yaashka-innate',
+        spellSlug: 'wall-of-fire'
+      }),
+      emptyEffects
+    );
+    expect(result.newState.combatants.yaashka.spellcasting?.[2].usedEntries).toEqual({
+      'wall-of-fire': 1
+    });
+    expect(result.events[0]).toMatchObject({
+      type: 'spell-usage-changed',
+      kind: 'innate',
+      action: 'used',
+      spellSlug: 'wall-of-fire',
+      spellName: 'Wall of Fire'
+    });
+  });
+
+  test('USE_INNATE_SPELL rejects at-will entries', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('USE_INNATE_SPELL', {
+        combatantId: 'yaashka',
+        blockId: 'yaashka-innate',
+        spellSlug: 'detect-magic'
+      }),
+      emptyEffects
+    );
+    expectRejected(result, 'USE_INNATE_SPELL', 'Spell detect-magic is not a per-day innate spell');
+  });
+
+  test('USE_INNATE_SPELL rejects when uses exhausted', () => {
+    const state = casterEncounter();
+    let after = applyCommand(
+      state,
+      command('USE_INNATE_SPELL', {
+        combatantId: 'yaashka',
+        blockId: 'yaashka-innate',
+        spellSlug: 'wall-of-fire'
+      }),
+      emptyEffects
+    ).newState;
+    after = applyCommand(
+      after,
+      command('USE_INNATE_SPELL', {
+        combatantId: 'yaashka',
+        blockId: 'yaashka-innate',
+        spellSlug: 'wall-of-fire'
+      }),
+      emptyEffects
+    ).newState;
+
+    const third = applyCommand(
+      after,
+      command('USE_INNATE_SPELL', {
+        combatantId: 'yaashka',
+        blockId: 'yaashka-innate',
+        spellSlug: 'wall-of-fire'
+      }),
+      emptyEffects
+    );
+    expectRejected(third, 'USE_INNATE_SPELL', 'No uses remaining for wall-of-fire');
+  });
+
+  test('rejects when combatant has no spellcasting', () => {
+    const fighter = combatant('fighter-1', { name: 'Fighter', spellcasting: undefined });
+    const state = activeEncounter({
+      combatants: { 'fighter-1': fighter },
+      initiative: { order: ['fighter-1'], currentIndex: 0, delaying: [], scores: {} }
+    });
+    const result = applyCommand(
+      state,
+      command('USE_SPELL_SLOT', { combatantId: 'fighter-1', blockId: 'x', rank: 1 }),
+      emptyEffects
+    );
+    expectRejected(result, 'USE_SPELL_SLOT', 'Combatant fighter-1 has no spellcasting blocks');
+  });
+
+  test('rejects when block id does not match', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('USE_FOCUS_POINT', { combatantId: 'yaashka', blockId: 'no-such-block' }),
+      emptyEffects
+    );
+    expectRejected(result, 'USE_FOCUS_POINT', 'Spellcasting block no-such-block not found');
+  });
+
+  test('result remains JSON-serializable', () => {
+    const result = applyCommand(
+      casterEncounter(),
+      command('USE_SPELL_SLOT', { combatantId: 'yaashka', blockId: 'yaashka-prepared', rank: 3 }),
+      emptyEffects
+    );
+    expectSerializable(result.newState);
+  });
+});

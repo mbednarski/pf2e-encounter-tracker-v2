@@ -136,23 +136,41 @@ export function toCommand<T extends CommandType>(
 
 export function dispatchEncounterCommand(state: EncounterState, command: Command): DispatchResult {
   const result = applyCommand(state, command, effectLibrary);
-  const newEntries = formatEvents(result.events, {
+  return appendLogEntries(result.newState, result.events, formatEvents(result.events, {
     commandId: command.id,
     state: result.newState
-  });
+  }));
+}
 
-  if (newEntries.length === 0) {
-    return { state: result.newState, events: result.events };
+function appendLogEntries(
+  state: EncounterState,
+  events: DomainEvent[],
+  entries: LogEntry[]
+): DispatchResult {
+  if (entries.length === 0) {
+    return { state, events };
   }
-
-  const merged = [...result.newState.combatLog, ...newEntries];
+  const merged = [...state.combatLog, ...entries];
   const cappedLog: LogEntry[] =
     merged.length > COMBAT_LOG_CAP ? merged.slice(merged.length - COMBAT_LOG_CAP) : merged;
+  return { state: { ...state, combatLog: cappedLog }, events };
+}
 
-  return {
-    state: { ...result.newState, combatLog: cappedLog },
-    events: result.events
-  };
+// Appends a single log entry to encounter.combatLog without going through the
+// reducer. Used for client-side dice rolls that don't (and shouldn't) mutate
+// domain state. The entry id must be unique within the log; callers typically
+// use a monotonic counter to guarantee that.
+export function appendInfoLog(
+  state: EncounterState,
+  entryId: string,
+  message: string,
+  tone: LogEntry['tone'] = 'info'
+): EncounterState {
+  const entry: LogEntry = { id: entryId, message, tone };
+  const merged = [...state.combatLog, entry];
+  const cappedLog =
+    merged.length > COMBAT_LOG_CAP ? merged.slice(merged.length - COMBAT_LOG_CAP) : merged;
+  return { ...state, combatLog: cappedLog };
 }
 
 export function currentCombatant(state: EncounterState): CombatantState | undefined {

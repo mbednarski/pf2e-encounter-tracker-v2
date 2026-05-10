@@ -271,6 +271,29 @@ export interface SetEffectDurationPayload {
   newDuration: Duration;
 }
 
+export interface UseSpellSlotPayload {
+  combatantId: CombatantId;
+  blockId: string;
+  rank: number;
+}
+
+export interface RestoreSpellSlotPayload {
+  combatantId: CombatantId;
+  blockId: string;
+  rank: number;
+}
+
+export interface FocusPointPayload {
+  combatantId: CombatantId;
+  blockId: string;
+}
+
+export interface InnateSpellPayload {
+  combatantId: CombatantId;
+  blockId: string;
+  spellSlug: string;
+}
+
 export type PromptResolution =
   | { type: 'accept' }
   | { type: 'setValue'; value: number }
@@ -309,12 +332,12 @@ export type Command =
   | BaseCommand<'SET_EFFECT_VALUE', SetEffectValuePayload>
   | BaseCommand<'MODIFY_EFFECT_VALUE', ModifyEffectValuePayload>
   | BaseCommand<'SET_EFFECT_DURATION', SetEffectDurationPayload>
-  | BaseCommand<'USE_SPELL_SLOT', Record<string, unknown>>
-  | BaseCommand<'RESTORE_SPELL_SLOT', Record<string, unknown>>
-  | BaseCommand<'USE_FOCUS_POINT', Record<string, unknown>>
-  | BaseCommand<'RESTORE_FOCUS_POINT', Record<string, unknown>>
-  | BaseCommand<'USE_INNATE_SPELL', Record<string, unknown>>
-  | BaseCommand<'RESTORE_INNATE_SPELL', Record<string, unknown>>
+  | BaseCommand<'USE_SPELL_SLOT', UseSpellSlotPayload>
+  | BaseCommand<'RESTORE_SPELL_SLOT', RestoreSpellSlotPayload>
+  | BaseCommand<'USE_FOCUS_POINT', FocusPointPayload>
+  | BaseCommand<'RESTORE_FOCUS_POINT', FocusPointPayload>
+  | BaseCommand<'USE_INNATE_SPELL', InnateSpellPayload>
+  | BaseCommand<'RESTORE_INNATE_SPELL', InnateSpellPayload>
   | BaseCommand<'SET_SPELL_SLOT_USAGE', Record<string, unknown>>
   | BaseCommand<'SET_FOCUS_USAGE', Record<string, unknown>>
   | BaseCommand<'SET_INNATE_USAGE', Record<string, unknown>>
@@ -443,6 +466,17 @@ export type DomainEvent =
       damageType?: string;
     }
   | { type: 'hp-reached-zero'; combatantId: CombatantId }
+  | {
+      type: 'spell-usage-changed';
+      combatantId: CombatantId;
+      blockId: string;
+      blockName: string;
+      kind: 'slot' | 'focus' | 'innate';
+      action: 'used' | 'restored';
+      rank?: number;
+      spellSlug?: string;
+      spellName?: string;
+    }
   | { type: 'command-rejected'; commandType: CommandType; reason: string };
 
 export type EffectCategory = 'condition' | 'spell' | 'affliction' | 'persistent-damage' | 'custom';
