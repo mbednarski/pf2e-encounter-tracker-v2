@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Command, CombatantState, Creature, Duration, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import { computeEncounterXP } from '../domain';
+  import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -87,6 +89,8 @@
   let storedPartyMembers: PartyMember[] = [];
 
   $: availableCreatures = storedCreatures;
+
+  $: xpSummary = computeEncounterXP(encounter);
 
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
@@ -687,6 +691,8 @@
     round={encounter.round}
     activeName={activeCombatant?.name}
   />
+
+  <EncounterDifficultyMeter summary={xpSummary} />
 
   <section class="workspace">
     <div class="workspace__library">

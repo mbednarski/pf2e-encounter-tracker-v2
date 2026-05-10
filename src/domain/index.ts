@@ -4,7 +4,19 @@ export { createCombatantFromPartyMember } from './party/factory';
 export { applyEliteWeak } from './creatures/templates';
 export { effectLibrary } from './effects/library';
 export { deriveStats } from './effects/derivation';
+export {
+  classifyDifficulty,
+  computeEncounterXP,
+  creatureXPValue,
+  difficultyThresholds
+} from './encounter-xp';
 export type { CreatureTemplateAdjustment } from './creatures/templates';
+export type {
+  CreatureXPContribution,
+  DifficultyThresholds,
+  EncounterDifficulty,
+  EncounterXPSummary
+} from './encounter-xp';
 export type {
   Ability,
   AppliedModifier,
