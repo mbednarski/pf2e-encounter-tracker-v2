@@ -8,7 +8,6 @@
   import CombatantCard from '../components/CombatantCard.svelte';
   import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
   import LibraryPane from '../components/LibraryPane.svelte';
-  import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import EffectModal from '../components/EffectModal.svelte';
   import RollBubble from '../components/RollBubble.svelte';
@@ -847,13 +846,6 @@
     </div>
 
     <section class="workspace__track" aria-label="Combatants">
-      <PromptResolutionPanel
-        prompts={encounter.pendingPrompts}
-        combatantsById={encounter.combatants}
-        phase={encounter.phase}
-        onResolve={resolvePrompt}
-        onApplyPersistentDamage={applyPersistentDamageFromPrompt}
-      />
       {#if unorderedCombatants.length > 0}
         <div class="not-yet-rolled" aria-label="Not yet rolled">
           <h3>Not yet rolled</h3>
@@ -898,6 +890,10 @@
             onSetInitiative={setInitiativeScore}
             isFirst={index === 0}
             isLast={index === orderedCombatants.length - 1}
+            pendingPrompts={encounter.pendingPrompts}
+            combatantsById={encounter.combatants}
+            onResolvePrompt={resolvePrompt}
+            onApplyPersistentDamage={applyPersistentDamageFromPrompt}
           />
         {/each}
       </div>

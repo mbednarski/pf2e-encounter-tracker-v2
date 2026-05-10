@@ -8,7 +8,7 @@ import type {
   Prompt,
   PromptResolution
 } from '../domain';
-import PromptResolutionPanel from './PromptResolutionPanel.svelte';
+import CombatantPromptResolution from './CombatantPromptResolution.svelte';
 
 type ResolveHandler = (promptId: string, resolution: PromptResolution) => void;
 type ApplyDamageHandler = (combatantId: string, amount: number, damageType: string) => void;
@@ -34,7 +34,7 @@ function renderPanel(props: {
   const onResolve: Mock<ResolveHandler> = props.onResolve ?? vi.fn<ResolveHandler>();
   const onApplyPersistentDamage: Mock<ApplyDamageHandler> =
     props.onApplyPersistentDamage ?? vi.fn<ApplyDamageHandler>();
-  const utils = render(PromptResolutionPanel, {
+  const utils = render(CombatantPromptResolution, {
     props: {
       prompts: props.prompts,
       combatantsById: props.combatantsById ?? combatants,
@@ -46,10 +46,10 @@ function renderPanel(props: {
   return { ...utils, onResolve, onApplyPersistentDamage };
 }
 
-describe('PromptResolutionPanel', () => {
+describe('CombatantPromptResolution', () => {
   test('renders nothing when there are no pending prompts', () => {
     const { container } = renderPanel({ prompts: [] });
-    expect(container.querySelector('aside')).toBeNull();
+    expect(container.querySelector('.prompt-block')).toBeNull();
   });
 
   test('renders nothing when phase is not RESOLVING even if prompts exist', () => {
@@ -57,16 +57,15 @@ describe('PromptResolutionPanel', () => {
       prompts: [prompt({ suggestionType: { type: 'reminder', description: 'x' } })],
       phase: 'ACTIVE'
     });
-    expect(container.querySelector('aside')).toBeNull();
+    expect(container.querySelector('.prompt-block')).toBeNull();
   });
 
-  test('renders focused container with aria-live and the GM heading when active', () => {
+  test('renders focused container with aria-live when active', () => {
     renderPanel({
       prompts: [prompt({ suggestionType: { type: 'reminder', description: 'x' } })]
     });
-    const region = screen.getByLabelText('Awaiting GM resolution');
+    const region = screen.getByLabelText('Awaiting resolution');
     expect(region).toHaveAttribute('aria-live', 'polite');
-    expect(screen.getByRole('heading', { level: 2, name: 'Awaiting GM resolution' })).toBeInTheDocument();
   });
 
   test('suggestDecrement prompt: shows owner boundary, target name, description, and four resolution controls', async () => {
@@ -504,7 +503,7 @@ describe('PromptResolutionPanel', () => {
       onResolve: vi.fn<ResolveHandler>() as unknown as ResolveHandler
     };
 
-    const { rerender } = render(PromptResolutionPanel, {
+    const { rerender } = render(CombatantPromptResolution, {
       props: { ...baseProps, prompts: [promptA] }
     });
 
