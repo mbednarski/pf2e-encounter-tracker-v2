@@ -68,9 +68,11 @@ const BASE_THRESHOLDS: DifficultyThresholds = {
   extreme: 160
 };
 
+// Per-PC threshold increments from GM Core Table 10-1 ("Character Adjustment").
+// The pre-Remaster Core Rulebook had Low at +15/PC; GM Core changed it to +20/PC.
 const PER_PC_INCREMENTS: DifficultyThresholds = {
   trivial: 10,
-  low: 15,
+  low: 20,
   moderate: 20,
   severe: 30,
   extreme: 40
