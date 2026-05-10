@@ -2,14 +2,17 @@
   import type { CombatantState, EncounterState, Prompt, PromptResolution } from '../domain';
   import {
     clampValue,
+    combatantFaction,
     combatantVisualState,
     resolveApplyChoice,
     type AppliedEffectView,
     type ApplyConditionChoice,
     type CombatantCardActionAvailability,
+    type CombatantFaction,
     type ConditionOption
   } from '$lib/encounter-app';
   import type { CommittableEdit, HpEditField } from '$lib/hp-input';
+  import { formatModifier } from '$lib/abilities/format-damage';
   import { templateLabel } from '$lib/template-label';
   import { persistentEffectIdToDamageType } from '$lib/effects/damage-type-glyph';
   import InlineNumberEdit from './InlineNumberEdit.svelte';
@@ -17,8 +20,11 @@
   import Chip from './ui/Chip.svelte';
   import IconButton from './ui/IconButton.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
+  import StatRollButton from './ui/StatRollButton.svelte';
   import DamageTypeGlyph from './ui/DamageTypeGlyph.svelte';
   import CombatantPromptResolution from './CombatantPromptResolution.svelte';
+
+  type SaveKey = 'fortitude' | 'reflex' | 'will';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
@@ -52,6 +58,11 @@
     combatantId: string,
     amount: number,
     damageType: string
+  ) => void = () => {};
+  export let onRollSave: (
+    combatantId: string,
+    save: SaveKey,
+    origin: { x: number; y: number }
   ) => void = () => {};
 
   $: cardPrompts = pendingPrompts.filter((p) => p.targetId === combatant.id);
@@ -107,7 +118,7 @@
   function isInnerInteractive(target: EventTarget | null, card: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false;
     const hit = target.closest(
-      'button, a, input, select, textarea, [role="button"], [contenteditable="true"]'
+      'button, a, input, select, textarea, summary, [role="button"], [contenteditable="true"]'
     );
     return hit !== null && hit !== card;
   }
@@ -233,6 +244,23 @@
 
   $: visualState = combatantVisualState(combatant);
 
+  $: faction = combatantFaction(combatant);
+  $: factionLabel = factionDisplayLabel(faction);
+
+  function factionDisplayLabel(f: CombatantFaction): string {
+    switch (f) {
+      case 'pc':
+        return 'PC';
+      case 'ally':
+        return 'Ally';
+      case 'hazard':
+        return 'Hazard';
+      case 'enemy':
+      default:
+        return 'Enemy';
+    }
+  }
+
   $: endTurnTitle = actions.canEndTurn
     ? 'End this combatant’s turn'
     : isCurrent
@@ -258,6 +286,10 @@
     : combatant.isAlive
       ? 'Combatant is already alive'
       : 'Revive is unavailable in this phase';
+
+  $: fortAriaLabel = `Roll ${combatant.name} Fortitude save (${formatModifier(combatant.baseStats.fortitude)})`;
+  $: refAriaLabel = `Roll ${combatant.name} Reflex save (${formatModifier(combatant.baseStats.reflex)})`;
+  $: willAriaLabel = `Roll ${combatant.name} Will save (${formatModifier(combatant.baseStats.will)})`;
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -268,6 +300,7 @@
   class:dimmed={visualState !== 'alive'}
   data-visual-state={visualState}
   data-hp-tone={hpTone}
+  data-faction={faction}
   class="combatant-card"
   role={onSelect ? 'button' : undefined}
   tabindex={onSelect ? 0 : -1}
@@ -281,57 +314,36 @@
   onkeydown={handleArticleKeyDown}
 >
   <div class="card-heading">
-    <div class="card-heading__main">
-      <div class="card-title">
-        <h2>
-          <button
-            type="button"
-            class="card-name-button"
-            aria-pressed={isSelected}
-            title={isSelected ? `${combatant.name} is selected` : `Show details for ${combatant.name}`}
-            onclick={() => onSelect?.(combatant.id)}
-          >{combatant.name}</button>
-        </h2>
-        {#if combatant.templateAdjustment}
-          <Chip variant={combatant.templateAdjustment === 'elite' ? 'warning' : 'default'}>
-            {templateLabel(combatant.templateAdjustment)}
-          </Chip>
-        {/if}
-        {#if visualState === 'dead'}
-          <Chip variant="danger">Dead</Chip>
-        {:else if visualState === 'unconscious'}
-          <Chip variant="warning">Unconscious</Chip>
-        {/if}
-      </div>
+    <div class="card-title">
+      <span
+        class="faction-tag"
+        data-faction={faction}
+        aria-label={`${factionLabel}`}
+      >{factionLabel}</span>
+      <h2>
+        <button
+          type="button"
+          class="card-name-button"
+          aria-pressed={isSelected}
+          title={isSelected ? `${combatant.name} is selected` : `Show details for ${combatant.name}`}
+          onclick={() => onSelect?.(combatant.id)}
+        >{combatant.name}</button>
+      </h2>
+      {#if combatant.templateAdjustment}
+        <Chip variant={combatant.templateAdjustment === 'elite' ? 'warning' : 'default'}>
+          {templateLabel(combatant.templateAdjustment)}
+        </Chip>
+      {/if}
+      {#if visualState === 'dead'}
+        <Chip variant="danger">Dead</Chip>
+      {:else if visualState === 'unconscious'}
+        <Chip variant="warning">Unconscious</Chip>
+      {/if}
     </div>
     <div class="card-aside">
       <Chip variant={isCurrent ? 'success' : 'default'}>
         {isCurrent ? 'Turn' : phase}
       </Chip>
-      {#if phase === 'PREPARING' && onSetInitiative}
-        <div class="card-initiative" aria-label="Initiative">
-          <SectionLabel>Init</SectionLabel>
-          <input
-            type="number"
-            class="card-initiative__input"
-            aria-label={`Initiative for ${combatant.name}`}
-            placeholder="—"
-            bind:value={initiativeDraft}
-            onblur={commitInitiativeDraft}
-            onkeydown={handleInitiativeKey}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            ariaLabel={`Roll initiative for ${combatant.name}`}
-            onclick={rollInitiative}
-          >Roll</Button>
-          <span
-            class="card-initiative__hint"
-            aria-label={`Perception modifier ${combatant.baseStats.perception >= 0 ? '+' : ''}${combatant.baseStats.perception}`}
-          >({combatant.baseStats.perception >= 0 ? '+' : ''}{combatant.baseStats.perception} Perception)</span>
-        </div>
-      {/if}
       <div class="card-reorder" aria-label="Reorder">
         <IconButton
           ariaLabel={`Move ${combatant.name} up`}
@@ -351,11 +363,32 @@
     </div>
   </div>
 
-  <div class="stat-grid">
-    <div class="stat-cell stat-cell--ac">
-      <SectionLabel>AC</SectionLabel>
-      <span class="stat-cell__value">{combatant.baseStats.ac}</span>
+  {#if phase === 'PREPARING' && onSetInitiative}
+    <div class="card-initiative-row" aria-label="Initiative">
+      <SectionLabel>Init</SectionLabel>
+      <input
+        type="number"
+        class="card-initiative__input"
+        aria-label={`Initiative for ${combatant.name}`}
+        placeholder="—"
+        bind:value={initiativeDraft}
+        onblur={commitInitiativeDraft}
+        onkeydown={handleInitiativeKey}
+      />
+      <Button
+        size="sm"
+        variant="secondary"
+        ariaLabel={`Roll initiative for ${combatant.name}`}
+        onclick={rollInitiative}
+      >Roll</Button>
+      <span
+        class="card-initiative__hint"
+        aria-label={`Perception modifier ${combatant.baseStats.perception >= 0 ? '+' : ''}${combatant.baseStats.perception}`}
+      >({combatant.baseStats.perception >= 0 ? '+' : ''}{combatant.baseStats.perception} Perception)</span>
     </div>
+  {/if}
+
+  <div class="stat-strip">
     <div class="stat-cell stat-cell--hp">
       <SectionLabel>HP</SectionLabel>
       <div class="hp-row">
@@ -387,24 +420,38 @@
           {/if}
         </div>
       </div>
-      <div class="hp-track" aria-label={`${combatant.name} HP`}>
-        <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
-      </div>
     </div>
-    <div class="stat-cell stat-cell--saves">
-      <div class="save">
-        <SectionLabel>Fort</SectionLabel>
-        <span class="save__value">+{combatant.baseStats.fortitude}</span>
+    <div class="stat-cell stat-cell--defenses" aria-label="Defenses">
+      <div
+        class="stat-readout"
+        aria-label={`Armor Class ${combatant.baseStats.ac}`}
+      >
+        <span class="stat-readout__label">AC</span>
+        <span class="stat-readout__value">{combatant.baseStats.ac}</span>
       </div>
-      <div class="save">
-        <SectionLabel>Ref</SectionLabel>
-        <span class="save__value">+{combatant.baseStats.reflex}</span>
-      </div>
-      <div class="save">
-        <SectionLabel>Will</SectionLabel>
-        <span class="save__value">+{combatant.baseStats.will}</span>
-      </div>
+      <StatRollButton
+        label="Fort"
+        modifier={combatant.baseStats.fortitude}
+        ariaLabel={fortAriaLabel}
+        onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
+      />
+      <StatRollButton
+        label="Ref"
+        modifier={combatant.baseStats.reflex}
+        ariaLabel={refAriaLabel}
+        onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
+      />
+      <StatRollButton
+        label="Will"
+        modifier={combatant.baseStats.will}
+        ariaLabel={willAriaLabel}
+        onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
+      />
     </div>
+  </div>
+
+  <div class="hp-track" aria-label={`${combatant.name} HP`}>
+    <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
   </div>
 
   <div class="conditions" aria-label={`${combatant.name} conditions`}>
@@ -535,22 +582,31 @@
       disabled={!actions.canMarkReactionUsed}
       onclick={() => onMarkReactionUsed(combatant.id)}
     >Reaction Used</Button>
-    <Button
-      size="sm"
-      variant="secondary"
-      ariaLabel="Mark dead"
-      title={markDeadTitle}
-      disabled={!actions.canMarkDead}
-      onclick={() => onMarkDead(combatant.id)}
-    >Mark Dead</Button>
-    <Button
-      size="sm"
-      variant="secondary"
-      ariaLabel="Revive"
-      title={reviveTitle}
-      disabled={!actions.canRevive}
-      onclick={() => onRevive(combatant.id)}
-    >Revive</Button>
+    <details class="card-overflow">
+      <summary
+        class="card-overflow__toggle"
+        aria-label={`More actions for ${combatant.name}`}
+        title="More actions"
+      >⋯</summary>
+      <div class="card-overflow__menu" role="menu">
+        <Button
+          size="sm"
+          variant="secondary"
+          ariaLabel="Mark dead"
+          title={markDeadTitle}
+          disabled={!actions.canMarkDead}
+          onclick={() => onMarkDead(combatant.id)}
+        >Mark Dead</Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          ariaLabel="Revive"
+          title={reviveTitle}
+          disabled={!actions.canRevive}
+          onclick={() => onRevive(combatant.id)}
+        >Revive</Button>
+      </div>
+    </details>
   </div>
 </article>
 
@@ -560,8 +616,24 @@
     background: var(--color-panel-2);
     border: var(--border-thin);
     border-left: 3px solid var(--color-rule-strong);
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
     transition: background 0.12s, border-color 0.12s;
+  }
+
+  .combatant-card[data-faction='pc'] {
+    border-left-color: var(--color-blue);
+  }
+
+  .combatant-card[data-faction='ally'] {
+    border-left-color: var(--color-blue);
+  }
+
+  .combatant-card[data-faction='enemy'] {
+    border-left-color: var(--color-red);
+  }
+
+  .combatant-card[data-faction='hazard'] {
+    border-left-color: var(--color-amber);
   }
 
   .current-card {
@@ -617,22 +689,44 @@
 
   .card-heading {
     display: flex;
-    align-items: start;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-  }
-
-  .card-heading__main {
-    min-width: 0;
-    flex: 1;
   }
 
   .card-title {
     display: flex;
     align-items: center;
-    justify-content: start;
     gap: var(--space-2);
     flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .faction-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    flex: 0 0 auto;
+    line-height: 1.2;
+  }
+
+  .faction-tag[data-faction='pc'],
+  .faction-tag[data-faction='ally'] {
+    color: var(--color-blue);
+  }
+
+  .faction-tag[data-faction='enemy'] {
+    color: var(--color-red);
+  }
+
+  .faction-tag[data-faction='hazard'] {
+    color: var(--color-amber);
   }
 
   h2 {
@@ -646,24 +740,27 @@
 
   .card-aside {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--space-2);
+    flex: 0 0 auto;
   }
 
   .card-reorder {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 2px;
   }
 
-  .card-initiative {
-    display: inline-flex;
+  .card-initiative-row {
+    display: flex;
     align-items: center;
     gap: 6px;
-    padding: 2px 6px;
+    margin-top: var(--space-2);
+    padding: 4px 8px;
     background: var(--color-panel);
     border: var(--border-thin);
     border-radius: var(--radius-card, 4px);
+    flex-wrap: wrap;
   }
 
   .card-initiative__input {
@@ -690,13 +787,14 @@
     white-space: nowrap;
   }
 
-  .stat-grid {
-    display: grid;
-    grid-template-columns: 64px minmax(0, 1fr) auto;
+  .stat-strip {
+    display: flex;
+    align-items: center;
     gap: var(--space-3);
-    margin-top: var(--space-3);
-    padding-top: var(--space-3);
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
     border-top: 1px dashed var(--color-rule);
+    flex-wrap: wrap;
   }
 
   .stat-cell {
@@ -705,20 +803,45 @@
     gap: 2px;
   }
 
-  .stat-cell--ac {
-    align-items: center;
-  }
-
-  .stat-cell--ac .stat-cell__value {
-    font-family: var(--font-serif);
-    font-size: var(--text-xl);
-    font-weight: 600;
-    color: var(--color-ink);
-    line-height: var(--leading-tight);
-  }
-
   .stat-cell--hp {
+    flex: 1 1 auto;
     min-width: 0;
+  }
+
+  .stat-cell--defenses {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+  }
+
+  .stat-readout {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--color-panel-2);
+    border: 1px solid var(--color-rule);
+    cursor: default;
+  }
+
+  .stat-readout__label {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--color-ink-mute);
+  }
+
+  .stat-readout__value {
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    font-weight: 700;
+    color: var(--color-ink);
   }
 
   .hp-row {
@@ -774,7 +897,8 @@
     overflow: hidden;
     background: var(--color-hp-bg);
     border: 1px solid var(--color-rule);
-    margin-top: var(--space-1);
+    margin-top: var(--space-2);
+    width: 100%;
   }
 
   .hp-fill {
@@ -791,34 +915,13 @@
     background: var(--color-red);
   }
 
-  .stat-cell--saves {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-3);
-    text-align: center;
-  }
-
-  .save {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .save__value {
-    font-family: var(--font-mono);
-    font-size: var(--text-base);
-    font-weight: 700;
-    color: var(--color-ink);
-  }
-
   .conditions {
     display: flex;
     align-items: center;
     justify-content: start;
     gap: var(--space-2);
     flex-wrap: wrap;
-    margin-top: var(--space-3);
+    margin-top: var(--space-2);
   }
 
   .conditions-empty {
@@ -937,9 +1040,67 @@
     justify-content: start;
     gap: var(--space-2);
     flex-wrap: wrap;
-    margin-top: var(--space-3);
-    padding-top: var(--space-3);
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
     border-top: 1px dashed var(--color-rule);
+  }
+
+  .card-overflow {
+    position: relative;
+  }
+
+  .card-overflow__toggle {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 24px;
+    padding: 0;
+    border: var(--border-thin);
+    border-radius: var(--radius-card, 4px);
+    background: transparent;
+    color: var(--color-ink-mute);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-overflow__toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .card-overflow__toggle:hover {
+    border-color: var(--color-ink);
+    color: var(--color-ink);
+  }
+
+  .card-overflow__toggle:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 1px;
+  }
+
+  .card-overflow[open] .card-overflow__toggle {
+    border-color: var(--color-ink);
+    color: var(--color-ink);
+  }
+
+  .card-overflow__menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    background: var(--color-panel);
+    border: var(--border-strong);
+    border-radius: var(--radius-card, 4px);
+    box-shadow: var(--shadow-soft);
+    z-index: 5;
+    white-space: nowrap;
   }
 
   @media (max-width: 760px) {
@@ -948,8 +1109,16 @@
       flex-direction: column;
     }
 
-    .stat-grid {
-      grid-template-columns: 1fr;
+    .card-aside {
+      justify-content: space-between;
+    }
+
+    .stat-strip {
+      align-items: stretch;
+    }
+
+    .stat-cell--defenses {
+      flex-wrap: wrap;
     }
   }
 </style>

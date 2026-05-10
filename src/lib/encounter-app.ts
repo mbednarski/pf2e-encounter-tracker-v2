@@ -186,6 +186,22 @@ export function combatantVisualState(combatant: CombatantState): CombatantVisual
   return 'alive';
 }
 
+export type CombatantFaction = 'pc' | 'ally' | 'enemy' | 'hazard';
+
+export function combatantFaction(combatant: CombatantState): CombatantFaction {
+  switch (combatant.sourceType) {
+    case 'partyMember':
+      return 'pc';
+    case 'companion':
+      return 'ally';
+    case 'hazard':
+      return 'hazard';
+    case 'creature':
+    default:
+      return 'enemy';
+  }
+}
+
 export interface CombatantCardActionAvailability {
   canEndTurn: boolean;
   canMarkReactionUsed: boolean;

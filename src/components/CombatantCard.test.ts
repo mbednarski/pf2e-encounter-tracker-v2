@@ -184,3 +184,101 @@ describe('CombatantCard initiative control', () => {
     expect(screen.getByText('(-1 Perception)')).toBeInTheDocument();
   });
 });
+
+describe('CombatantCard faction styling', () => {
+  test('a creature combatant gets data-faction="enemy" and renders an Enemy tag', () => {
+    const { container } = render(CombatantCard, {
+      props: baseProps({ combatant: combatant('goblin-1', { sourceType: 'creature' }) })
+    });
+    const article = container.querySelector('article.combatant-card');
+    expect(article?.getAttribute('data-faction')).toBe('enemy');
+    expect(article?.textContent).toContain('Enemy');
+  });
+
+  test('a partyMember combatant gets data-faction="pc" and renders a PC tag', () => {
+    const { container } = render(CombatantCard, {
+      props: baseProps({ combatant: combatant('cleric-1', { sourceType: 'partyMember' }) })
+    });
+    const article = container.querySelector('article.combatant-card');
+    expect(article?.getAttribute('data-faction')).toBe('pc');
+    expect(article?.textContent).toContain('PC');
+  });
+
+  test('a hazard combatant gets data-faction="hazard" and renders a Hazard tag', () => {
+    const { container } = render(CombatantCard, {
+      props: baseProps({ combatant: combatant('trap-1', { sourceType: 'hazard' }) })
+    });
+    const article = container.querySelector('article.combatant-card');
+    expect(article?.getAttribute('data-faction')).toBe('hazard');
+    expect(article?.textContent).toContain('Hazard');
+  });
+
+  test('a companion combatant gets data-faction="ally"', () => {
+    const { container } = render(CombatantCard, {
+      props: baseProps({
+        combatant: combatant('wolf-1', { sourceType: 'companion', name: 'Wolf' })
+      })
+    });
+    const article = container.querySelector('article.combatant-card');
+    expect(article?.getAttribute('data-faction')).toBe('ally');
+    expect(article?.textContent).toContain('Ally');
+  });
+});
+
+describe('CombatantCard save rolls', () => {
+  test('renders a button per save with signed modifier', () => {
+    const c = combatant('goblin-1', { name: 'Goblin Warrior' });
+    c.baseStats.fortitude = 12;
+    c.baseStats.reflex = 9;
+    c.baseStats.will = -1;
+    render(CombatantCard, { props: baseProps({ combatant: c }) });
+
+    const fort = screen.getByRole('button', {
+      name: 'Roll Goblin Warrior Fortitude save (+12)'
+    });
+    expect(fort).toHaveTextContent('Fort');
+    expect(fort).toHaveTextContent('+12');
+
+    const ref = screen.getByRole('button', {
+      name: 'Roll Goblin Warrior Reflex save (+9)'
+    });
+    expect(ref).toHaveTextContent('Ref');
+    expect(ref).toHaveTextContent('+9');
+
+    const will = screen.getByRole('button', {
+      name: 'Roll Goblin Warrior Will save (-1)'
+    });
+    expect(will).toHaveTextContent('Will');
+    expect(will).toHaveTextContent('-1');
+  });
+
+  test('clicking a save button forwards onRollSave with combatant id, save key, and click origin', async () => {
+    const onRollSave = vi.fn();
+    const c = combatant('goblin-1', { name: 'Goblin Warrior' });
+    c.baseStats.reflex = 7;
+    render(CombatantCard, { props: baseProps({ combatant: c, onRollSave }) });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Roll Goblin Warrior Reflex save (+7)' }),
+      { clientX: 11, clientY: 22 }
+    );
+
+    expect(onRollSave).toHaveBeenCalledTimes(1);
+    expect(onRollSave).toHaveBeenCalledWith('goblin-1', 'reflex', { x: 11, y: 22 });
+  });
+
+  test('clicking a save button does not also fire the card onSelect handler', async () => {
+    const onSelect = vi.fn();
+    const onRollSave = vi.fn();
+    const c = combatant('goblin-1', { name: 'Goblin Warrior' });
+    c.baseStats.fortitude = 5;
+    render(CombatantCard, { props: baseProps({ combatant: c, onSelect, onRollSave }) });
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Roll Goblin Warrior Fortitude save (+5)' })
+    );
+
+    expect(onRollSave).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
