@@ -18,6 +18,82 @@ export interface CreatureBaseStats {
   perception: number;
   speed: number;
   skills: Record<string, number>;
+  hardness?: number;
+}
+
+/**
+ * Defensive stats for a complex hazard. Hazards may lack some saves or AC
+ * entirely (PF2e prints "—"). Stealth replaces Perception as the initiative
+ * modifier; Perception is kept as a number but is unused for hazards.
+ */
+export interface HazardBaseStats {
+  hp: number;
+  ac: number | null;
+  fortitude: number | null;
+  reflex: number | null;
+  will: number | null;
+  perception: number;
+  stealth: number;
+  stealthNote?: string;
+  speed: number;
+  skills: Record<string, number>;
+  hardness?: number;
+  immunities?: string[];
+  resistances?: { type: string; value: number }[];
+  weaknesses?: { type: string; value: number }[];
+}
+
+export interface DisableCheck {
+  skill: string;
+  dc: number;
+  requiredSuccesses: number;
+  note?: string;
+}
+
+export interface DisableProgress {
+  checkIndex: number;
+  successesRemaining: number;
+}
+
+export interface HazardRoutine {
+  actions: number;
+  description: string;
+}
+
+export interface HazardData {
+  routine: HazardRoutine;
+  disableChecks: DisableCheck[];
+  disableProgress: DisableProgress[];
+}
+
+export interface Hazard {
+  id: string;
+  name: string;
+  level: number;
+  traits: string[];
+  rarity: CreatureRarity;
+  ac?: number;
+  fortitude?: number;
+  reflex?: number;
+  will?: number;
+  perception?: number;
+  hp?: number;
+  hardness?: number;
+  stealth: number;
+  stealthNote?: string;
+  immunities: string[];
+  resistances: { type: string; value: number }[];
+  weaknesses: { type: string; value: number }[];
+  disableChecks: DisableCheck[];
+  routine: HazardRoutine;
+  passiveAbilities: Ability[];
+  reactiveAbilities: Ability[];
+  activeAbilities: Ability[];
+  attacks: Attack[];
+  description?: string;
+  source?: string;
+  tags: string[];
+  notes?: string;
 }
 
 export type SourceType = 'creature' | 'partyMember' | 'companion' | 'hazard';
@@ -105,6 +181,7 @@ export interface Creature {
   will: number;
   perception: number;
   hp: number;
+  hardness?: number;
   immunities: string[];
   resistances: { type: string; value: number }[];
   weaknesses: { type: string; value: number }[];
@@ -172,7 +249,7 @@ export interface CombatantState {
   name: string;
   sourceType: SourceType;
   masterId?: CombatantId;
-  baseStats: CreatureBaseStats;
+  baseStats: CreatureBaseStats | HazardBaseStats;
   currentHp: number;
   tempHp: number;
   appliedEffects: AppliedEffect[];
@@ -188,6 +265,7 @@ export interface CombatantState {
   size?: CreatureSize;
   level?: number;
   templateAdjustment?: 'elite' | 'weak';
+  hazardData?: HazardData;
 }
 
 export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; ownerId: CombatantId };
@@ -294,6 +372,17 @@ export interface InnateSpellPayload {
   spellSlug: string;
 }
 
+export interface RecordDisableProgressPayload {
+  combatantId: CombatantId;
+  checkIndex: number;
+  /**
+   * Successes to apply, signed: negative decrements successesRemaining
+   * (representing GM-confirmed successful disable check), positive undoes.
+   * Crit success = -2, crit fail / undo = +1, etc.
+   */
+  delta: number;
+}
+
 export type PromptResolution =
   | { type: 'accept' }
   | { type: 'setValue'; value: number }
@@ -347,7 +436,8 @@ export type Command =
   | BaseCommand<'RESET_REACTION', { combatantId: CombatantId }>
   | BaseCommand<'SET_NOTE', { combatantId: CombatantId; note: string | null }>
   | BaseCommand<'MARK_DEAD', { combatantId: CombatantId }>
-  | BaseCommand<'REVIVE', { combatantId: CombatantId }>;
+  | BaseCommand<'REVIVE', { combatantId: CombatantId }>
+  | BaseCommand<'RECORD_DISABLE_PROGRESS', RecordDisableProgressPayload>;
 
 export type CommandType =
   | 'START_ENCOUNTER'
@@ -386,7 +476,8 @@ export type CommandType =
   | 'RESET_REACTION'
   | 'SET_NOTE'
   | 'MARK_DEAD'
-  | 'REVIVE';
+  | 'REVIVE'
+  | 'RECORD_DISABLE_PROGRESS';
 
 export type DomainEvent =
   | { type: 'encounter-started' }
@@ -477,6 +568,14 @@ export type DomainEvent =
       spellSlug?: string;
       spellName?: string;
     }
+  | {
+      type: 'disable-progress-recorded';
+      combatantId: CombatantId;
+      checkIndex: number;
+      previous: number;
+      next: number;
+    }
+  | { type: 'hazard-disabled'; combatantId: CombatantId }
   | { type: 'command-rejected'; commandType: CommandType; reason: string };
 
 export type EffectCategory = 'condition' | 'spell' | 'affliction' | 'persistent-damage' | 'custom';
@@ -533,10 +632,12 @@ export interface ComputedModifierBucket {
 }
 
 export interface ComputedStats {
-  ac: ComputedStat;
-  fortitude: ComputedStat;
-  reflex: ComputedStat;
-  will: ComputedStat;
+  /** Absent for hazards that lack AC (PF2e "AC —"). */
+  ac?: ComputedStat;
+  /** Absent for hazards that lack the save. */
+  fortitude?: ComputedStat;
+  reflex?: ComputedStat;
+  will?: ComputedStat;
   perception: ComputedStat;
   skills: Record<string, ComputedStat>;
   attackRolls: ComputedModifierBucket;

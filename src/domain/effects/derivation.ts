@@ -8,9 +8,12 @@ import type {
   CreatureBaseStats,
   EffectDefinition,
   EffectLibrary,
+  HazardBaseStats,
   Modifier,
   StatTarget
 } from '../types';
+
+export type DerivableBaseStats = CreatureBaseStats | HazardBaseStats;
 
 type BaseStatKey = 'ac' | 'fortitude' | 'reflex' | 'will' | 'perception';
 type BucketKey = 'attackRolls' | 'damageRolls' | 'allDCs' | 'spellDcs' | 'spellAttacks';
@@ -32,17 +35,13 @@ const skillMetaTargets: Record<'strSkills' | 'dexSkills' | 'intSkills' | 'wisSki
 };
 
 export function deriveStats(
-  baseStats: CreatureBaseStats,
+  baseStats: DerivableBaseStats,
   appliedEffects: AppliedEffect[],
   effectLibrary: EffectLibrary
 ): ComputedStats {
   const modifiersByTarget = collectModifiers(baseStats, appliedEffects, effectLibrary);
 
-  return {
-    ac: computeBaseStat(baseStats.ac, modifiersByTarget.ac),
-    fortitude: computeBaseStat(baseStats.fortitude, modifiersByTarget.fortitude),
-    reflex: computeBaseStat(baseStats.reflex, modifiersByTarget.reflex),
-    will: computeBaseStat(baseStats.will, modifiersByTarget.will),
+  const computed: ComputedStats = {
     perception: computeBaseStat(baseStats.perception, modifiersByTarget.perception),
     skills: computeSkills(baseStats.skills, modifiersByTarget.skills),
     attackRolls: computeBucket(modifiersByTarget.attackRolls),
@@ -51,10 +50,25 @@ export function deriveStats(
     spellDcs: computeBucket(modifiersByTarget.spellDcs),
     spellAttacks: computeBucket(modifiersByTarget.spellAttacks)
   };
+
+  if (baseStats.ac !== null) {
+    computed.ac = computeBaseStat(baseStats.ac, modifiersByTarget.ac);
+  }
+  if (baseStats.fortitude !== null) {
+    computed.fortitude = computeBaseStat(baseStats.fortitude, modifiersByTarget.fortitude);
+  }
+  if (baseStats.reflex !== null) {
+    computed.reflex = computeBaseStat(baseStats.reflex, modifiersByTarget.reflex);
+  }
+  if (baseStats.will !== null) {
+    computed.will = computeBaseStat(baseStats.will, modifiersByTarget.will);
+  }
+
+  return computed;
 }
 
 function collectModifiers(
-  baseStats: CreatureBaseStats,
+  baseStats: DerivableBaseStats,
   appliedEffects: AppliedEffect[],
   effectLibrary: EffectLibrary
 ): {

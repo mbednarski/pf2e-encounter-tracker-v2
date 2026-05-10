@@ -1,6 +1,7 @@
 import {
   applyCommand,
   createCombatantFromCreature,
+  createCombatantFromHazard,
   createCombatantFromPartyMember,
   deriveStats,
   effectLibrary
@@ -18,6 +19,8 @@ import type {
   Duration,
   EffectDefinition,
   EncounterState,
+  Hazard,
+  HazardBaseStats,
   LogEntry,
   PartyMember
 } from '../domain';
@@ -127,6 +130,26 @@ export function makePartyMemberCombatant(input: PartyMemberCombatantInput): Comb
     combatantId: input.combatantId,
     name: input.name
   });
+}
+
+export interface HazardCombatantInput {
+  hazard: Hazard;
+  combatantId: string;
+  name?: string;
+}
+
+export function makeHazardCombatant(input: HazardCombatantInput): CombatantState {
+  return createCombatantFromHazard({
+    hazard: input.hazard,
+    combatantId: input.combatantId,
+    name: input.name
+  });
+}
+
+export function isHazardCombatant(
+  combatant: CombatantState
+): combatant is CombatantState & { baseStats: HazardBaseStats; hazardData: NonNullable<CombatantState['hazardData']> } {
+  return combatant.sourceType === 'hazard' && combatant.hazardData !== undefined;
 }
 
 export function toCommand<T extends CommandType>(

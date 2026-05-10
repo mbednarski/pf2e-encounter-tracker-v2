@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Creature, PartyMember } from '../domain';
+  import type { Creature, Hazard, PartyMember } from '../domain';
   import type {
     ConditionOption,
     ManualCombatantInput,
     TemplateAdjustmentChoice
   } from '$lib/encounter-app';
   import BestiarySection from './BestiarySection.svelte';
+  import HazardsSection from './HazardsSection.svelte';
   import LibraryManageModal from './LibraryManageModal.svelte';
   import PartySection from './PartySection.svelte';
   import SetupPanel from './SetupPanel.svelte';
@@ -13,6 +14,7 @@
   export let canStart: boolean;
   export let creatures: Creature[];
   export let partyMembers: PartyMember[];
+  export let hazards: Hazard[];
   export let conditionOptions: ConditionOption[];
   export let encounterCounts: Record<string, number>;
   export let onAddOneFromBestiary: (creature: Creature, adjustment: TemplateAdjustmentChoice) => void;
@@ -24,6 +26,10 @@
   export let onRemovePartyMember: (id: string) => void;
   export let onSavePartyMember: (partyMember: PartyMember) => void;
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
+  export let onAddHazardToEncounter: (hazard: Hazard) => void;
+  export let onRemoveOneHazardFromEncounter: (hazardId: string) => void;
+  export let onImportHazardYamlFiles: (files: File[]) => void;
+  export let onRemoveHazard: (id: string) => void;
   export let onStart: () => void;
   export let onReset: () => void;
 
@@ -57,6 +63,14 @@
     {onRemovePartyMember}
     {onSavePartyMember}
     {onImportPartyMemberYamlFiles}
+  />
+  <HazardsSection
+    {hazards}
+    {encounterCounts}
+    onAddToEncounter={onAddHazardToEncounter}
+    onRemoveOneFromEncounter={onRemoveOneHazardFromEncounter}
+    onImportYamlFiles={onImportHazardYamlFiles}
+    {onRemoveHazard}
   />
   <div class="library__configure">
     <SetupPanel {canStart} {onAddManual} {onStart} {onReset} />

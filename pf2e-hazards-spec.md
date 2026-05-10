@@ -1,8 +1,8 @@
 # PF2e Encounter Tracker v2 — Complex Hazards Specification
 
-**Version:** 0.1 (draft)
-**Date:** 2026-04-22
-**Status:** Ready for review
+**Version:** 0.2 (draft)
+**Date:** 2026-05-11
+**Status:** Implemented
 
 ---
 
@@ -30,46 +30,69 @@ interface CombatantState {
 
 No other changes to `CombatantState`. Hazard combatants use the same fields as creature combatants: `baseStats`, `attacks`, `abilities`, `appliedEffects`, etc.
 
-### 2.2 CreatureBaseStats — Add Hardness, Make Saves Optional
+### 2.2 Discriminated baseStats: keep `CreatureBaseStats` strict, add `HazardBaseStats`
 
-Hardness is not hazard-specific — creatures can have it too (golems, animated objects, constructs). Add it to `CreatureBaseStats`. Additionally, some hazards lack certain saves. Make saves nullable.
+`CreatureBaseStats` stays strict — `ac`, `fortitude`, `reflex`, `will` remain required numbers. The 0.1 draft proposed making them `number | null` on the shared type, but that pushes null checks across every reader (UI, roll handlers, all existing creature/PC tests). The implemented design adds a separate `HazardBaseStats` and discriminates `CombatantState.baseStats` as a union narrowed by `sourceType`.
 
 ```typescript
 interface CreatureBaseStats {
   ac: number
-  fortitude: number | null          // null = hazard/entity doesn't have this save
-  reflex: number | null
-  will: number | null
+  fortitude: number
+  reflex: number
+  will: number
   perception: number
   hp: number
-  hardness?: number                 // flat damage reduction, display-only
+  speed: number
   skills: Record<string, number>
-  speed?: Record<string, number>
+  hardness?: number                 // NEW — flat DR, display-only
+}
+
+interface HazardBaseStats {
+  ac: number | null                 // null = "AC —" in the statblock
+  fortitude: number | null
+  reflex: number | null
+  will: number | null
+  perception: number                // factory defaults to 0; hazards roll Stealth
+  hp: number                        // 0 for indestructible hazards
+  speed: number                     // factory defaults to 0
+  skills: Record<string, number>    // typically empty
+  hardness?: number
+  stealth: number                   // initiative modifier
+  stealthNote?: string              // "expert", "trained in Perception", etc.
+  immunities?: string[]
   resistances?: { type: string; value: number }[]
   weaknesses?: { type: string; value: number }[]
-  immunities?: string[]
+}
+
+interface CombatantState {
+  // ...
+  sourceType: "creature" | "partyMember" | "companion" | "hazard"
+  baseStats: CreatureBaseStats | HazardBaseStats   // narrowed by sourceType
+  // ...
 }
 ```
 
-**Impact on `deriveStats()`:** When a save is `null`, the derivation skips it — no modifiers applied, no entry in `ComputedStats`. The UI displays "—" for missing saves. All existing creature and party member factories continue to set saves as numbers. Only hazard factories may produce `null`.
+**Impact on `deriveStats()`:** Accepts `CreatureBaseStats | HazardBaseStats`. When `ac`, `fortitude`, `reflex`, or `will` is `null`, the entry is omitted from `ComputedStats` and any modifier targeting that stat is silently dropped (no `suppressed` entry). Creature/PC code paths see numbers everywhere; only hazard derivations skip stats.
 
-**Impact on `ComputedStats`:** Save entries become optional:
+**Impact on `ComputedStats`:** AC and the three saves become optional. `perception` and the buckets (`attackRolls`, `damageRolls`, `allDCs`, `spellDcs`, `spellAttacks`) always populate.
 
 ```typescript
 interface ComputedStats {
-  ac: { final: number; base: number; modifiers: AppliedModifier[] }
-  fortitude?: { final: number; base: number; modifiers: AppliedModifier[] }
-  reflex?: { final: number; base: number; modifiers: AppliedModifier[] }
-  will?: { final: number; base: number; modifiers: AppliedModifier[] }
-  // ... rest unchanged
+  ac?: ComputedStat
+  fortitude?: ComputedStat
+  reflex?: ComputedStat
+  will?: ComputedStat
+  perception: ComputedStat
+  skills: Record<string, ComputedStat>
+  // ...buckets unchanged...
 }
 ```
 
-**Impact on `Creature` type:** Unchanged. All creatures have saves. The `Creature` interface keeps `fortitude: number`, etc. The nullable saves are a `CreatureBaseStats` concern — the factory that builds base stats from a `Hazard` is where `null` enters.
+**Impact on `Creature`:** Add optional `hardness?: number` (some creatures — golems, animated objects — have hardness). All other fields unchanged. The creature factory passes `hardness` through into `CreatureBaseStats.hardness`.
 
-**Impact on `PartyMember` and `Companion`:** Unchanged. PCs and companions always have all saves.
+**Impact on `PartyMember` / Companion:** Unchanged.
 
-**Hardness and APPLY_DAMAGE:** No change. `APPLY_DAMAGE` takes final numbers (command vocab spec §1.3). The GM subtracts hardness mentally before entering the damage amount, same as resistances and weaknesses. The UI displays hardness prominently so the GM remembers.
+**Hardness and APPLY_DAMAGE:** No automation. `APPLY_DAMAGE` takes the final number; the GM subtracts hardness mentally, the same pattern used for resistances and weaknesses. The UI shows hardness as a chip next to AC so the GM remembers.
 
 ### 2.3 Creature — Add Optional Hardness
 
@@ -102,13 +125,14 @@ Hazards are a new YAML entity type alongside creatures, encounters, party member
 
 ### 3.1 Hazard (Library Template)
 
+The `complexity` field from the 0.1 draft is dropped — only complex hazards are tracked today, and a literal-`"complex"` field carries no information. If simple hazards are ever modeled, reintroduce it then.
+
 ```typescript
 interface Hazard {
   id: string
   name: string
   level: number
   traits: string[]
-  complexity: "complex"              // always complex — simple hazards aren't tracked
   rarity: "common" | "uncommon" | "rare" | "unique"
 
   // Detection
@@ -202,28 +226,28 @@ The factory:
 
 The GM dispatches `ADD_COMBATANT` with the result. Standard flow.
 
-### 4.2 CombatantState — Hazard-Specific Display Data
+### 4.2 CombatantState — Hazard-Specific Display Data (split)
 
-Hazards need a few display fields that creatures don't have. Rather than polluting `CombatantState` with hazard-specific required fields, these go in an optional bag:
+The 0.1 draft put everything (routine, disable checks/progress, stealth, stealth note) into one `hazardData?` bag. The implemented design splits these by their nature:
+
+- **Defensive sense stats (`stealth`, `stealthNote`)** live on `HazardBaseStats` — parallel to `perception` on `CreatureBaseStats`. With the discriminated union, narrowing `sourceType === 'hazard'` gives you `combatant.baseStats.stealth` directly.
+- **Encounter mechanics (routine, disable checks, disable progress)** live in a smaller `hazardData?` bag on `CombatantState`. `disableProgress` is mutable encounter state indexed against `disableChecks`, so they need to stay grouped.
 
 ```typescript
 interface CombatantState {
   // ... existing fields ...
 
-  // Hazard-specific display data (only populated for sourceType: "hazard")
   hazardData?: {
     routine: HazardRoutine
     disableChecks: DisableCheck[]
     disableProgress: DisableProgress[]   // mutable — tracks successes during encounter
-    stealth: number
-    stealthNote?: string
   }
 }
 ```
 
-This keeps the hazard-specific data contained. The domain ignores `hazardData` entirely — it's display data for the UI and mutable state for disable tracking. Creatures, party members, and companions have `hazardData: undefined`.
+Creatures, PCs, and companions have `hazardData: undefined`. The factory `createCombatantFromHazard` is the only place that populates the bag.
 
-### 4.3 Disable Progress Tracking
+### 4.3 Disable Progress Tracking — domain command
 
 ```typescript
 interface DisableProgress {
@@ -241,11 +265,25 @@ disableProgress: hazard.disableChecks.map((check, i) => ({
 }))
 ```
 
-**Tracking is manual.** The GM rolls, tells the system the result. No dedicated command — the GM uses SET_NOTE or a UI action that decrements `successesRemaining` directly (orchestrator-level mutation, not a domain command).
+The 0.1 draft proposed orchestrator-level mutation (no command). The implemented design uses a domain command so disable attempts go through the same command-sourced path as every other mutation and appear in the combat log.
 
-**Why not a domain command?** Disable progress isn't domain state in the command-sourcing sense. It doesn't interact with effects, HP, initiative, or any other domain concept. It's a counter the GM ticks down. Putting it in the domain would require a new command type for minimal benefit. The orchestrator can handle the mutation and persist it as part of the combatant state snapshot.
+```typescript
+// Command
+{ type: 'RECORD_DISABLE_PROGRESS',
+  payload: { combatantId, checkIndex, delta: number } }
 
-**Full disable:** When all `disableProgress` entries have `successesRemaining === 0`, the hazard is fully disabled. The UI indicates this. The GM dispatches `MARK_DEAD` or `REMOVE_COMBATANT` to take it out of initiative. The domain doesn't auto-remove — GM authority.
+// Events
+{ type: 'disable-progress-recorded',
+  combatantId, checkIndex, previous, next }
+{ type: 'hazard-disabled', combatantId }
+```
+
+- `delta` is signed: typically `-1` on a success, `-2` on a critical success, `+1` to undo, etc.
+- Reducer clamps `successesRemaining` to `[0, requiredSuccesses]` and rejects no-op deltas.
+- Reducer rejects if the target isn't a hazard or `checkIndex` is out of range.
+- `hazard-disabled` fires exactly once, the first time all entries transition to `successesRemaining: 0`.
+
+**Full disable behavior:** Domain does not auto-`MARK_DEAD`. The UI shows a "Fully disabled" badge, and the GM dispatches `MARK_DEAD` or `REMOVE_COMBATANT` to take the hazard out of initiative. GM authority for the actual removal stays intact.
 
 ### 4.4 Initiative
 
@@ -272,42 +310,9 @@ No new commands needed for either path.
 
 ### 5.1 Hazards Without AC
 
-Some complex hazards can't be targeted by attacks — they have no AC. In PF2e this is represented as "AC —" in the statblock.
+Some complex hazards can't be targeted by attacks — "AC —" in the statblock. On the `Hazard` template, `ac?: number` (optional). The factory maps `undefined → null` into `HazardBaseStats.ac`. `deriveStats()` omits the `ac` entry from `ComputedStats`. UI renders "—".
 
-Handle the same way as missing saves: make AC nullable on `Hazard`.
-
-```typescript
-interface Hazard {
-  // ...
-  ac?: number                         // undefined = can't be targeted by attacks
-  // ...
-}
-```
-
-`CreatureBaseStats.ac` stays required (`number`). If a hazard lacks AC, the factory sets it to... actually, this is a problem. `deriveStats()` expects `ac: number`.
-
-**Resolution:** Make `CreatureBaseStats.ac` nullable too: `ac: number | null`. Same treatment as saves. `deriveStats()` skips null AC. The UI displays "—". This is a rare edge case (most complex hazards have AC) but the type system should handle it cleanly.
-
-Updated `CreatureBaseStats`:
-
-```typescript
-interface CreatureBaseStats {
-  ac: number | null                  // null for hazards that can't be targeted
-  fortitude: number | null
-  reflex: number | null
-  will: number | null
-  perception: number
-  hp: number
-  hardness?: number
-  skills: Record<string, number>
-  speed?: Record<string, number>
-  resistances?: { type: string; value: number }[]
-  weaknesses?: { type: string; value: number }[]
-  immunities?: string[]
-}
-```
-
-**For creatures, party members, and companions:** factories always set AC and saves to numbers. The `null` path only activates for hazards. Existing code that reads `baseStats.ac` needs a null check — but since this stat is consumed in exactly one place (`deriveStats`), the blast radius is small.
+`CreatureBaseStats.ac` stays required `number`. The null path lives entirely on `HazardBaseStats`. See §2.2 for the full type shapes.
 
 ### 5.2 Hazards With Multiple HP Pools
 
@@ -350,7 +355,6 @@ id: poisoned-dart-gallery
 name: Poisoned Dart Gallery
 level: 8
 traits: [mechanical, trap]
-complexity: complex
 rarity: common
 
 stealth: 28
@@ -407,9 +411,9 @@ tags: [extinction-curse]
 
 ---
 
-## 7. No New Commands
+## 7. Command Vocabulary
 
-Complex hazards use the existing command vocabulary entirely:
+Complex hazards reuse the existing command vocabulary plus one new command for disable tracking:
 
 | Action | Command |
 |---|---|
@@ -420,9 +424,9 @@ Complex hazards use the existing command vocabulary entirely:
 | Advance turn | END_TURN |
 | Destroy | MARK_DEAD |
 | Remove from encounter | REMOVE_COMBATANT |
-| Track disable progress | Orchestrator-level mutation (not a domain command) |
+| Track disable progress | **RECORD_DISABLE_PROGRESS** (see §4.3) |
 
-No new domain commands. No new domain events.
+The 0.1 draft proposed orchestrator-level mutation for disable tracking. The implemented design adds one domain command and two events (`disable-progress-recorded`, `hazard-disabled`) to keep disable attempts within the command-sourced model and surface them in the combat log.
 
 ---
 
@@ -432,20 +436,25 @@ No new domain commands. No new domain events.
 
 | Type | Location | Purpose |
 |---|---|---|
-| `Hazard` | `domain/types/hazard.ts` | Library template for complex hazards |
-| `DisableCheck` | `domain/types/hazard.ts` | Skill + DC + required successes to disable |
-| `HazardRoutine` | `domain/types/hazard.ts` | Fixed actions per turn with description |
-| `DisableProgress` | `domain/types/hazard.ts` | Mutable encounter tracking for disable checks |
+| `Hazard` | `domain/types.ts` | Library template for complex hazards |
+| `HazardBaseStats` | `domain/types.ts` | Defensive stats for hazard combatants (nullable AC/saves, stealth) |
+| `DisableCheck` | `domain/types.ts` | Skill + DC + required successes to disable |
+| `HazardRoutine` | `domain/types.ts` | Fixed actions per turn with description |
+| `DisableProgress` | `domain/types.ts` | Mutable encounter tracking for disable checks |
+| `HazardData` | `domain/types.ts` | Bag carrying routine + disable checks + progress on `CombatantState` |
 
 ### 8.2 Modified Types
 
 | Type | Change |
 |---|---|
-| `CombatantState.sourceType` | Add `"hazard"` to union |
-| `CombatantState` | Add optional `hazardData?` field |
-| `CreatureBaseStats` | Add `hardness?`. Make `ac`, `fortitude`, `reflex`, `will` nullable (`number \| null`). |
+| `CombatantState.sourceType` | Already had `"hazard"` in union (verified) |
+| `CombatantState.baseStats` | Now `CreatureBaseStats \| HazardBaseStats` (discriminated by `sourceType`) |
+| `CombatantState` | Add optional `hazardData?: HazardData` field |
+| `CreatureBaseStats` | Add `hardness?`. Saves stay required `number`. |
 | `ComputedStats` | Make `ac`, `fortitude`, `reflex`, `will` entries optional. |
 | `Creature` | Add optional `hardness?` field. |
+| `Command` | Add `RECORD_DISABLE_PROGRESS` variant. |
+| `DomainEvent` | Add `disable-progress-recorded` and `hazard-disabled` variants. |
 
 ### 8.3 New IndexedDB Store
 
@@ -453,20 +462,23 @@ No new domain commands. No new domain events.
 
 ### 8.4 New Factory Function
 
-`createCombatantFromHazard(hazard: Hazard): CombatantState` — in `domain/creatures/` or new `domain/hazards/`.
+`createCombatantFromHazard(input: { hazard, combatantId, name? })` — implemented at `domain/hazards/factory.ts`. Mirrors `createCombatantFromCreature` shape.
 
-### 8.5 No New Commands
+### 8.5 New Command
 
-Zero. Existing command vocabulary handles all hazard interactions.
+`RECORD_DISABLE_PROGRESS` (see §4.3). Two new events: `disable-progress-recorded`, `hazard-disabled`.
 
 ### 8.6 Orchestrator Logic
 
-- Disable progress tracking: orchestrator-level mutation, not domain command
-- Hazard factory invocation on "Add Hazard" UI action
+- Hazard factory invocation on "Add Hazard" UI action (via `makeHazardCombatant` in `src/lib/encounter-app.ts`).
+- `isHazardCombatant(combatant)` type guard narrows for UI sites that need hazard-specific fields.
+- Initiative roll uses `baseStats.stealth` when `sourceType === 'hazard'`, otherwise computed perception.
 
 ### 8.7 Test Priority
 
-1. **CreatureBaseStats nullability** — `deriveStats()` with null AC, null saves. Verify modifiers targeting null stats are skipped, ComputedStats entries omitted.
-2. **Hardness display** — verify it appears in the stat display and isn't consumed by any automated logic.
-3. **Hazard factory** — produces correct CombatantState from Hazard library entry. Handles missing AC, missing saves, missing HP.
-4. **Disable progress** — initialization from DisableCheck[], decrement, full-disable detection.
+1. **Nullable AC/saves** — `deriveStats()` with `HazardBaseStats` and null fields. ComputedStats entries omitted; modifiers targeting null stats fall on the floor.
+2. **Hardness display** — chip on the card and dd in the details panel for any combatant with `baseStats.hardness !== undefined`. Not consumed by automated damage logic.
+3. **Hazard factory** — produces correct CombatantState. Handles missing AC, missing saves, missing HP, stealth note.
+4. **Disable progress** — initialization from `DisableCheck[]`, decrement clamps at 0, undo clamps at `requiredSuccesses`, `hazard-disabled` fires exactly once on transition.
+5. **YAML import** — round-trip the poisoned-dart-gallery fixture; reject missing required fields (`routine`, `disableChecks`).
+6. **IDB store** — load/add/remove with fake-indexeddb; v4 → v5 migration preserves prior records.

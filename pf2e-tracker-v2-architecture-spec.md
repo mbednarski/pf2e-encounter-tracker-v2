@@ -358,11 +358,14 @@ The derivation pipeline per stat:
 
 ```typescript
 interface ComputedStats {
-  // Each stat includes final value + breakdown for UI display
-  ac: { final: number; base: number; modifiers: AppliedModifier[] }
-  fortitude: { final: number; base: number; modifiers: AppliedModifier[] }
-  reflex: { final: number; base: number; modifiers: AppliedModifier[] }
-  will: { final: number; base: number; modifiers: AppliedModifier[] }
+  // Each stat includes final value + breakdown for UI display.
+  // AC and saves are optional: hazards may lack one or more (PF2e "AC —" or no
+  // Fortitude save, etc.). Hazard base stats hold `number | null` for these
+  // fields; null entries are omitted from ComputedStats and the UI renders "—".
+  ac?: { final: number; base: number; modifiers: AppliedModifier[] }
+  fortitude?: { final: number; base: number; modifiers: AppliedModifier[] }
+  reflex?: { final: number; base: number; modifiers: AppliedModifier[] }
+  will?: { final: number; base: number; modifiers: AppliedModifier[] }
   perception: { final: number; base: number; modifiers: AppliedModifier[] }
   attackRolls: { total: number; modifiers: AppliedModifier[] }
   damageRolls: { total: number; modifiers: AppliedModifier[] }
@@ -371,6 +374,11 @@ interface ComputedStats {
   spellAttacks: { total: number; modifiers: AppliedModifier[] }
   skills: Record<string, { final: number; base: number; modifiers: AppliedModifier[] }>
 }
+
+// `CombatantState.baseStats` is a discriminated union narrowed by `sourceType`:
+//   - 'creature' | 'partyMember' | 'companion' → CreatureBaseStats (all stats required)
+//   - 'hazard' → HazardBaseStats (ac/fortitude/reflex/will: number | null, plus stealth)
+// See pf2e-hazards-spec.md for the hazard branch.
 
 interface AppliedModifier {
   value: number                     // resolved numeric value
