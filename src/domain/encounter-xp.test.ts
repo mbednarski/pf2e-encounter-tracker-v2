@@ -62,7 +62,7 @@ describe('difficultyThresholds', () => {
   it('party of 5 (one PC above standard)', () => {
     expect(difficultyThresholds(5)).toEqual({
       trivial: 50,
-      low: 75,
+      low: 80,
       moderate: 100,
       severe: 150,
       extreme: 200
@@ -72,7 +72,7 @@ describe('difficultyThresholds', () => {
   it('party of 3 (one PC below standard)', () => {
     expect(difficultyThresholds(3)).toEqual({
       trivial: 30,
-      low: 45,
+      low: 40,
       moderate: 60,
       severe: 90,
       extreme: 120
@@ -82,17 +82,20 @@ describe('difficultyThresholds', () => {
   it('party of 6', () => {
     expect(difficultyThresholds(6)).toEqual({
       trivial: 60,
-      low: 90,
+      low: 100,
       moderate: 120,
       severe: 180,
       extreme: 240
     });
   });
 
-  it('party of 1', () => {
+  it('party of 1 — Low collapses to 0 because GM Core deducts 20 XP per missing PC', () => {
+    // Base Low = 60, deducted by 20*3 = 60 for the three "missing" PCs → 0.
+    // This matches the literal spec formula; party-of-1 is a degenerate edge
+    // case the rules don't really cover, so any non-zero XP qualifies as Low.
     expect(difficultyThresholds(1)).toEqual({
       trivial: 10,
-      low: 15,
+      low: 0,
       moderate: 20,
       severe: 30,
       extreme: 40
@@ -274,7 +277,7 @@ describe('computeEncounterXP', () => {
     expect(result.totalXP).toBe(240);
     expect(result.thresholds).toEqual({
       trivial: 50,
-      low: 75,
+      low: 80,
       moderate: 100,
       severe: 150,
       extreme: 200
