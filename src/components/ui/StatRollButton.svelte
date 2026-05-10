@@ -1,0 +1,91 @@
+<script lang="ts">
+  import { formatModifier } from '$lib/abilities/format-damage';
+
+  type Tone = 'default' | 'pc';
+
+  export let label: string;
+  export let modifier: number;
+  export let disabled = false;
+  export let title: string | undefined = undefined;
+  export let ariaLabel: string | undefined = undefined;
+  export let tone: Tone = 'default';
+  export let onRoll: (origin: { x: number; y: number }) => void = () => {};
+
+  $: signedModifier = formatModifier(modifier);
+  $: computedAriaLabel = ariaLabel ?? `Roll ${label} (${signedModifier})`;
+
+  function handleClick(event: MouseEvent) {
+    onRoll({ x: event.clientX, y: event.clientY });
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    onRoll({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  }
+</script>
+
+<button
+  type="button"
+  {disabled}
+  {title}
+  aria-label={computedAriaLabel}
+  class="stat-roll stat-roll--{tone}"
+  onclick={handleClick}
+  onkeydown={handleKeyDown}
+>
+  <span class="stat-roll__label">{label}</span>
+  <span class="stat-roll__mod">{signedModifier}</span>
+</button>
+
+<style>
+  .stat-roll {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--color-panel-2);
+    color: var(--color-ink);
+    border: 1px solid var(--color-rule);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .stat-roll:hover:not(:disabled) {
+    background: var(--color-panel);
+    border-color: var(--color-ink);
+  }
+
+  .stat-roll:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 1px;
+  }
+
+  .stat-roll:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .stat-roll__label {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--color-ink-mute);
+  }
+
+  .stat-roll__mod {
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+
+  .stat-roll--pc .stat-roll__mod {
+    color: var(--color-blue);
+  }
+</style>

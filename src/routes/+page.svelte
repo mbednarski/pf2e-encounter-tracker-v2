@@ -749,6 +749,43 @@
     });
   }
 
+  type SaveKey = 'fortitude' | 'reflex' | 'will';
+  const SAVE_LABELS: Record<SaveKey, string> = {
+    fortitude: 'Fort',
+    reflex: 'Reflex',
+    will: 'Will'
+  };
+
+  function rollSaveFor(combatantId: string, save: SaveKey, origin: { x: number; y: number }) {
+    const c = encounter.combatants[combatantId];
+    if (!c) return;
+    const mod = c.baseStats[save];
+    const result = rollAttackDice(mod);
+    const isCrit = result.d20 === 20;
+    const isFumble = result.d20 === 1;
+    const logTone = isCrit ? 'success' : isFumble ? 'danger' : 'info';
+    const bubbleTone: BubbleTone = isCrit ? 'crit' : isFumble ? 'fumble' : 'normal';
+    const label = SAVE_LABELS[save];
+    const badge = isCrit ? 'NAT 20' : isFumble ? 'NAT 1' : `${label} save`;
+
+    encounter = appendInfoLog(
+      encounter,
+      nextRollId(),
+      `${c.name} ${label} save: 1d20(${result.d20}) ${formatModifier(mod)} = ${result.total}`,
+      logTone
+    );
+    persistence.persist(encounter);
+
+    showBubble({
+      x: origin.x,
+      y: origin.y,
+      total: String(result.total),
+      detail: `1d20(${result.d20}) ${formatModifier(mod)}`,
+      tone: bubbleTone,
+      badge
+    });
+  }
+
   function rollDamageFor(combatantId: string, attack: Attack, origin: { x: number; y: number }) {
     const c = encounter.combatants[combatantId];
     if (!c || attack.damage.length === 0) return;
@@ -894,6 +931,7 @@
             combatantsById={encounter.combatants}
             onResolvePrompt={resolvePrompt}
             onApplyPersistentDamage={applyPersistentDamageFromPrompt}
+            onRollSave={rollSaveFor}
           />
         {/each}
       </div>
@@ -905,6 +943,7 @@
         onSetNote={setNote}
         onRollAttack={rollAttackFor}
         onRollDamage={rollDamageFor}
+        onRollSave={rollSaveFor}
         onUseSpellSlot={useSpellSlot}
         onRestoreSpellSlot={restoreSpellSlot}
         onUseFocusPoint={useFocusPoint}

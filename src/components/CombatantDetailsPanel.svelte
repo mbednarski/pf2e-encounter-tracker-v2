@@ -6,9 +6,12 @@
   import Chip from './ui/Chip.svelte';
   import NotesEditor from './NotesEditor.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
+  import StatRollButton from './ui/StatRollButton.svelte';
   import AbilityCard from './details/AbilityCard.svelte';
   import AttackRow from './details/AttackRow.svelte';
   import SpellcastingBlockView from './details/SpellcastingBlockView.svelte';
+
+  type SaveKey = 'fortitude' | 'reflex' | 'will';
 
   export let combatant: CombatantState | undefined;
   export let onSetNote: (combatantId: string, note: string | null) => void;
@@ -21,6 +24,11 @@
   export let onRollDamage: (
     combatantId: string,
     attack: Attack,
+    origin: { x: number; y: number }
+  ) => void = () => {};
+  export let onRollSave: (
+    combatantId: string,
+    save: SaveKey,
     origin: { x: number; y: number }
   ) => void = () => {};
   export let onUseSpellSlot: (combatantId: string, blockId: string, rank: number) => void = () => {};
@@ -86,20 +94,26 @@
           <dd>{combatant.baseStats.speed} ft</dd>
         </div>
       </dl>
-      <dl class="saves-grid">
-        <div class="stat stat--small">
-          <SectionLabel>Fort</SectionLabel>
-          <dd>{formatModifier(combatant.baseStats.fortitude)}</dd>
-        </div>
-        <div class="stat stat--small">
-          <SectionLabel>Ref</SectionLabel>
-          <dd>{formatModifier(combatant.baseStats.reflex)}</dd>
-        </div>
-        <div class="stat stat--small">
-          <SectionLabel>Will</SectionLabel>
-          <dd>{formatModifier(combatant.baseStats.will)}</dd>
-        </div>
-      </dl>
+      <div class="saves-grid">
+        <StatRollButton
+          label="Fort"
+          modifier={combatant.baseStats.fortitude}
+          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(combatant.baseStats.fortitude)})`}
+          onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
+        />
+        <StatRollButton
+          label="Ref"
+          modifier={combatant.baseStats.reflex}
+          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(combatant.baseStats.reflex)})`}
+          onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
+        />
+        <StatRollButton
+          label="Will"
+          modifier={combatant.baseStats.will}
+          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(combatant.baseStats.will)})`}
+          onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
+        />
+      </div>
     </section>
 
     {#if combatant.passiveAbilities.length > 0}
@@ -271,10 +285,6 @@
     font-size: var(--text-xl);
     font-weight: 600;
     line-height: var(--leading-tight);
-  }
-
-  .stat--small dd {
-    font-size: var(--text-lg);
   }
 
   .muted {
