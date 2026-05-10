@@ -2,13 +2,16 @@ import {
   applyCommand,
   createCombatantFromCreature,
   createCombatantFromPartyMember,
+  deriveStats,
   effectLibrary
 } from '../domain';
 import type {
   AppliedEffect,
+  AppliedModifier,
   CombatantState,
   Command,
   CommandType,
+  ComputedStats,
   Creature,
   CreatureTemplateAdjustment,
   DomainEvent,
@@ -545,4 +548,30 @@ export function listRemovableEffects(
         source: { kind: 'direct' as const }
       };
     });
+}
+
+export function computeCombatantStats(combatant: CombatantState): ComputedStats {
+  return deriveStats(combatant.baseStats, combatant.appliedEffects, effectLibrary);
+}
+
+function signed(value: number): string {
+  return value >= 0 ? `+${value}` : `${value}`;
+}
+
+export function formatModifierBreakdown(mods: readonly AppliedModifier[]): string {
+  return mods
+    .filter((m) => !m.suppressed)
+    .map((m) => `${m.sourceName}: ${signed(m.value)} ${m.bonusType}`)
+    .join('; ');
+}
+
+export function formatStatTooltip(
+  base: number,
+  final: number,
+  mods: readonly AppliedModifier[]
+): string {
+  const active = mods.filter((m) => !m.suppressed);
+  if (active.length === 0) return String(base);
+  const parts = active.map((m) => `${signed(m.value)} ${m.sourceName}`).join(' ');
+  return `${base} ${parts} = ${final}`;
 }

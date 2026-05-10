@@ -4,11 +4,16 @@
   import { formatDamage, formatModifier } from '$lib/abilities/format-damage';
 
   export let attack: Attack;
+  export let attackBonus: number = 0;
+  export let damageBonus: number = 0;
+  export let attackTooltip: string = '';
+  export let damageTooltip: string = '';
   export let onRollAttack: (attack: Attack, variant: MapVariant, origin: { x: number; y: number }) => void;
   export let onRollDamage: (attack: Attack, origin: { x: number; y: number }) => void;
 
-  $: variants = mapVariants(attack.modifier, attack.traits);
+  $: variants = mapVariants(attack.modifier + attackBonus, attack.traits);
   $: damageLabel = formatDamage(attack.damage);
+  $: damageBonusSuffix = damageBonus !== 0 ? ` ${damageBonus > 0 ? '+' : ''}${damageBonus}` : '';
 </script>
 
 <article class="row">
@@ -25,6 +30,8 @@
         <button
           type="button"
           class="btn btn--attack"
+          class:btn--modified={attackBonus !== 0}
+          title={attackTooltip}
           aria-label="Roll {attack.name} {variant.label} attack ({formatModifier(variant.modifier)})"
           onclick={(e) => onRollAttack(attack, variant, { x: e.clientX, y: e.clientY })}
         >
@@ -37,11 +44,13 @@
       <button
         type="button"
         class="btn btn--damage"
-        aria-label="Roll {attack.name} damage ({damageLabel})"
+        class:btn--modified={damageBonus !== 0}
+        title={damageTooltip}
+        aria-label="Roll {attack.name} damage ({damageLabel}{damageBonusSuffix})"
         onclick={(e) => onRollDamage(attack, { x: e.clientX, y: e.clientY })}
       >
         <span class="btn__label">Dmg</span>
-        <span class="btn__mod">{damageLabel}</span>
+        <span class="btn__mod">{damageLabel}{damageBonusSuffix}</span>
       </button>
     {/if}
   </div>
@@ -149,5 +158,11 @@
 
   .btn--damage .btn__mod {
     font-size: var(--text-sm);
+  }
+
+  .btn--modified .btn__mod {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
   }
 </style>

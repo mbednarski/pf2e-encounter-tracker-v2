@@ -13,7 +13,9 @@ import type {
 } from '../types';
 
 type BaseStatKey = 'ac' | 'fortitude' | 'reflex' | 'will' | 'perception';
-type BucketKey = 'attackRolls' | 'allDCs';
+type BucketKey = 'attackRolls' | 'damageRolls' | 'allDCs' | 'spellDcs' | 'spellAttacks';
+
+const bucketKeys: BucketKey[] = ['attackRolls', 'damageRolls', 'allDCs', 'spellDcs', 'spellAttacks'];
 type ModifierTarget =
   | { kind: 'base'; key: BaseStatKey }
   | { kind: 'bucket'; key: BucketKey }
@@ -44,7 +46,10 @@ export function deriveStats(
     perception: computeBaseStat(baseStats.perception, modifiersByTarget.perception),
     skills: computeSkills(baseStats.skills, modifiersByTarget.skills),
     attackRolls: computeBucket(modifiersByTarget.attackRolls),
-    allDCs: computeBucket(modifiersByTarget.allDCs)
+    damageRolls: computeBucket(modifiersByTarget.damageRolls),
+    allDCs: computeBucket(modifiersByTarget.allDCs),
+    spellDcs: computeBucket(modifiersByTarget.spellDcs),
+    spellAttacks: computeBucket(modifiersByTarget.spellAttacks)
   };
 }
 
@@ -62,7 +67,10 @@ function collectModifiers(
     will: [],
     perception: [],
     attackRolls: [],
+    damageRolls: [],
     allDCs: [],
+    spellDcs: [],
+    spellAttacks: [],
     skills: Object.fromEntries(Object.keys(baseStats.skills).map((skill) => [skill, []]))
   } as {
     [K in BaseStatKey | BucketKey]: AppliedModifier[];
@@ -244,7 +252,7 @@ function isBaseStatKey(stat: StatTarget): stat is BaseStatKey {
 }
 
 function isBucketKey(stat: StatTarget): stat is BucketKey {
-  return stat === 'attackRolls' || stat === 'allDCs';
+  return bucketKeys.includes(stat as BucketKey);
 }
 
 function isSkillMetaTarget(

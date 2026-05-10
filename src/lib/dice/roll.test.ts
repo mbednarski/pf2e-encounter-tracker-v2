@@ -30,7 +30,7 @@ describe('rollAttack', () => {
 
 describe('rollDamage', () => {
   test('rolls a single dice + bonus component', () => {
-    const result = rollDamage([{ dice: 1, dieSize: 8, bonus: 3, type: 'slashing' }], () => 0.5);
+    const result = rollDamage([{ dice: 1, dieSize: 8, bonus: 3, type: 'slashing' }], {}, () => 0.5);
     // 0.5 * 8 = 4, +1 → 5; +3 = 8
     expect(result.total).toBe(8);
     expect(result.breakdown).toBe('1d8+3 slashing (8)');
@@ -42,6 +42,7 @@ describe('rollDamage', () => {
         { dice: 2, dieSize: 8, bonus: 4, type: 'piercing' },
         { dice: 1, dieSize: 6, type: 'fire', persistent: true }
       ],
+      {},
       () => 0.5
     );
     // 2d8: 5+5 = 10, +4 = 14; 1d6: 4
@@ -50,15 +51,45 @@ describe('rollDamage', () => {
   });
 
   test('flat bonus-only component renders bonus prefix', () => {
-    const result = rollDamage([{ bonus: 5, type: 'fire' }], () => 0.5);
+    const result = rollDamage([{ bonus: 5, type: 'fire' }], {}, () => 0.5);
     expect(result.total).toBe(5);
     expect(result.breakdown).toBe('+5 fire (5)');
   });
 
   test('dice-only component (e.g. persistent bleed)', () => {
-    const result = rollDamage([{ dice: 1, dieSize: 4, type: 'bleed', persistent: true }], () => 0);
+    const result = rollDamage([{ dice: 1, dieSize: 4, type: 'bleed', persistent: true }], {}, () => 0);
     // 0 * 4 → 0, +1 = 1
     expect(result.total).toBe(1);
     expect(result.breakdown).toBe('1d4 bleed persistent (1)');
+  });
+
+  test('appends positive flatBonus with default label and adds to total', () => {
+    const result = rollDamage(
+      [{ dice: 1, dieSize: 8, bonus: 3, type: 'slashing' }],
+      { flatBonus: 1 },
+      () => 0.5
+    );
+    expect(result.total).toBe(9);
+    expect(result.breakdown).toBe('1d8+3 slashing (8) + +1 status');
+  });
+
+  test('appends negative flatBonus and subtracts from total', () => {
+    const result = rollDamage(
+      [{ dice: 1, dieSize: 8, bonus: 3, type: 'slashing' }],
+      { flatBonus: -2, flatBonusLabel: 'enfeebled' },
+      () => 0.5
+    );
+    expect(result.total).toBe(6);
+    expect(result.breakdown).toBe('1d8+3 slashing (8) + -2 enfeebled');
+  });
+
+  test('zero flatBonus is omitted from breakdown', () => {
+    const result = rollDamage(
+      [{ dice: 1, dieSize: 8, bonus: 3, type: 'slashing' }],
+      { flatBonus: 0 },
+      () => 0.5
+    );
+    expect(result.total).toBe(8);
+    expect(result.breakdown).toBe('1d8+3 slashing (8)');
   });
 });

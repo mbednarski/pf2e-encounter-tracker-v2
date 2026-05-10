@@ -88,10 +88,12 @@ export const effectLibrary: EffectLibrary = {
     maxValue: 4,
     modifiers: [
       { stat: 'mentalSkills', bonusType: 'status', value: negativeEffectValue },
-      { stat: 'will', bonusType: 'status', value: negativeEffectValue }
+      { stat: 'will', bonusType: 'status', value: negativeEffectValue },
+      { stat: 'spellDcs', bonusType: 'status', value: negativeEffectValue },
+      { stat: 'spellAttacks', bonusType: 'status', value: negativeEffectValue }
     ],
     description:
-      'Also applies to spell attack rolls and spell DCs. When casting a spell, DC 5 + value flat check or spell is lost.'
+      'When casting a spell, DC 5 + value flat check or the spell is lost.'
   }),
   drained: condition({
     id: 'drained',
@@ -393,14 +395,14 @@ export const effectLibrary: EffectLibrary = {
     id: 'bless',
     name: 'Bless',
     hasValue: false,
-    modifiers: [],
+    modifiers: [{ stat: 'attackRolls', bonusType: 'status', value: 1 }],
     description: 'Allies in a 5-foot emanation gain a +1 status bonus to attack rolls. Sustained; emanation grows by 10 ft each turn (max 30 ft).'
   }),
   bane: spellEffect({
     id: 'bane',
     name: 'Bane',
     hasValue: false,
-    modifiers: [],
+    modifiers: [{ stat: 'attackRolls', bonusType: 'status', value: -1 }],
     description: 'Enemies in a 5-foot emanation that fail Will save take a -1 status penalty to attack rolls. Sustained; emanation grows.'
   }),
   haste: spellEffect({
@@ -429,22 +431,28 @@ export const effectLibrary: EffectLibrary = {
     id: 'inspire-courage',
     name: 'Inspire Courage',
     hasValue: false,
-    modifiers: [],
-    description: 'Allies in a 60-foot emanation gain a +1 status bonus to attack rolls, damage rolls, and saves vs fear. Composition cantrip; 1 round.'
+    modifiers: [
+      { stat: 'attackRolls', bonusType: 'status', value: 1 },
+      { stat: 'damageRolls', bonusType: 'status', value: 1 }
+    ],
+    description: 'Allies in a 60-foot emanation gain a +1 status bonus to attack rolls, damage rolls, and saves vs fear (the save bonus is too narrow to automate). Composition cantrip; 1 round.'
   }),
   'inspire-defense': spellEffect({
     id: 'inspire-defense',
     name: 'Inspire Defense',
     hasValue: false,
-    modifiers: [],
-    description: 'Allies in a 60-foot emanation gain a +1 status bonus to AC and saves, plus resistance equal to half the bardic level to physical damage. Composition cantrip; 1 round.'
+    modifiers: [
+      { stat: 'ac', bonusType: 'status', value: 1 },
+      { stat: 'allSaves', bonusType: 'status', value: 1 }
+    ],
+    description: 'Allies in a 60-foot emanation gain a +1 status bonus to AC and saves, plus resistance equal to half the bardic level to physical damage (resistance not automated). Composition cantrip; 1 round.'
   }),
   'mage-armor': spellEffect({
     id: 'mage-armor',
     name: 'Mage Armor',
     hasValue: false,
-    modifiers: [],
-    description: 'Target gains a +1 item bonus to AC and a maximum Dex cap of +5. 24 hours.'
+    modifiers: [{ stat: 'ac', bonusType: 'item', value: 1 }],
+    description: 'Target gains a +1 item bonus to AC and a maximum Dex cap of +5 (Dex cap not modeled). 24 hours.'
   }),
   shield: spellEffect({
     id: 'shield',

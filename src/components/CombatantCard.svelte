@@ -4,6 +4,8 @@
     clampValue,
     combatantFaction,
     combatantVisualState,
+    computeCombatantStats,
+    formatStatTooltip,
     resolveApplyChoice,
     type AppliedEffectView,
     type ApplyConditionChoice,
@@ -176,7 +178,7 @@
   function rollInitiative() {
     if (!onSetInitiative) return;
     const die = Math.floor(Math.random() * 20) + 1;
-    onSetInitiative(combatant.id, die + combatant.baseStats.perception);
+    onSetInitiative(combatant.id, die + computed.perception.final);
   }
 
   let pickerOpen = false;
@@ -287,9 +289,27 @@
       ? 'Combatant is already alive'
       : 'Revive is unavailable in this phase';
 
-  $: fortAriaLabel = `Roll ${combatant.name} Fortitude save (${formatModifier(combatant.baseStats.fortitude)})`;
-  $: refAriaLabel = `Roll ${combatant.name} Reflex save (${formatModifier(combatant.baseStats.reflex)})`;
-  $: willAriaLabel = `Roll ${combatant.name} Will save (${formatModifier(combatant.baseStats.will)})`;
+  $: computed = computeCombatantStats(combatant);
+  $: acTooltip = formatStatTooltip(computed.ac.base, computed.ac.final, computed.ac.modifiers);
+  $: fortTooltip = formatStatTooltip(
+    computed.fortitude.base,
+    computed.fortitude.final,
+    computed.fortitude.modifiers
+  );
+  $: refTooltip = formatStatTooltip(
+    computed.reflex.base,
+    computed.reflex.final,
+    computed.reflex.modifiers
+  );
+  $: willTooltip = formatStatTooltip(
+    computed.will.base,
+    computed.will.final,
+    computed.will.modifiers
+  );
+
+  $: fortAriaLabel = `Roll ${combatant.name} Fortitude save (${formatModifier(computed.fortitude.final)})`;
+  $: refAriaLabel = `Roll ${combatant.name} Reflex save (${formatModifier(computed.reflex.final)})`;
+  $: willAriaLabel = `Roll ${combatant.name} Will save (${formatModifier(computed.will.final)})`;
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -383,8 +403,14 @@
       >Roll</Button>
       <span
         class="card-initiative__hint"
-        aria-label={`Perception modifier ${combatant.baseStats.perception >= 0 ? '+' : ''}${combatant.baseStats.perception}`}
-      >({combatant.baseStats.perception >= 0 ? '+' : ''}{combatant.baseStats.perception} Perception)</span>
+        class:modified={computed.perception.final !== computed.perception.base}
+        title={formatStatTooltip(
+          computed.perception.base,
+          computed.perception.final,
+          computed.perception.modifiers
+        )}
+        aria-label={`Perception modifier ${computed.perception.final >= 0 ? '+' : ''}${computed.perception.final}`}
+      >({computed.perception.final >= 0 ? '+' : ''}{computed.perception.final} Perception)</span>
     </div>
   {/if}
 
@@ -424,30 +450,40 @@
     <div class="stat-cell stat-cell--defenses" aria-label="Defenses">
       <div
         class="stat-readout"
-        aria-label={`Armor Class ${combatant.baseStats.ac}`}
+        title={acTooltip}
+        aria-label={`Armor Class ${computed.ac.final}${computed.ac.final !== computed.ac.base ? ` (base ${computed.ac.base})` : ''}`}
       >
         <span class="stat-readout__label">AC</span>
-        <span class="stat-readout__value">{combatant.baseStats.ac}</span>
+        <span
+          class="stat-readout__value"
+          class:modified={computed.ac.final !== computed.ac.base}
+        >{computed.ac.final}</span>
       </div>
       <StatRollButton
         label="Fort"
-        modifier={combatant.baseStats.fortitude}
+        modifier={computed.fortitude.final}
         tone="save"
         ariaLabel={fortAriaLabel}
+        breakdownTitle={fortTooltip}
+        modified={computed.fortitude.final !== computed.fortitude.base}
         onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
       />
       <StatRollButton
         label="Ref"
-        modifier={combatant.baseStats.reflex}
+        modifier={computed.reflex.final}
         tone="save"
         ariaLabel={refAriaLabel}
+        breakdownTitle={refTooltip}
+        modified={computed.reflex.final !== computed.reflex.base}
         onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
       />
       <StatRollButton
         label="Will"
-        modifier={combatant.baseStats.will}
+        modifier={computed.will.final}
         tone="save"
         ariaLabel={willAriaLabel}
+        breakdownTitle={willTooltip}
+        modified={computed.will.final !== computed.will.base}
         onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
       />
     </div>
@@ -854,6 +890,17 @@
     font-size: var(--text-base);
     font-weight: 700;
     color: var(--color-ink);
+  }
+
+  .stat-readout__value.modified {
+    color: var(--effect-cond);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+
+  .card-initiative__hint.modified {
+    color: var(--effect-cond);
   }
 
   .hp-row {
