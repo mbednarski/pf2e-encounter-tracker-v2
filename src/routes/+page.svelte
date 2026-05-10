@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { Command, CombatantState, Creature, Duration, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP } from '../domain';
+  import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -689,8 +690,9 @@
     phase={encounter.phase}
     round={encounter.round}
     activeName={activeCombatant?.name}
-    {xpSummary}
   />
+
+  <EncounterDifficultyMeter summary={xpSummary} />
 
   <section class="workspace">
     <div class="workspace__library">

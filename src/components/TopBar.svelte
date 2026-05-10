@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { EncounterDifficulty, EncounterState, EncounterXPSummary } from '../domain';
+  import type { EncounterState } from '../domain';
   import Chip from './ui/Chip.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
 
@@ -7,37 +7,6 @@
   export let phase: EncounterState['phase'];
   export let round: number;
   export let activeName: string | undefined;
-  export let xpSummary: EncounterXPSummary | undefined = undefined;
-
-  type ChipVariant = 'default' | 'pc' | 'enemy' | 'success' | 'warning' | 'danger';
-
-  function difficultyVariant(d: EncounterDifficulty): ChipVariant {
-    switch (d) {
-      case 'Trivial':
-      case 'Low':
-        return 'default';
-      case 'Moderate':
-        return 'warning';
-      case 'Severe':
-        return 'enemy';
-      case 'Extreme':
-        return 'danger';
-    }
-  }
-
-  function difficultyTooltip(s: EncounterXPSummary): string {
-    if (!s.thresholds || s.partyLevel == null) return '';
-    const t = s.thresholds;
-    const base = `Party L${s.partyLevel} · ${s.partySize} PC · T/L/M/S/E ${t.trivial}/${t.low}/${t.moderate}/${t.severe}/${t.extreme}`;
-    return s.hasOutOfRange ? `${base} · some creatures above PL+4 (clamped)` : base;
-  }
-
-  $: showDifficultyChip = Boolean(
-    xpSummary && xpSummary.difficulty && xpSummary.partyLevel != null
-  );
-  $: showSetPartyChip = Boolean(
-    xpSummary && xpSummary.partyLevel == null && xpSummary.enemyCount > 0
-  );
 </script>
 
 <header class="topbar">
@@ -47,18 +16,6 @@
   </div>
   <div class="topbar__status" aria-label="Encounter status">
     <Chip variant={phase === 'ACTIVE' ? 'success' : 'default'}>{phase}</Chip>
-    {#if showDifficultyChip && xpSummary?.difficulty}
-      <Chip
-        variant={difficultyVariant(xpSummary.difficulty)}
-        title={difficultyTooltip(xpSummary)}
-      >
-        {xpSummary.totalXP} XP · {xpSummary.difficulty}{xpSummary.hasOutOfRange ? '*' : ''}
-      </Chip>
-    {:else if showSetPartyChip}
-      <Chip variant="default" title="Add party members to compute encounter difficulty">
-        Set party
-      </Chip>
-    {/if}
     <div class="topbar__round">
       <SectionLabel>Round</SectionLabel>
       <span class="topbar__round-value">{round}</span>

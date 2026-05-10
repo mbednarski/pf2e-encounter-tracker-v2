@@ -26,9 +26,19 @@ export interface EncounterXPSummary {
   totalXP: number;
   difficulty: EncounterDifficulty | null;
   thresholds: DifficultyThresholds | null;
+  /** Per-character XP award based on the encounter's difficulty band (PF2e GM Core). */
+  xpPerPlayer: number;
   hasOutOfRange: boolean;
   contributions: CreatureXPContribution[];
 }
+
+export const XP_PER_PLAYER_BY_DIFFICULTY: Record<EncounterDifficulty, number> = {
+  Trivial: 10,
+  Low: 15,
+  Moderate: 20,
+  Severe: 30,
+  Extreme: 40
+};
 
 const DELTA_XP: Record<number, number> = {
   [-4]: 10,
@@ -125,6 +135,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
       totalXP: 0,
       difficulty: null,
       thresholds,
+      xpPerPlayer: 0,
       hasOutOfRange: false,
       contributions: []
     };
@@ -152,6 +163,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
 
   const difficulty =
     enemyCount > 0 && thresholds ? classifyDifficulty(totalXP, thresholds) : null;
+  const xpPerPlayer = difficulty ? XP_PER_PLAYER_BY_DIFFICULTY[difficulty] : 0;
 
   return {
     partyLevel,
@@ -160,6 +172,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
     totalXP,
     difficulty,
     thresholds,
+    xpPerPlayer,
     hasOutOfRange,
     contributions
   };
