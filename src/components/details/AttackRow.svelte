@@ -4,8 +4,8 @@
   import { formatDamage, formatModifier } from '$lib/abilities/format-damage';
 
   export let attack: Attack;
-  export let onRollAttack: (attack: Attack, variant: MapVariant) => void;
-  export let onRollDamage: (attack: Attack) => void;
+  export let onRollAttack: (attack: Attack, variant: MapVariant, origin: { x: number; y: number }) => void;
+  export let onRollDamage: (attack: Attack, origin: { x: number; y: number }) => void;
 
   $: variants = mapVariants(attack.modifier, attack.traits);
   $: damageLabel = formatDamage(attack.damage);
@@ -26,7 +26,7 @@
           type="button"
           class="btn btn--attack"
           aria-label="Roll {attack.name} {variant.label} attack ({formatModifier(variant.modifier)})"
-          onclick={() => onRollAttack(attack, variant)}
+          onclick={(e) => onRollAttack(attack, variant, { x: e.clientX, y: e.clientY })}
         >
           <span class="btn__label">{variant.label}</span>
           <span class="btn__mod">{formatModifier(variant.modifier)}</span>
@@ -38,7 +38,7 @@
         type="button"
         class="btn btn--damage"
         aria-label="Roll {attack.name} damage ({damageLabel})"
-        onclick={() => onRollDamage(attack)}
+        onclick={(e) => onRollDamage(attack, { x: e.clientX, y: e.clientY })}
       >
         <span class="btn__label">Dmg</span>
         <span class="btn__mod">{damageLabel}</span>

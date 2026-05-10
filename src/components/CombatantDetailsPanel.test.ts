@@ -115,7 +115,7 @@ describe('CombatantDetailsPanel', () => {
     expect(screen.getByRole('button', { name: 'Roll Claw 3rd attack (+7)' })).toBeInTheDocument();
   });
 
-  test('clicking attack button forwards onRollAttack with the combatant id and variant', async () => {
+  test('clicking attack button forwards onRollAttack with combatant id, variant, and click origin', async () => {
     const onRollAttack = vi.fn();
     renderPanel(
       combatant('spinesnapper', {
@@ -131,9 +131,10 @@ describe('CombatantDetailsPanel', () => {
     expect(onRollAttack.mock.calls[0][0]).toBe('spinesnapper');
     expect(onRollAttack.mock.calls[0][1].name).toBe('Maul');
     expect(onRollAttack.mock.calls[0][2]).toMatchObject({ step: 1, modifier: 10 });
+    expect(onRollAttack.mock.calls[0][3]).toEqual(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
   });
 
-  test('clicking damage button forwards onRollDamage with the attack', () => {
+  test('clicking damage button forwards onRollDamage with the attack and click origin', () => {
     const onRollDamage = vi.fn();
     renderPanel(
       combatant('spinesnapper', {
@@ -154,6 +155,7 @@ describe('CombatantDetailsPanel', () => {
     expect(onRollDamage).toHaveBeenCalledTimes(1);
     expect(onRollDamage.mock.calls[0][0]).toBe('spinesnapper');
     expect(onRollDamage.mock.calls[0][1].name).toBe('Maul');
+    expect(onRollDamage.mock.calls[0][2]).toEqual(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
   });
 
   test('omits each ability sub-section when its array is empty', () => {

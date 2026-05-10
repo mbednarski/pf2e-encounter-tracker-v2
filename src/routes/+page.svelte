@@ -11,6 +11,7 @@
   import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import EffectModal from '../components/EffectModal.svelte';
+  import RollBubble from '../components/RollBubble.svelte';
   import {
     appendInfoLog,
     combatantCardActions,
@@ -700,21 +701,56 @@
     return `local-roll-${rollCounter++}`;
   }
 
-  function rollAttackFor(combatantId: string, attack: Attack, variant: MapVariant) {
+  type BubbleTone = 'normal' | 'crit' | 'fumble' | 'damage';
+  interface RollBubbleEntry {
+    id: string;
+    x: number;
+    y: number;
+    total: string;
+    detail: string;
+    tone: BubbleTone;
+    badge: string;
+  }
+  let bubbles: RollBubbleEntry[] = [];
+  const BUBBLE_LIFETIME_MS = 1800;
+
+  function showBubble(entry: Omit<RollBubbleEntry, 'id'>) {
+    const id = nextRollId();
+    bubbles = [...bubbles, { ...entry, id }];
+    setTimeout(() => {
+      bubbles = bubbles.filter((b) => b.id !== id);
+    }, BUBBLE_LIFETIME_MS);
+  }
+
+  function rollAttackFor(combatantId: string, attack: Attack, variant: MapVariant, origin: { x: number; y: number }) {
     const c = encounter.combatants[combatantId];
     if (!c) return;
     const result = rollAttackDice(variant.modifier);
-    const tone = result.d20 === 20 ? 'success' : result.d20 === 1 ? 'danger' : 'info';
+    const isCrit = result.d20 === 20;
+    const isFumble = result.d20 === 1;
+    const logTone = isCrit ? 'success' : isFumble ? 'danger' : 'info';
+    const bubbleTone: BubbleTone = isCrit ? 'crit' : isFumble ? 'fumble' : 'normal';
+    const badge = isCrit ? 'NAT 20' : isFumble ? 'NAT 1' : `${attack.name} · ${variant.label}`;
+
     encounter = appendInfoLog(
       encounter,
       nextRollId(),
       `${c.name} ${attack.name} ${variant.label}: 1d20(${result.d20}) ${formatModifier(variant.modifier)} = ${result.total}`,
-      tone
+      logTone
     );
     persistence.persist(encounter);
+
+    showBubble({
+      x: origin.x,
+      y: origin.y,
+      total: String(result.total),
+      detail: `1d20(${result.d20}) ${formatModifier(variant.modifier)}`,
+      tone: bubbleTone,
+      badge
+    });
   }
 
-  function rollDamageFor(combatantId: string, attack: Attack) {
+  function rollDamageFor(combatantId: string, attack: Attack, origin: { x: number; y: number }) {
     const c = encounter.combatants[combatantId];
     if (!c || attack.damage.length === 0) return;
     const result = rollDamageDice(attack.damage);
@@ -725,6 +761,15 @@
       'danger'
     );
     persistence.persist(encounter);
+
+    showBubble({
+      x: origin.x,
+      y: origin.y,
+      total: `${result.total} dmg`,
+      detail: result.breakdown,
+      tone: 'damage',
+      badge: `${attack.name}`
+    });
   }
 
   function useSpellSlot(combatantId: string, blockId: string, rank: number) {
@@ -888,6 +933,17 @@
     onClose={closeRadial}
   />
 {/if}
+
+{#each bubbles as bubble (bubble.id)}
+  <RollBubble
+    x={bubble.x}
+    y={bubble.y}
+    total={bubble.total}
+    detail={bubble.detail}
+    tone={bubble.tone}
+    badge={bubble.badge}
+  />
+{/each}
 
 {#if effectModal && effectModalCombatant}
   <EffectModal

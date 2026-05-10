@@ -12,8 +12,17 @@
 
   export let combatant: CombatantState | undefined;
   export let onSetNote: (combatantId: string, note: string | null) => void;
-  export let onRollAttack: (combatantId: string, attack: Attack, variant: MapVariant) => void = () => {};
-  export let onRollDamage: (combatantId: string, attack: Attack) => void = () => {};
+  export let onRollAttack: (
+    combatantId: string,
+    attack: Attack,
+    variant: MapVariant,
+    origin: { x: number; y: number }
+  ) => void = () => {};
+  export let onRollDamage: (
+    combatantId: string,
+    attack: Attack,
+    origin: { x: number; y: number }
+  ) => void = () => {};
   export let onUseSpellSlot: (combatantId: string, blockId: string, rank: number) => void = () => {};
   export let onRestoreSpellSlot: (combatantId: string, blockId: string, rank: number) => void = () => {};
   export let onUseFocusPoint: (combatantId: string, blockId: string) => void = () => {};
@@ -123,8 +132,8 @@
             <li>
               <AttackRow
                 attack={attack as Attack}
-                onRollAttack={(a, v) => onRollAttack(combatant.id, a, v)}
-                onRollDamage={(a) => onRollDamage(combatant.id, a)}
+                onRollAttack={(a, v, origin) => onRollAttack(combatant.id, a, v, origin)}
+                onRollDamage={(a, origin) => onRollDamage(combatant.id, a, origin)}
               />
             </li>
           {/each}
