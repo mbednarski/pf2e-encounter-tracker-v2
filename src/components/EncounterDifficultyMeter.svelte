@@ -186,23 +186,23 @@
   .meter__difficulty--low {
     color: var(--color-ink-soft);
     border-color: var(--color-ink-soft);
-    background: transparent;
+    background: var(--color-panel-2);
   }
 
   .meter__difficulty--moderate {
     color: var(--color-amber);
     border-color: var(--color-amber);
-    background: transparent;
+    background: var(--color-amber-soft);
   }
 
   .meter__difficulty--severe {
     color: var(--color-red);
     border-color: var(--color-red);
-    background: transparent;
+    background: var(--color-red-soft);
   }
 
   .meter__difficulty--extreme {
-    color: var(--color-panel);
+    color: var(--color-panel-up);
     border-color: var(--color-red);
     background: var(--color-red);
   }
@@ -238,7 +238,7 @@
     height: 18px;
     border-radius: 4px;
     overflow: hidden;
-    border: 1px solid var(--color-ink-soft);
+    border: 1px solid var(--color-rule-strong);
   }
 
   .meter__zone {
@@ -249,24 +249,24 @@
     transition: filter 0.12s;
   }
 
+  /* Solid-fill ladder. Each label hits AA against its own fill. */
   .meter__zone--trivial {
-    background: color-mix(in srgb, var(--color-ink-soft) 12%, transparent);
+    background: var(--color-panel-2);
   }
   .meter__zone--low {
-    background: color-mix(in srgb, var(--color-ink-soft) 22%, transparent);
+    background: var(--color-rule-strong);
   }
   .meter__zone--moderate {
-    background: color-mix(in srgb, var(--color-amber) 30%, transparent);
+    background: var(--color-amber);
   }
   .meter__zone--severe {
-    background: color-mix(in srgb, var(--color-red) 30%, transparent);
+    background: color-mix(in srgb, var(--color-red) 80%, var(--color-panel-up));
   }
   .meter__zone--extreme {
-    background: color-mix(in srgb, var(--color-red) 65%, transparent);
+    background: var(--color-red);
   }
 
   .meter__zone--current {
-    filter: brightness(1.05) saturate(1.2);
     box-shadow: inset 0 0 0 2px var(--color-ink);
   }
 
@@ -277,10 +277,24 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--color-ink);
-    opacity: 0.7;
     white-space: nowrap;
     padding: 0 4px;
     pointer-events: none;
+  }
+
+  /* Per-zone label color so text contrasts against its own fill. */
+  .meter__zone--trivial .meter__zone-label,
+  .meter__zone--low .meter__zone-label {
+    color: var(--color-ink-soft);
+  }
+
+  .meter__zone--moderate .meter__zone-label {
+    color: var(--color-ink);
+  }
+
+  .meter__zone--severe .meter__zone-label,
+  .meter__zone--extreme .meter__zone-label {
+    color: var(--color-panel-up);
   }
 
   .meter__ticks {
@@ -337,7 +351,7 @@
   .meter__cursor-bubble {
     margin-top: 2px;
     background: var(--color-ink);
-    color: var(--color-panel);
+    color: var(--color-panel-up);
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 700;

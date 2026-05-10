@@ -267,7 +267,7 @@
   .prompt-block {
     display: grid;
     gap: var(--space-2);
-    background: #fff7ee;
+    background: var(--color-amber-soft);
     border: 1px solid var(--color-amber);
     border-left: 3px solid var(--color-amber);
     border-radius: var(--radius-card);

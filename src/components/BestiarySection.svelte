@@ -197,7 +197,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: var(--tracking-wide);
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
   }
 
   .adjustment__group {
@@ -335,7 +335,7 @@
     font-weight: 600;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

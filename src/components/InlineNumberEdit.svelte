@@ -108,19 +108,19 @@
     text-align: right;
     border: 1px solid var(--input-border, #888);
     border-radius: 3px;
-    background: var(--input-bg, #fff);
+    background: var(--color-panel-up);
     color: inherit;
   }
 
   input.invalid {
-    border-color: #c0392b;
-    outline: 2px solid rgba(192, 57, 43, 0.25);
+    border-color: var(--color-red);
+    outline: 2px solid color-mix(in srgb, var(--color-red) 25%, transparent);
     outline-offset: 0;
   }
 
   .hint {
     font-size: 0.75em;
-    color: #c0392b;
+    color: var(--color-red);
     line-height: 1;
   }
 
@@ -143,7 +143,7 @@
   }
 
   .display:focus-visible {
-    outline: 2px solid var(--focus, #2c7be5);
+    outline: 2px solid var(--color-blue);
     outline-offset: 2px;
     border-radius: 2px;
   }

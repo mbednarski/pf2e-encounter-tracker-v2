@@ -566,7 +566,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     cursor: pointer;
   }
 
@@ -763,7 +763,7 @@
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     margin: 0 0 var(--space-2);
   }
 

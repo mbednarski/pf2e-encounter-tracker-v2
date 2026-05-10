@@ -209,7 +209,7 @@
     font-weight: 600;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

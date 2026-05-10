@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatModifier } from '$lib/abilities/format-damage';
 
-  type Tone = 'default' | 'pc';
+  type Tone = 'default' | 'pc' | 'attack' | 'damage' | 'save';
 
   export let label: string;
   export let modifier: number;
@@ -51,7 +51,7 @@
     border: 1px solid var(--color-rule);
     font: inherit;
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
   }
 
   .stat-roll:hover:not(:disabled) {
@@ -75,7 +75,7 @@
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
   }
 
   .stat-roll__mod {
@@ -85,7 +85,49 @@
     color: var(--color-ink);
   }
 
+  /* PC tone — kept for backwards compatibility */
   .stat-roll--pc .stat-roll__mod {
-    color: var(--color-blue);
+    color: var(--faction-pc);
+  }
+
+  /* Roll-type tones — color-mode the whole pill so a glance tells you
+     what kind of roll it is. Soft tinted bg + border + label/value. */
+  .stat-roll--attack {
+    background: var(--roll-atk-soft);
+    border-color: var(--roll-atk);
+  }
+  .stat-roll--attack .stat-roll__label,
+  .stat-roll--attack .stat-roll__mod {
+    color: var(--roll-atk);
+  }
+  .stat-roll--attack:hover:not(:disabled) {
+    background: var(--color-panel);
+    border-color: var(--roll-atk);
+  }
+
+  .stat-roll--damage {
+    background: var(--roll-dmg-soft);
+    border-color: var(--roll-dmg);
+  }
+  .stat-roll--damage .stat-roll__label,
+  .stat-roll--damage .stat-roll__mod {
+    color: var(--roll-dmg);
+  }
+  .stat-roll--damage:hover:not(:disabled) {
+    background: var(--color-panel);
+    border-color: var(--roll-dmg);
+  }
+
+  .stat-roll--save {
+    background: var(--roll-sav-soft);
+    border-color: var(--roll-sav);
+  }
+  .stat-roll--save .stat-roll__label,
+  .stat-roll--save .stat-roll__mod {
+    color: var(--roll-sav);
+  }
+  .stat-roll--save:hover:not(:disabled) {
+    background: var(--color-panel);
+    border-color: var(--roll-sav);
   }
 </style>

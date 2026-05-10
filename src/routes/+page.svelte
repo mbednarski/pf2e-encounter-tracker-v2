@@ -1084,15 +1084,15 @@
   }
 
   .not-yet-rolled {
-    border: 1px solid #cfd6d1;
+    border: 1px solid var(--color-rule);
     border-radius: 8px;
-    background: #fbfcfa;
+    background: var(--color-panel);
     padding: 12px 14px;
   }
 
   .not-yet-rolled h3 {
     margin: 0 0 6px;
-    color: #627171;
+    color: var(--color-ink-soft);
     font-size: 13px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1107,7 +1107,7 @@
   }
 
   .not-yet-rolled li {
-    color: #263235;
+    color: var(--color-ink);
     font-size: 14px;
   }
 
