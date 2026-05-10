@@ -268,7 +268,7 @@
 
   .rank__label {
     min-width: 36px;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     font-family: var(--font-sans);
     font-size: var(--text-xs);
     font-weight: 700;
@@ -348,7 +348,7 @@
   }
 
   .innate-marker {
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     font-family: var(--font-sans);
     font-size: var(--text-xs);
     text-transform: uppercase;
@@ -361,7 +361,7 @@
   }
 
   .cantrips__label {
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     font-family: var(--font-sans);
     font-size: var(--text-xs);
     font-weight: 700;

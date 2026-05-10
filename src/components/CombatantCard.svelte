@@ -432,18 +432,21 @@
       <StatRollButton
         label="Fort"
         modifier={combatant.baseStats.fortitude}
+        tone="save"
         ariaLabel={fortAriaLabel}
         onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
       />
       <StatRollButton
         label="Ref"
         modifier={combatant.baseStats.reflex}
+        tone="save"
         ariaLabel={refAriaLabel}
         onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
       />
       <StatRollButton
         label="Will"
         modifier={combatant.baseStats.will}
+        tone="save"
         ariaLabel={willAriaLabel}
         onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
       />
@@ -621,34 +624,43 @@
   }
 
   .combatant-card[data-faction='pc'] {
-    border-left-color: var(--color-blue);
+    border-left-color: var(--faction-pc);
   }
 
   .combatant-card[data-faction='ally'] {
-    border-left-color: var(--color-blue);
+    border-left-color: var(--faction-pc);
   }
 
   .combatant-card[data-faction='enemy'] {
-    border-left-color: var(--color-red);
+    border-left-color: var(--faction-enemy);
   }
 
   .combatant-card[data-faction='hazard'] {
-    border-left-color: var(--color-amber);
+    border-left-color: var(--faction-hazard);
   }
 
+  /* Active card — lifted to eggshell paper, with a soft halo around it.
+     Halo uses --color-blue-soft so the eye is drawn without a bulb-bright
+     surface. The card resting state stays calm. */
   .current-card {
-    background: var(--color-panel);
-    border-color: var(--color-ink);
-    border-left-color: var(--color-ink);
-    box-shadow: var(--shadow-soft);
+    background: var(--color-panel-up);
+    border-color: var(--color-rule-strong);
+    box-shadow:
+      0 0 0 3px var(--color-blue-soft),
+      var(--shadow-soft);
   }
 
   .selected-card {
-    box-shadow: inset 0 0 0 2px var(--color-blue), 0 1px 2px rgba(31, 26, 20, 0.08);
+    box-shadow:
+      inset 0 0 0 2px var(--color-blue),
+      0 1px 2px rgba(20, 20, 14, 0.08);
   }
 
   .selected-card.current-card {
-    box-shadow: inset 0 0 0 2px var(--color-blue), var(--shadow-soft);
+    box-shadow:
+      inset 0 0 0 2px var(--color-blue),
+      0 0 0 4px var(--color-blue-soft),
+      var(--shadow-soft);
   }
 
   .combatant-card.selectable {
@@ -718,15 +730,15 @@
 
   .faction-tag[data-faction='pc'],
   .faction-tag[data-faction='ally'] {
-    color: var(--color-blue);
+    color: var(--faction-pc);
   }
 
   .faction-tag[data-faction='enemy'] {
-    color: var(--color-red);
+    color: var(--faction-enemy);
   }
 
   .faction-tag[data-faction='hazard'] {
-    color: var(--color-amber);
+    color: var(--faction-hazard);
   }
 
   h2 {
@@ -834,7 +846,7 @@
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
   }
 
   .stat-readout__value {
@@ -873,11 +885,11 @@
   }
 
   [data-hp-tone='wounded'] .stat-cell--hp :global(.hp-value) {
-    color: var(--color-amber);
+    color: var(--hp-warn);
   }
 
   [data-hp-tone='critical'] .stat-cell--hp :global(.hp-value) {
-    color: var(--color-red);
+    color: var(--hp-crit);
   }
 
   .hp-max {
@@ -903,16 +915,16 @@
 
   .hp-fill {
     height: 100%;
-    background: var(--color-green);
+    background: var(--hp-ok);
     transition: width 0.18s ease, background 0.18s ease;
   }
 
   [data-hp-tone='wounded'] .hp-fill {
-    background: var(--color-amber);
+    background: var(--hp-warn);
   }
 
   [data-hp-tone='critical'] .hp-fill {
-    background: var(--color-red);
+    background: var(--hp-crit);
   }
 
   .conditions {
@@ -930,13 +942,15 @@
     font-style: italic;
   }
 
+  /* Default condition chip — bronze/amber. A *condition* is a status
+     effect on the creature (Frightened, Sickened, Off-Guard...). */
   .condition-chip {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: var(--border-thin);
-    background: var(--color-panel);
-    color: var(--color-ink);
+    border: 1px solid var(--effect-cond);
+    background: var(--effect-cond-soft);
+    color: var(--effect-cond);
     font-size: var(--text-sm);
     font-weight: 600;
     padding: 2px var(--space-2);
@@ -945,14 +959,16 @@
   .condition-chip--implied {
     background: transparent;
     border-style: dashed;
-    opacity: 0.78;
+    opacity: 0.85;
   }
 
+  /* Persistent damage — distinct from a regular condition. Filled red
+     because it ticks at end of turn and the player needs to see it. */
   .condition-chip--persistent {
-    background: #fff3f0;
-    border-color: var(--color-red);
-    border-left: 3px solid var(--color-red);
-    color: var(--color-red);
+    background: var(--effect-pers-soft);
+    border-color: var(--effect-pers);
+    border-left: 3px solid var(--effect-pers);
+    color: var(--effect-pers);
   }
 
   .condition-chip--persistent .condition-name {
@@ -967,16 +983,16 @@
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     font-weight: 700;
-    color: var(--color-red);
-    background: #fff;
+    color: var(--effect-pers);
+    background: var(--color-panel-up);
     padding: 0 4px;
-    border: var(--border-thin);
-    border-color: var(--color-red);
+    border: 1px solid var(--effect-pers);
     border-radius: 2px;
   }
 
   .condition-duration {
-    color: var(--color-ink-mute);
+    color: currentColor;
+    opacity: 0.7;
     font-weight: 500;
     font-size: var(--text-xs);
   }

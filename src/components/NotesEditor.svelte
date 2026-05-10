@@ -106,13 +106,13 @@
 
   .notes-display:hover,
   .notes-display:focus-visible {
-    border-color: #b8c3be;
-    background: #f3f6f1;
+    border-color: var(--color-rule-strong);
+    background: var(--color-panel-2);
     outline: none;
   }
 
   .notes-display.empty {
-    color: #8a9690;
+    color: var(--color-ink-mute);
     font-style: italic;
   }
 
@@ -122,9 +122,9 @@
     box-sizing: border-box;
     margin: 0;
     padding: 6px 8px;
-    border: 1px solid #2f6f8a;
+    border: 1px solid var(--color-blue);
     border-radius: 6px;
-    background: #fbfcfa;
+    background: var(--color-panel-up);
     color: inherit;
     font: inherit;
     font-size: 13px;
@@ -133,13 +133,13 @@
   }
 
   .notes-edit:focus-visible {
-    outline: 2px solid var(--focus, #2c7be5);
+    outline: 2px solid var(--color-blue);
     outline-offset: 1px;
   }
 
   .notes-hint {
     margin: 4px 0 0;
-    color: #8a9690;
+    color: var(--color-ink-mute);
     font-size: 11px;
     line-height: 1;
   }

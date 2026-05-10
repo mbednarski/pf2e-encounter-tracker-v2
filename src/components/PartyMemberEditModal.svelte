@@ -468,14 +468,14 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: var(--tracking-wide);
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
   }
 
   .block label {
     display: grid;
     gap: 2px;
     font-size: var(--text-xs);
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
   }
 
   .block input,

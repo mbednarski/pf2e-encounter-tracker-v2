@@ -98,18 +98,21 @@
         <StatRollButton
           label="Fort"
           modifier={combatant.baseStats.fortitude}
+          tone="save"
           ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(combatant.baseStats.fortitude)})`}
           onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
         />
         <StatRollButton
           label="Ref"
           modifier={combatant.baseStats.reflex}
+          tone="save"
           ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(combatant.baseStats.reflex)})`}
           onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
         />
         <StatRollButton
           label="Will"
           modifier={combatant.baseStats.will}
+          tone="save"
           ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(combatant.baseStats.will)})`}
           onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
         />

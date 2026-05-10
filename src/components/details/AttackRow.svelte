@@ -14,10 +14,10 @@
 <article class="row">
   <header class="row__head">
     <span class="row__name">{attack.name}</span>
-    <span class="row__type">{attack.type}</span>
-    {#if attack.traits.length > 0}
-      <span class="row__traits">{attack.traits.join(', ')}</span>
-    {/if}
+    <span class="tag">{attack.type}</span>
+    {#each attack.traits as trait (trait)}
+      <span class="tag">{trait}</span>
+    {/each}
   </header>
   <div class="row__rolls">
     <div class="row__attacks">
@@ -62,22 +62,23 @@
 
   .row__name {
     color: var(--color-ink);
-    font-size: var(--text-base);
-    font-weight: 600;
+    font-family: var(--font-serif);
+    font-size: var(--text-md);
+    font-weight: 700;
   }
 
-  .row__type {
-    color: var(--color-ink-mute);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-  }
-
-  .row__traits {
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border: var(--border-thin);
+    background: var(--color-panel-2);
     color: var(--color-ink-soft);
     font-family: var(--font-sans);
     font-size: var(--text-xs);
-    text-transform: lowercase;
+    font-weight: 700;
     letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
   }
 
   .row__rolls {
@@ -98,21 +99,34 @@
     gap: 4px;
     padding: 3px 8px;
     border-radius: 4px;
-    background: var(--color-panel-2);
-    color: var(--color-ink);
-    border: 1px solid var(--color-rule);
     font: inherit;
     cursor: pointer;
-  }
-
-  .btn:hover {
-    background: var(--color-panel);
-    border-color: var(--color-ink);
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
   }
 
   .btn:focus-visible {
     outline: 2px solid var(--color-blue);
     outline-offset: 1px;
+  }
+
+  .btn--attack {
+    background: var(--roll-atk-soft);
+    border: 1px solid var(--roll-atk);
+    color: var(--roll-atk);
+  }
+
+  .btn--attack:hover {
+    background: var(--color-panel);
+  }
+
+  .btn--damage {
+    background: var(--roll-dmg-soft);
+    border: 1px solid var(--roll-dmg);
+    color: var(--roll-dmg);
+  }
+
+  .btn--damage:hover {
+    background: var(--color-panel);
   }
 
   .btn__label {
@@ -121,20 +135,19 @@
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    opacity: 0.8;
   }
 
-  .btn--attack .btn__mod {
-    color: var(--color-red);
+  .btn__mod {
     font-family: var(--font-mono);
-    font-size: var(--text-base);
     font-weight: 700;
   }
 
+  .btn--attack .btn__mod {
+    font-size: var(--text-base);
+  }
+
   .btn--damage .btn__mod {
-    color: var(--color-ink);
-    font-family: var(--font-mono);
     font-size: var(--text-sm);
-    font-weight: 600;
   }
 </style>

@@ -101,7 +101,7 @@
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
   }
 
   .dos__row dd {

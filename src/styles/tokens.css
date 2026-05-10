@@ -1,33 +1,67 @@
 /*
- * Design tokens — Direction A ("Reference Sheet" / parchment).
+ * Design tokens — "Cool Slate / Teal" palette.
  *
- * Values mirror design/direction-a.jsx (A_COLORS, lines 5-20) and the
- * design/README.md token spec (lines 107-145). Any UI surface that needs
- * a color, spacing, font, or radius MUST read it from a token here so a
- * later Direction B (dark "Console") can be added by populating the
- * [data-theme="dark"] block — no per-component restyle required.
+ * Surfaces are paper-toned (no pure white anywhere), ink is neutral-cool,
+ * accents are tuned for AA contrast on the surfaces below them. Roll-type,
+ * effect-category, faction, and HP-tone aliases are layered on top of the
+ * primitive colors so component CSS reads what it means, not what it is.
+ *
+ * Any UI surface that needs a color, spacing, font, or radius MUST read it
+ * from a token here so a later [data-theme="dark"] block can override the
+ * primitives without per-component restyle.
  */
 
 :root {
-  /* Surfaces */
-  --color-bg: #f5efe2;          /* page parchment */
-  --color-panel: #fbf7ec;       /* brighter parchment — cards, active rows */
-  --color-panel-2: #f1e9d5;     /* header strips, hover */
-  --color-hp-bg: #e8dfc8;       /* HP meter track */
+  /* Surfaces — paper, not bulb */
+  --color-bg: #eef0eb;          /* page backdrop */
+  --color-panel: #f5f6f1;       /* card / panel resting */
+  --color-panel-2: #e8eae4;     /* sub-panel, header strip, hover */
+  --color-panel-up: #fafbf6;    /* active / lifted card — eggshell, never #fff */
+  --color-hp-bg: #ddded7;       /* HP meter track */
 
   /* Ink (text & rules) */
-  --color-ink: #1f1a14;         /* primary text, primary borders */
-  --color-ink-soft: #5c5345;    /* secondary text */
-  --color-ink-mute: #8c8270;    /* tertiary text, uppercase labels */
-  --color-rule: #d9cfb6;        /* light dividers */
-  --color-rule-strong: #b5a887; /* medium dividers, frame edges */
+  --color-ink: #14140e;         /* primary text, primary borders */
+  --color-ink-soft: #555a51;    /* secondary text, AA on panel */
+  --color-ink-mute: #7d8278;    /* tertiary text, AA-large for caps labels */
+  --color-rule: #cbcec5;        /* light dividers */
+  --color-rule-strong: #aaada4; /* medium dividers, frame edges */
 
-  /* Semantic accents */
-  --color-red: #9b2d20;         /* HP critical, damage, crits */
-  --color-red-soft: #c4685c;
-  --color-green: #3f6b3a;       /* healthy HP, success */
-  --color-amber: #a57a1f;       /* wounded HP, condition warnings */
-  --color-blue: #2f5773;        /* PCs, spells, links */
+  /* Semantic accents — primitives. *-soft values are the soft fill behind
+     a chip whose text/border uses the corresponding non-soft primitive. */
+  --color-red: #b22a39;         /* danger, damage, persistent, faction-enemy */
+  --color-red-soft: #f1d4d8;
+  --color-green: #0d6e6e;       /* HP-OK, save accent — TEAL */
+  --color-green-soft: #cfe6e6;
+  --color-amber: #b8841a;       /* HP-warn, moderate difficulty */
+  --color-amber-soft: #f5e4b8;
+  --color-blue: #2c4d6e;        /* PCs, attack rolls, focus ring */
+  --color-blue-soft: #d3e0ee;
+
+  /* Roll-type aliases — used by chips and roll buttons so a glance at the
+     UI tells you what kind of roll you're about to make. */
+  --roll-atk: var(--color-blue);
+  --roll-atk-soft: var(--color-blue-soft);
+  --roll-dmg: var(--color-red);
+  --roll-dmg-soft: var(--color-red-soft);
+  --roll-sav: var(--color-green);
+  --roll-sav-soft: var(--color-green-soft);
+
+  /* Effect-category aliases — conditions vs persistent damage must look
+     different. Conditions get bronze/amber, persistent damage stays red. */
+  --effect-cond: #8a5a14;
+  --effect-cond-soft: #f1e1be;
+  --effect-pers: var(--color-red);
+  --effect-pers-soft: var(--color-red-soft);
+
+  /* Faction aliases */
+  --faction-pc: var(--color-blue);
+  --faction-enemy: var(--color-red);
+  --faction-hazard: var(--color-amber);
+
+  /* HP tone aliases */
+  --hp-ok: var(--color-green);
+  --hp-warn: var(--color-amber);
+  --hp-crit: var(--color-red);
 
   /* Typography */
   --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, 'Times New Roman', serif;
@@ -48,9 +82,9 @@
   --leading-normal: 1.5;
   --leading-relaxed: 1.6;
 
-  --tracking-wide: 0.06em;     /* lightly spaced caps */
+  --tracking-wide: 0.06em;
   --tracking-wider: 0.1em;
-  --tracking-widest: 0.14em;   /* uppercase labels per design spec */
+  --tracking-widest: 0.14em;
 
   /* Spacing (4-based) */
   --space-0: 0;
@@ -68,22 +102,20 @@
   --border-strong: 1px solid var(--color-rule-strong);
   --border-ink: 1px solid var(--color-ink);
 
-  /* Direction A is intentionally flat (no border-radius). A future
-     Direction B can override this token to introduce a 4px radius. */
+  /* Flat by design — no border-radius. A future Direction B can override. */
   --radius-card: 0;
   --radius-chip: 0;
 
   /* Shadows */
-  --shadow-paper: 4px 6px 0 rgba(31, 26, 20, 0.18);
-  --shadow-soft: 0 1px 2px rgba(31, 26, 20, 0.08);
+  --shadow-paper: 4px 6px 0 rgba(20, 20, 14, 0.18);
+  --shadow-soft: 0 1px 2px rgba(20, 20, 14, 0.08);
 }
 
 /*
  * Direction B (dark "Console") palette — stub.
  * Populate this block in a future PR to enable a [data-theme="dark"]
- * toggle. Values come from design/direction-b-shared.jsx + README.md
- * lines 141-145. Intentionally left empty so the cascade falls through
- * to the :root values until the dark slice ships.
+ * toggle. Intentionally left empty so the cascade falls through to the
+ * :root values until the dark slice ships.
  */
 [data-theme='dark'] {
   /* TODO(direction-b): paste dark palette here. */
