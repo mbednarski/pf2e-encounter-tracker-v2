@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Creature } from '../domain';
+  import { adjustedLevel, type Creature } from '../domain';
   import type { TemplateAdjustmentChoice } from '$lib/encounter-app';
   import Button from './ui/Button.svelte';
   import IconButton from './ui/IconButton.svelte';
@@ -16,6 +16,9 @@
   let query = '';
   let adjustment: TemplateAdjustmentChoice = 'normal';
   let fileInput: HTMLInputElement | undefined;
+
+  $: previewLevel = (level: number) =>
+    adjustment === 'normal' ? level : adjustedLevel(level, adjustment);
 
   $: needle = query.trim().toLowerCase();
   $: filtered = needle
@@ -104,6 +107,8 @@
     <ul class="rows">
       {#each filtered as creature (creature.id)}
         {@const count = encounterCounts[creature.id] ?? 0}
+        {@const displayedLevel = previewLevel(creature.level)}
+        {@const levelDelta = displayedLevel - creature.level}
         <li class="row">
           <button
             type="button"
@@ -112,7 +117,19 @@
             title="Add to encounter"
             onclick={() => onAddToEncounter(creature, adjustment)}
           >
-            <span class="row__level" aria-label="Level {creature.level}">{creature.level}</span>
+            <span class="row__level-wrap">
+              <span
+                class="row__level"
+                aria-label={adjustment === 'normal'
+                  ? `Level ${displayedLevel}`
+                  : `Level ${displayedLevel} (${adjustment}, base ${creature.level})`}
+              >{displayedLevel}</span>
+              {#if levelDelta !== 0}
+                <span class="row__level-delta" aria-hidden="true"
+                  >{levelDelta > 0 ? `+${levelDelta}` : `${levelDelta}`}</span
+                >
+              {/if}
+            </span>
             <span class="row__body">
               <span class="row__name">{creature.name}</span>
               <span class="row__traits">{creature.traits.join(' · ')}</span>
@@ -255,7 +272,7 @@
     all: unset;
     cursor: pointer;
     display: grid;
-    grid-template-columns: 32px 1fr;
+    grid-template-columns: 48px 1fr;
     gap: var(--space-3);
     align-items: center;
     padding: var(--space-2) var(--space-2);
@@ -272,6 +289,13 @@
     outline-offset: -2px;
   }
 
+  .row__level-wrap {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 3px;
+  }
+
   .row__level {
     display: inline-flex;
     align-items: center;
@@ -280,6 +304,14 @@
     font-size: var(--text-md);
     font-weight: 600;
     color: var(--color-ink);
+  }
+
+  .row__level-delta {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--color-blue);
   }
 
   .row__body {

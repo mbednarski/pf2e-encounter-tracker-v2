@@ -28,7 +28,7 @@ export function applyEliteWeak(creature: Creature, adjustment: CreatureTemplateA
   return adjusted;
 }
 
-function adjustedLevel(level: number, adjustment: CreatureTemplateAdjustment): number {
+export function adjustedLevel(level: number, adjustment: CreatureTemplateAdjustment): number {
   if (adjustment === 'elite') {
     return level <= 0 ? level + 2 : level + 1;
   }
