@@ -140,9 +140,32 @@ export function formatEvent(event: DomainEvent, options: FormatOptions): LogEntr
       return entry(id, `${nameOf(state, event.combatantId)} dropped to 0 HP.`, 'danger');
     case 'spell-usage-changed':
       return entry(id, formatSpellUsage(state, event), 'info');
+    case 'disable-progress-recorded':
+      return entry(id, formatDisableProgress(state, event), 'info');
+    case 'hazard-disabled':
+      return entry(id, `${nameOf(state, event.combatantId)} is fully disabled.`, 'success');
     case 'command-rejected':
       return entry(id, `${event.commandType} rejected: ${event.reason}.`, 'danger');
   }
+}
+
+function formatDisableProgress(
+  state: EncounterState,
+  event: Extract<DomainEvent, { type: 'disable-progress-recorded' }>
+): string {
+  const target = nameOf(state, event.combatantId);
+  const combatant = state.combatants[event.combatantId];
+  const check = combatant?.hazardData?.disableChecks[event.checkIndex];
+  const label = check ? `${capitalize(check.skill)} DC ${check.dc}` : `check #${event.checkIndex + 1}`;
+  const direction = event.next < event.previous ? 'success' : 'undone';
+  const remaining = check
+    ? ` (${event.next}/${check.requiredSuccesses} remaining)`
+    : '';
+  return `${target} disable — ${label} ${direction}${remaining}.`;
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }
 
 function formatSpellUsage(

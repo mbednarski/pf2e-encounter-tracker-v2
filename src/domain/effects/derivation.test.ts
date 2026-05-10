@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { deriveStats } from './derivation';
 import { effectLibrary } from './library';
-import type { AppliedEffect, CreatureBaseStats, EffectLibrary } from '../types';
+import type {
+  AppliedEffect,
+  CreatureBaseStats,
+  EffectLibrary,
+  HazardBaseStats
+} from '../types';
 
 const baseStats: CreatureBaseStats = {
   hp: 20,
@@ -196,8 +201,8 @@ describe('deriveStats', () => {
   test('keeps only the worse same-type status penalty from Frightened and Sickened', () => {
     const computed = deriveStats(baseStats, [applied('frightened', 1), applied('sickened', 2)], effectLibrary);
 
-    expect(computed.ac.final).toBe(16);
-    expect(computed.ac.modifiers).toEqual([
+    expect(computed.ac!.final).toBe(16);
+    expect(computed.ac!.modifiers).toEqual([
       expect.objectContaining({ effectId: 'frightened', value: -1, suppressed: true }),
       expect.objectContaining({ effectId: 'sickened', value: -2, suppressed: false })
     ]);
@@ -206,8 +211,8 @@ describe('deriveStats', () => {
   test('stacks Frightened status penalty and Off-Guard circumstance penalty on AC', () => {
     const computed = deriveStats(baseStats, [applied('frightened', 1), applied('off-guard')], effectLibrary);
 
-    expect(computed.ac.final).toBe(15);
-    expect(computed.ac.modifiers).toEqual([
+    expect(computed.ac!.final).toBe(15);
+    expect(computed.ac!.modifiers).toEqual([
       expect.objectContaining({ effectId: 'frightened', bonusType: 'status', value: -1, suppressed: false }),
       expect.objectContaining({ effectId: 'off-guard', bonusType: 'circumstance', value: -2, suppressed: false })
     ]);
@@ -216,8 +221,8 @@ describe('deriveStats', () => {
   test('suppresses the lower duplicate Frightened value', () => {
     const computed = deriveStats(baseStats, [applied('frightened', 1, 'frightened-low'), applied('frightened', 3, 'frightened-high')], effectLibrary);
 
-    expect(computed.will.final).toBe(4);
-    expect(computed.will.modifiers).toEqual([
+    expect(computed.will!.final).toBe(4);
+    expect(computed.will!.modifiers).toEqual([
       expect.objectContaining({ instanceId: 'frightened-low', value: -1, suppressed: true }),
       expect.objectContaining({ instanceId: 'frightened-high', value: -3, suppressed: false })
     ]);
@@ -235,8 +240,8 @@ describe('deriveStats', () => {
       customLibrary
     );
 
-    expect(computed.ac.final).toBe(17);
-    expect(computed.ac.modifiers).toEqual([
+    expect(computed.ac!.final).toBe(17);
+    expect(computed.ac!.modifiers).toEqual([
       expect.objectContaining({ effectId: 'untypedPenaltyA', value: -1, suppressed: false }),
       expect.objectContaining({ effectId: 'untypedPenaltyB', value: -2, suppressed: false }),
       expect.objectContaining({ effectId: 'lowerUntypedBoost', value: 1, suppressed: true }),
@@ -251,8 +256,8 @@ describe('deriveStats', () => {
       { ...customLibrary, frightened: effectLibrary.frightened }
     );
 
-    expect(computed.ac.final).toBe(20);
-    expect(computed.ac.modifiers).toEqual([
+    expect(computed.ac!.final).toBe(20);
+    expect(computed.ac!.modifiers).toEqual([
       expect.objectContaining({ effectId: 'lowerStatusBoost', value: 1, suppressed: true }),
       expect.objectContaining({ effectId: 'higherStatusBoost', value: 3, suppressed: false }),
       expect.objectContaining({ effectId: 'frightened', value: -1, suppressed: false })
@@ -264,9 +269,9 @@ describe('deriveStats', () => {
     const abilityComputed = deriveStats(baseStats, [applied('abilityMetaPenalty')], customLibrary);
     const mentalComputed = deriveStats(baseStats, [applied('mentalPenalty')], customLibrary);
 
-    expect(allComputed.fortitude.final).toBe(8);
-    expect(allComputed.reflex.final).toBe(7);
-    expect(allComputed.will.final).toBe(6);
+    expect(allComputed.fortitude!.final).toBe(8);
+    expect(allComputed.reflex!.final).toBe(7);
+    expect(allComputed.will!.final).toBe(6);
     expect(allComputed.skills.stealth.final).toBe(10);
     expect(allComputed.skills.warfareLore.final).toBe(11);
 
@@ -359,9 +364,56 @@ describe('deriveStats', () => {
   test('applies standalone custom allSaves modifier to all saves', () => {
     const computed = deriveStats(baseStats, [applied('savePenalty')], customLibrary);
 
-    expect(computed.fortitude.final).toBe(7);
-    expect(computed.reflex.final).toBe(6);
-    expect(computed.will.final).toBe(5);
-    expect(computed.ac.final).toBe(18);
+    expect(computed.fortitude!.final).toBe(7);
+    expect(computed.reflex!.final).toBe(6);
+    expect(computed.will!.final).toBe(5);
+    expect(computed.ac!.final).toBe(18);
+  });
+
+  test('hazard base stats: null AC and null fortitude omit those entries; remaining stats still derive', () => {
+    const hazardBase: HazardBaseStats = {
+      hp: 0,
+      ac: null,
+      fortitude: null,
+      reflex: 17,
+      will: null,
+      perception: 0,
+      stealth: 28,
+      speed: 0,
+      skills: {}
+    };
+
+    const computed = deriveStats(hazardBase, [applied('frightened', 2)], effectLibrary);
+
+    expect(computed.ac).toBeUndefined();
+    expect(computed.fortitude).toBeUndefined();
+    expect(computed.will).toBeUndefined();
+    expect(computed.reflex).toBeDefined();
+    expect(computed.reflex!.final).toBe(15);
+    expect(computed.perception.final).toBe(-2);
+    expect(computed.attackRolls.total).toBe(-2);
+  });
+
+  test('hazard with all defenses null: only perception/buckets populate; modifiers fall on the floor', () => {
+    const hazardBase: HazardBaseStats = {
+      hp: 0,
+      ac: null,
+      fortitude: null,
+      reflex: null,
+      will: null,
+      perception: 0,
+      stealth: 30,
+      speed: 0,
+      skills: {}
+    };
+
+    const computed = deriveStats(hazardBase, [applied('off-guard')], effectLibrary);
+
+    expect(computed.ac).toBeUndefined();
+    expect(computed.fortitude).toBeUndefined();
+    expect(computed.reflex).toBeUndefined();
+    expect(computed.will).toBeUndefined();
+    expect(computed.perception).toEqual({ base: 0, final: 0, modifiers: [] });
+    expect(computed.attackRolls).toEqual({ total: 0, modifiers: [] });
   });
 });

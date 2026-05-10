@@ -6,6 +6,7 @@
     combatantVisualState,
     computeCombatantStats,
     formatStatTooltip,
+    isHazardCombatant,
     resolveApplyChoice,
     type AppliedEffectView,
     type ApplyConditionChoice,
@@ -178,7 +179,7 @@
   function rollInitiative() {
     if (!onSetInitiative) return;
     const die = Math.floor(Math.random() * 20) + 1;
-    onSetInitiative(combatant.id, die + computed.perception.final);
+    onSetInitiative(combatant.id, die + initiativeMod);
   }
 
   let pickerOpen = false;
@@ -290,26 +291,36 @@
       : 'Revive is unavailable in this phase';
 
   $: computed = computeCombatantStats(combatant);
-  $: acTooltip = formatStatTooltip(computed.ac.base, computed.ac.final, computed.ac.modifiers);
-  $: fortTooltip = formatStatTooltip(
-    computed.fortitude.base,
-    computed.fortitude.final,
-    computed.fortitude.modifiers
-  );
-  $: refTooltip = formatStatTooltip(
-    computed.reflex.base,
-    computed.reflex.final,
-    computed.reflex.modifiers
-  );
-  $: willTooltip = formatStatTooltip(
-    computed.will.base,
-    computed.will.final,
-    computed.will.modifiers
-  );
+  $: hazard = isHazardCombatant(combatant) ? combatant : null;
+  $: initiativeMod = hazard ? hazard.baseStats.stealth : computed.perception.final;
+  $: initiativeLabel = hazard ? 'Stealth' : 'Perception';
+  $: hardness = hazard ? hazard.baseStats.hardness : undefined;
+  $: acTooltip = computed.ac
+    ? formatStatTooltip(computed.ac.base, computed.ac.final, computed.ac.modifiers)
+    : '';
+  $: fortTooltip = computed.fortitude
+    ? formatStatTooltip(
+        computed.fortitude.base,
+        computed.fortitude.final,
+        computed.fortitude.modifiers
+      )
+    : '';
+  $: refTooltip = computed.reflex
+    ? formatStatTooltip(computed.reflex.base, computed.reflex.final, computed.reflex.modifiers)
+    : '';
+  $: willTooltip = computed.will
+    ? formatStatTooltip(computed.will.base, computed.will.final, computed.will.modifiers)
+    : '';
 
-  $: fortAriaLabel = `Roll ${combatant.name} Fortitude save (${formatModifier(computed.fortitude.final)})`;
-  $: refAriaLabel = `Roll ${combatant.name} Reflex save (${formatModifier(computed.reflex.final)})`;
-  $: willAriaLabel = `Roll ${combatant.name} Will save (${formatModifier(computed.will.final)})`;
+  $: fortAriaLabel = computed.fortitude
+    ? `Roll ${combatant.name} Fortitude save (${formatModifier(computed.fortitude.final)})`
+    : `${combatant.name} has no Fortitude save`;
+  $: refAriaLabel = computed.reflex
+    ? `Roll ${combatant.name} Reflex save (${formatModifier(computed.reflex.final)})`
+    : `${combatant.name} has no Reflex save`;
+  $: willAriaLabel = computed.will
+    ? `Roll ${combatant.name} Will save (${formatModifier(computed.will.final)})`
+    : `${combatant.name} has no Will save`;
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -383,6 +394,13 @@
     </div>
   </div>
 
+  {#if isCurrent && hazard}
+    <div class="routine-banner" role="note" aria-label="Routine">
+      <span class="routine-banner__label">Routine · {hazard.hazardData.routine.actions} action{hazard.hazardData.routine.actions === 1 ? '' : 's'}</span>
+      <span class="routine-banner__body">{hazard.hazardData.routine.description}</span>
+    </div>
+  {/if}
+
   {#if phase === 'PREPARING' && onSetInitiative}
     <div class="card-initiative-row" aria-label="Initiative">
       <SectionLabel>Init</SectionLabel>
@@ -403,14 +421,16 @@
       >Roll</Button>
       <span
         class="card-initiative__hint"
-        class:modified={computed.perception.final !== computed.perception.base}
-        title={formatStatTooltip(
-          computed.perception.base,
-          computed.perception.final,
-          computed.perception.modifiers
-        )}
-        aria-label={`Perception modifier ${computed.perception.final >= 0 ? '+' : ''}${computed.perception.final}`}
-      >({computed.perception.final >= 0 ? '+' : ''}{computed.perception.final} Perception)</span>
+        class:modified={!hazard && computed.perception.final !== computed.perception.base}
+        title={hazard
+          ? ''
+          : formatStatTooltip(
+              computed.perception.base,
+              computed.perception.final,
+              computed.perception.modifiers
+            )}
+        aria-label={`${initiativeLabel} modifier ${initiativeMod >= 0 ? '+' : ''}${initiativeMod}`}
+      >({initiativeMod >= 0 ? '+' : ''}{initiativeMod} {initiativeLabel})</span>
     </div>
   {/if}
 
@@ -451,41 +471,61 @@
       <div
         class="stat-readout"
         title={acTooltip}
-        aria-label={`Armor Class ${computed.ac.final}${computed.ac.final !== computed.ac.base ? ` (base ${computed.ac.base})` : ''}`}
+        aria-label={computed.ac
+          ? `Armor Class ${computed.ac.final}${computed.ac.final !== computed.ac.base ? ` (base ${computed.ac.base})` : ''}`
+          : `${combatant.name} has no Armor Class`}
       >
         <span class="stat-readout__label">AC</span>
         <span
           class="stat-readout__value"
-          class:modified={computed.ac.final !== computed.ac.base}
-        >{computed.ac.final}</span>
+          class:modified={computed.ac ? computed.ac.final !== computed.ac.base : false}
+        >{computed.ac ? computed.ac.final : '—'}</span>
       </div>
-      <StatRollButton
-        label="Fort"
-        modifier={computed.fortitude.final}
-        tone="save"
-        ariaLabel={fortAriaLabel}
-        breakdownTitle={fortTooltip}
-        modified={computed.fortitude.final !== computed.fortitude.base}
-        onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
-      />
-      <StatRollButton
-        label="Ref"
-        modifier={computed.reflex.final}
-        tone="save"
-        ariaLabel={refAriaLabel}
-        breakdownTitle={refTooltip}
-        modified={computed.reflex.final !== computed.reflex.base}
-        onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
-      />
-      <StatRollButton
-        label="Will"
-        modifier={computed.will.final}
-        tone="save"
-        ariaLabel={willAriaLabel}
-        breakdownTitle={willTooltip}
-        modified={computed.will.final !== computed.will.base}
-        onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
-      />
+      {#if hardness !== undefined}
+        <div class="stat-readout" aria-label={`Hardness ${hardness}`}>
+          <span class="stat-readout__label">Hard</span>
+          <span class="stat-readout__value">{hardness}</span>
+        </div>
+      {/if}
+      {#if computed.fortitude}
+        <StatRollButton
+          label="Fort"
+          modifier={computed.fortitude.final}
+          tone="save"
+          ariaLabel={fortAriaLabel}
+          breakdownTitle={fortTooltip}
+          modified={computed.fortitude.final !== computed.fortitude.base}
+          onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
+        />
+      {:else}
+        <span class="save-placeholder" aria-label={fortAriaLabel}>Fort —</span>
+      {/if}
+      {#if computed.reflex}
+        <StatRollButton
+          label="Ref"
+          modifier={computed.reflex.final}
+          tone="save"
+          ariaLabel={refAriaLabel}
+          breakdownTitle={refTooltip}
+          modified={computed.reflex.final !== computed.reflex.base}
+          onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
+        />
+      {:else}
+        <span class="save-placeholder" aria-label={refAriaLabel}>Ref —</span>
+      {/if}
+      {#if computed.will}
+        <StatRollButton
+          label="Will"
+          modifier={computed.will.final}
+          tone="save"
+          ariaLabel={willAriaLabel}
+          breakdownTitle={willTooltip}
+          modified={computed.will.final !== computed.will.base}
+          onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
+        />
+      {:else}
+        <span class="save-placeholder" aria-label={willAriaLabel}>Will —</span>
+      {/if}
     </div>
   </div>
 
@@ -890,6 +930,46 @@
     font-size: var(--text-base);
     font-weight: 700;
     color: var(--color-ink);
+  }
+
+  .routine-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: var(--space-2) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: 4px;
+    border: 1px solid var(--effect-cond);
+    background: var(--effect-cond-soft);
+    color: var(--color-ink);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    white-space: pre-line;
+  }
+
+  .routine-banner__label {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--effect-cond);
+  }
+
+  .save-placeholder {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--color-panel-2);
+    border: 1px dashed var(--color-rule);
+    color: var(--color-ink-mute);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
   }
 
   .stat-readout__value.modified {

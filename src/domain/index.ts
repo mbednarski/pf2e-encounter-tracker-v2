@@ -1,5 +1,6 @@
 export { applyCommand } from './reducer';
 export { createCombatantFromCreature } from './creatures/clone';
+export { createCombatantFromHazard } from './hazards/factory';
 export { createCombatantFromPartyMember } from './party/factory';
 export { applyEliteWeak, adjustedLevel } from './creatures/templates';
 export { effectLibrary } from './effects/library';
@@ -40,6 +41,8 @@ export type {
   CreatureRarity,
   CreatureSize,
   DamageComponent,
+  DisableCheck,
+  DisableProgress,
   DomainEvent,
   Duration,
   EffectCategory,
@@ -47,6 +50,10 @@ export type {
   EffectLibrary,
   EncounterPhase,
   EncounterState,
+  Hazard,
+  HazardBaseStats,
+  HazardData,
+  HazardRoutine,
   InitiativeState,
   LogEntry,
   LogEntryTone,
@@ -56,6 +63,7 @@ export type {
   Prompt,
   PromptBoundary,
   PromptResolution,
+  RecordDisableProgressPayload,
   RemoveEffectPayload,
   ResolvePromptPayload,
   SetEffectDurationPayload,

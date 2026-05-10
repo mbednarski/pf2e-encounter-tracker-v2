@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Ability, Attack, CombatantState, ComputedStats } from '../domain';
+  import type { Ability, Attack, CombatantState, ComputedStat, ComputedStats } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
   import {
     computeCombatantStats,
     formatModifierBreakdown,
-    formatStatTooltip
+    formatStatTooltip,
+    isHazardCombatant
   } from '$lib/encounter-app';
   import type { MapVariant } from '$lib/dice/map';
   import Chip from './ui/Chip.svelte';
@@ -14,6 +15,7 @@
   import StatRollButton from './ui/StatRollButton.svelte';
   import AbilityCard from './details/AbilityCard.svelte';
   import AttackRow from './details/AttackRow.svelte';
+  import HazardSection from './details/HazardSection.svelte';
   import SpellcastingBlockView from './details/SpellcastingBlockView.svelte';
 
   type SaveKey = 'fortitude' | 'reflex' | 'will';
@@ -42,6 +44,11 @@
   export let onRestoreFocusPoint: (combatantId: string, blockId: string) => void = () => {};
   export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
+  export let onRecordDisableProgress: (
+    combatantId: string,
+    checkIndex: number,
+    delta: number
+  ) => void = () => {};
 
   function templateChipVariant(adjustment: 'elite' | 'weak' | undefined) {
     if (adjustment === 'elite') return 'warning';
@@ -60,8 +67,11 @@
     : '';
 
   $: computed = combatant ? computeCombatantStats(combatant) : null;
+  $: hazard = combatant && isHazardCombatant(combatant) ? combatant : null;
+  $: hardness = hazard ? hazard.baseStats.hardness : undefined;
 
-  function statTooltip(stat: ComputedStats['ac']): string {
+  function statTooltip(stat: ComputedStat | undefined): string {
+    if (!stat) return '';
     return formatStatTooltip(stat.base, stat.final, stat.modifiers);
   }
 
@@ -96,8 +106,8 @@
           <SectionLabel>AC</SectionLabel>
           <dd
             title={computed ? statTooltip(computed.ac) : ''}
-            class:modified={computed && computed.ac.final !== computed.ac.base}
-          >{computed ? computed.ac.final : combatant.baseStats.ac}</dd>
+            class:modified={!!computed?.ac && computed.ac.final !== computed.ac.base}
+          >{computed?.ac ? computed.ac.final : '—'}</dd>
         </div>
         <div class="stat">
           <SectionLabel>HP</SectionLabel>
@@ -107,47 +117,71 @@
           </dd>
         </div>
         <div class="stat">
-          <SectionLabel>Perception</SectionLabel>
+          <SectionLabel>{hazard ? 'Stealth' : 'Perception'}</SectionLabel>
           <dd
-            title={computed ? statTooltip(computed.perception) : ''}
-            class:modified={computed && computed.perception.final !== computed.perception.base}
-          >{formatModifier(computed ? computed.perception.final : combatant.baseStats.perception)}</dd>
+            title={hazard ? hazard.baseStats.stealthNote ?? '' : statTooltip(computed?.perception)}
+            class:modified={!hazard && !!computed && computed.perception.final !== computed.perception.base}
+          >{hazard
+            ? formatModifier(hazard.baseStats.stealth)
+            : formatModifier(computed ? computed.perception.final : combatant.baseStats.perception)}</dd>
         </div>
         <div class="stat">
           <SectionLabel>Speed</SectionLabel>
           <dd>{combatant.baseStats.speed} ft</dd>
         </div>
+        {#if hardness !== undefined}
+          <div class="stat">
+            <SectionLabel>Hardness</SectionLabel>
+            <dd>{hardness}</dd>
+          </div>
+        {/if}
       </dl>
       <div class="saves-grid">
-        <StatRollButton
-          label="Fort"
-          modifier={computed ? computed.fortitude.final : combatant.baseStats.fortitude}
-          tone="save"
-          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed ? computed.fortitude.final : combatant.baseStats.fortitude)})`}
-          breakdownTitle={computed ? statTooltip(computed.fortitude) : undefined}
-          modified={!!computed && computed.fortitude.final !== computed.fortitude.base}
-          onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
-        />
-        <StatRollButton
-          label="Ref"
-          modifier={computed ? computed.reflex.final : combatant.baseStats.reflex}
-          tone="save"
-          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed ? computed.reflex.final : combatant.baseStats.reflex)})`}
-          breakdownTitle={computed ? statTooltip(computed.reflex) : undefined}
-          modified={!!computed && computed.reflex.final !== computed.reflex.base}
-          onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
-        />
-        <StatRollButton
-          label="Will"
-          modifier={computed ? computed.will.final : combatant.baseStats.will}
-          tone="save"
-          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed ? computed.will.final : combatant.baseStats.will)})`}
-          breakdownTitle={computed ? statTooltip(computed.will) : undefined}
-          modified={!!computed && computed.will.final !== computed.will.base}
-          onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
-        />
+        {#if computed?.fortitude}
+          <StatRollButton
+            label="Fort"
+            modifier={computed.fortitude.final}
+            tone="save"
+            ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed.fortitude.final)})`}
+            breakdownTitle={statTooltip(computed.fortitude)}
+            modified={computed.fortitude.final !== computed.fortitude.base}
+            onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
+          />
+        {:else}
+          <span class="save-placeholder" aria-label={`${combatant.name} has no Fortitude save`}>Fort —</span>
+        {/if}
+        {#if computed?.reflex}
+          <StatRollButton
+            label="Ref"
+            modifier={computed.reflex.final}
+            tone="save"
+            ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed.reflex.final)})`}
+            breakdownTitle={statTooltip(computed.reflex)}
+            modified={computed.reflex.final !== computed.reflex.base}
+            onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
+          />
+        {:else}
+          <span class="save-placeholder" aria-label={`${combatant.name} has no Reflex save`}>Ref —</span>
+        {/if}
+        {#if computed?.will}
+          <StatRollButton
+            label="Will"
+            modifier={computed.will.final}
+            tone="save"
+            ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed.will.final)})`}
+            breakdownTitle={statTooltip(computed.will)}
+            modified={computed.will.final !== computed.will.base}
+            onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
+          />
+        {:else}
+          <span class="save-placeholder" aria-label={`${combatant.name} has no Will save`}>Will —</span>
+        {/if}
       </div>
     </section>
+
+    {#if hazard}
+      <HazardSection combatant={hazard} {onRecordDisableProgress} />
+    {/if}
 
     {#if combatant.passiveAbilities.length > 0}
       <section class="details__section" aria-label="Passive Abilities">
@@ -379,5 +413,20 @@
   .spellcasting-stack {
     display: grid;
     gap: var(--space-3);
+  }
+
+  .save-placeholder {
+    display: inline-flex;
+    align-items: baseline;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--color-panel-2);
+    border: 1px dashed var(--color-rule);
+    color: var(--color-ink-mute);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
   }
 </style>

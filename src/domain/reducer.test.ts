@@ -2993,3 +2993,129 @@ describe('spellcasting commands', () => {
     expectSerializable(result.newState);
   });
 });
+
+describe('applyCommand RECORD_DISABLE_PROGRESS', () => {
+  function hazardEncounter() {
+    const trap = combatant('trap-1', {
+      sourceType: 'hazard',
+      name: 'Dart Gallery',
+      hazardData: {
+        routine: { actions: 2, description: 'Fires darts.' },
+        disableChecks: [
+          { skill: 'thievery', dc: 22, requiredSuccesses: 3 },
+          { skill: 'athletics', dc: 18, requiredSuccesses: 1 }
+        ],
+        disableProgress: [
+          { checkIndex: 0, successesRemaining: 3 },
+          { checkIndex: 1, successesRemaining: 1 }
+        ]
+      }
+    });
+    return encounter({
+      combatants: { [trap.id]: trap },
+      initiative: { order: [trap.id], currentIndex: -1, delaying: [], scores: {} }
+    });
+  }
+
+  test('decrements successesRemaining on a success', () => {
+    const result = applyCommand(
+      hazardEncounter(),
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 0, delta: -1 }),
+      emptyEffects
+    );
+    expect(result.newState.combatants['trap-1'].hazardData!.disableProgress[0].successesRemaining).toBe(2);
+    expectEvents(result, [
+      {
+        type: 'disable-progress-recorded',
+        combatantId: 'trap-1',
+        checkIndex: 0,
+        previous: 3,
+        next: 2
+      }
+    ]);
+  });
+
+  test('clamps at 0 and rejects no-op decrement when already disabled', () => {
+    const start = hazardEncounter();
+    let next = start;
+    next = applyCommand(
+      next,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 0, delta: -3 }),
+      emptyEffects
+    ).newState;
+    next = applyCommand(
+      next,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 1, delta: -1 }),
+      emptyEffects
+    ).newState;
+
+    // both should be at 0 now
+    expect(next.combatants['trap-1'].hazardData!.disableProgress[0].successesRemaining).toBe(0);
+    expect(next.combatants['trap-1'].hazardData!.disableProgress[1].successesRemaining).toBe(0);
+
+    const noop = applyCommand(
+      next,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 0, delta: -1 }),
+      emptyEffects
+    );
+    expectRejected(noop, 'RECORD_DISABLE_PROGRESS', 'No change to disable progress');
+  });
+
+  test('emits hazard-disabled exactly once when crossing all-zero', () => {
+    const start = hazardEncounter();
+    const first = applyCommand(
+      start,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 0, delta: -3 }),
+      emptyEffects
+    );
+    expect(first.events.some((e) => e.type === 'disable-progress-recorded')).toBe(true);
+    expect(first.events.some((e) => e.type === 'hazard-disabled')).toBe(false);
+
+    const second = applyCommand(
+      first.newState,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 1, delta: -1 }),
+      emptyEffects
+    );
+    expect(second.events.some((e) => e.type === 'hazard-disabled')).toBe(true);
+  });
+
+  test('rejects on non-hazard target', () => {
+    const fighter = combatant('fighter-1', { sourceType: 'partyMember' });
+    const state = encounter({
+      combatants: { [fighter.id]: fighter },
+      initiative: { order: [fighter.id], currentIndex: -1, delaying: [], scores: {} }
+    });
+    const result = applyCommand(
+      state,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'fighter-1', checkIndex: 0, delta: -1 }),
+      emptyEffects
+    );
+    expectRejected(result, 'RECORD_DISABLE_PROGRESS', 'Combatant fighter-1 is not a hazard');
+  });
+
+  test('rejects on out-of-range checkIndex', () => {
+    const result = applyCommand(
+      hazardEncounter(),
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 9, delta: -1 }),
+      emptyEffects
+    );
+    expectRejected(result, 'RECORD_DISABLE_PROGRESS', 'Disable check index 9 is out of range');
+  });
+
+  test('positive delta undoes successes and clamps at requiredSuccesses', () => {
+    const start = hazardEncounter();
+    const reduced = applyCommand(
+      start,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 0, delta: -2 }),
+      emptyEffects
+    );
+    expect(reduced.newState.combatants['trap-1'].hazardData!.disableProgress[0].successesRemaining).toBe(1);
+
+    const undone = applyCommand(
+      reduced.newState,
+      command('RECORD_DISABLE_PROGRESS', { combatantId: 'trap-1', checkIndex: 0, delta: 99 }),
+      emptyEffects
+    );
+    expect(undone.newState.combatants['trap-1'].hazardData!.disableProgress[0].successesRemaining).toBe(3);
+  });
+});

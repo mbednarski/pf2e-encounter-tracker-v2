@@ -59,7 +59,8 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   RESET_REACTION: ['ACTIVE', 'RESOLVING'],
   SET_NOTE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   MARK_DEAD: ['PREPARING', 'ACTIVE', 'RESOLVING'],
-  REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING']
+  REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
+  RECORD_DISABLE_PROGRESS: ['PREPARING', 'ACTIVE', 'RESOLVING']
 };
 
 export function applyCommand(state: EncounterState, command: Command, effectLibrary: EffectLibrary): CommandResult {
@@ -137,6 +138,8 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
       return useInnateSpell(state, command.payload);
     case 'RESTORE_INNATE_SPELL':
       return restoreInnateSpell(state, command.payload);
+    case 'RECORD_DISABLE_PROGRESS':
+      return recordDisableProgress(state, command.payload);
     default:
       return reject(state, command.type, `${command.type} is not implemented in the first domain slice`);
   }
@@ -1687,6 +1690,82 @@ function revive(state: EncounterState, combatantId: CombatantId): CommandResult 
   }
 
   return updateCombatant(state, { ...combatant, isAlive: true }, [{ type: 'combatant-revived', combatantId }]);
+}
+
+function recordDisableProgress(
+  state: EncounterState,
+  payload: { combatantId: CombatantId; checkIndex: number; delta: number }
+): CommandResult {
+  const combatant = state.combatants[payload.combatantId];
+  if (!combatant) {
+    return reject(state, 'RECORD_DISABLE_PROGRESS', `Combatant ${payload.combatantId} not found`);
+  }
+
+  if (combatant.sourceType !== 'hazard' || !combatant.hazardData) {
+    return reject(
+      state,
+      'RECORD_DISABLE_PROGRESS',
+      `Combatant ${payload.combatantId} is not a hazard`
+    );
+  }
+
+  const checks = combatant.hazardData.disableChecks;
+  const progress = combatant.hazardData.disableProgress;
+  if (payload.checkIndex < 0 || payload.checkIndex >= checks.length) {
+    return reject(
+      state,
+      'RECORD_DISABLE_PROGRESS',
+      `Disable check index ${payload.checkIndex} is out of range`
+    );
+  }
+
+  const check = checks[payload.checkIndex];
+  const entry = progress[payload.checkIndex] ?? {
+    checkIndex: payload.checkIndex,
+    successesRemaining: check.requiredSuccesses
+  };
+  const max = check.requiredSuccesses;
+  const previous = entry.successesRemaining;
+  const next = clampInteger(previous + payload.delta, 0, max);
+
+  if (next === previous) {
+    return reject(state, 'RECORD_DISABLE_PROGRESS', 'No change to disable progress');
+  }
+
+  const wasFullyDisabled = progress.every((p) => p.successesRemaining === 0);
+  const newProgress = progress.map((p, i) =>
+    i === payload.checkIndex ? { ...p, successesRemaining: next } : p
+  );
+  const nowFullyDisabled = newProgress.every((p) => p.successesRemaining === 0);
+
+  const updated: CombatantState = {
+    ...combatant,
+    hazardData: {
+      ...combatant.hazardData,
+      disableProgress: newProgress
+    }
+  };
+
+  const events: DomainEvent[] = [
+    {
+      type: 'disable-progress-recorded',
+      combatantId: payload.combatantId,
+      checkIndex: payload.checkIndex,
+      previous,
+      next
+    }
+  ];
+
+  if (!wasFullyDisabled && nowFullyDisabled) {
+    events.push({ type: 'hazard-disabled', combatantId: payload.combatantId });
+  }
+
+  return updateCombatant(state, updated, events);
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
 interface SpellLookup {

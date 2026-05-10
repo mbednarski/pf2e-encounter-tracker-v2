@@ -166,7 +166,7 @@ describe('effectLibrary', () => {
 
     expect(computed.spellDcs.total).toBe(-2);
     expect(computed.spellAttacks.total).toBe(-2);
-    expect(computed.will.final).toBe(7);
+    expect(computed.will!.final).toBe(7);
     expect(computed.skills.arcana.final).toBe(8);
   });
 
@@ -222,10 +222,10 @@ describe('effectLibrary', () => {
 
     const computed = deriveStats(baseStats, [applied], effectLibrary);
 
-    expect(computed.ac.final).toBe(19);
-    expect(computed.fortitude.final).toBe(8);
-    expect(computed.reflex.final).toBe(8);
-    expect(computed.will.final).toBe(8);
+    expect(computed.ac!.final).toBe(19);
+    expect(computed.fortitude!.final).toBe(8);
+    expect(computed.reflex!.final).toBe(8);
+    expect(computed.will!.final).toBe(8);
   });
 
   test('wires Mage Armor to AC as item bonus', () => {
@@ -243,8 +243,8 @@ describe('effectLibrary', () => {
 
     const computed = deriveStats(baseStats, [applied], effectLibrary);
 
-    expect(computed.ac.final).toBe(19);
-    expect(computed.ac.modifiers[0]?.bonusType).toBe('item');
+    expect(computed.ac!.final).toBe(19);
+    expect(computed.ac!.modifiers[0]?.bonusType).toBe('item');
   });
 
   test('models persistent damage as note-driven prompt definitions', () => {

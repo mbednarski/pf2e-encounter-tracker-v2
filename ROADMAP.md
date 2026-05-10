@@ -82,7 +82,7 @@ Tracking only. Captured in issue #49. Domain commands are stubbed in `src/domain
 
 Specs are authoritative; tracking issues hold scope so the work is not lost. None of these are in the active backlog filter.
 
-- **Hazards** — issue #50, spec `pf2e-hazards-spec.md`. Hazards as initiative participants with reactions, triggers, and disables.
+- **Hazards** — issue #50, spec `pf2e-hazards-spec.md` v0.2. ✅ Implemented: complex hazards as initiative participants with stealth-rolled init, routine banner, disable progress tracking, hardness display, YAML import, IndexedDB hazard library.
 - **Afflictions** — issue #51, spec `pf2e-afflictions-spec.md`. Poison/disease/curse staging, saves, and turn-boundary prompts.
 - **Party members** — issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entities, not ad-hoc combatants.
 - **Creature types** — spec `pf2e-creature-types-spec.md`. Folds into #48 once the import-driven creature library lands.
