@@ -186,13 +186,13 @@ describe('CombatantCard initiative control', () => {
 });
 
 describe('CombatantCard faction styling', () => {
-  test('a creature combatant gets data-faction="enemy" and renders an NPC tag', () => {
+  test('a creature combatant gets data-faction="enemy" and renders an Enemy tag', () => {
     const { container } = render(CombatantCard, {
       props: baseProps({ combatant: combatant('goblin-1', { sourceType: 'creature' }) })
     });
     const article = container.querySelector('article.combatant-card');
     expect(article?.getAttribute('data-faction')).toBe('enemy');
-    expect(article?.textContent).toContain('NPC');
+    expect(article?.textContent).toContain('Enemy');
   });
 
   test('a partyMember combatant gets data-faction="pc" and renders a PC tag', () => {

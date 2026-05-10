@@ -257,7 +257,7 @@
         return 'Hazard';
       case 'enemy':
       default:
-        return 'NPC';
+        return 'Enemy';
     }
   }
 
@@ -389,10 +389,6 @@
   {/if}
 
   <div class="stat-strip">
-    <div class="stat-cell stat-cell--ac">
-      <SectionLabel>AC</SectionLabel>
-      <span class="stat-cell__value">{combatant.baseStats.ac}</span>
-    </div>
     <div class="stat-cell stat-cell--hp">
       <SectionLabel>HP</SectionLabel>
       <div class="hp-row">
@@ -424,11 +420,15 @@
           {/if}
         </div>
       </div>
-      <div class="hp-track" aria-label={`${combatant.name} HP`}>
-        <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
-      </div>
     </div>
-    <div class="stat-cell stat-cell--saves">
+    <div class="stat-cell stat-cell--defenses" aria-label="Defenses">
+      <div
+        class="stat-readout"
+        aria-label={`Armor Class ${combatant.baseStats.ac}`}
+      >
+        <span class="stat-readout__label">AC</span>
+        <span class="stat-readout__value">{combatant.baseStats.ac}</span>
+      </div>
       <StatRollButton
         label="Fort"
         modifier={combatant.baseStats.fortitude}
@@ -448,6 +448,10 @@
         onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
       />
     </div>
+  </div>
+
+  <div class="hp-track" aria-label={`${combatant.name} HP`}>
+    <div class="hp-fill" style={`width: ${hpPercent}%`}></div>
   </div>
 
   <div class="conditions" aria-label={`${combatant.name} conditions`}>
@@ -799,30 +803,45 @@
     gap: 2px;
   }
 
-  .stat-cell--ac {
-    align-items: center;
-    flex: 0 0 auto;
-  }
-
-  .stat-cell--ac .stat-cell__value {
-    font-family: var(--font-serif);
-    font-size: var(--text-xl);
-    font-weight: 600;
-    color: var(--color-ink);
-    line-height: var(--leading-tight);
-  }
-
   .stat-cell--hp {
-    flex: 1 1 200px;
-    min-width: 160px;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
-  .stat-cell--saves {
+  .stat-cell--defenses {
     display: flex;
     flex-direction: row;
-    align-items: stretch;
+    align-items: center;
     gap: 4px;
     flex: 0 0 auto;
+    flex-wrap: wrap;
+  }
+
+  .stat-readout {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--color-panel-2);
+    border: 1px solid var(--color-rule);
+    cursor: default;
+  }
+
+  .stat-readout__label {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--color-ink-mute);
+  }
+
+  .stat-readout__value {
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+    font-weight: 700;
+    color: var(--color-ink);
   }
 
   .hp-row {
@@ -878,7 +897,8 @@
     overflow: hidden;
     background: var(--color-hp-bg);
     border: 1px solid var(--color-rule);
-    margin-top: var(--space-1);
+    margin-top: var(--space-2);
+    width: 100%;
   }
 
   .hp-fill {
@@ -1097,7 +1117,7 @@
       align-items: stretch;
     }
 
-    .stat-cell--saves {
+    .stat-cell--defenses {
       flex-wrap: wrap;
     }
   }
