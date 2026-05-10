@@ -1,14 +1,21 @@
 <script lang="ts">
   import type { Creature } from '../domain';
+  import type { TemplateAdjustmentChoice } from '$lib/encounter-app';
+  import Button from './ui/Button.svelte';
   import IconButton from './ui/IconButton.svelte';
   import Input from './ui/Input.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
 
   export let creatures: Creature[];
-  export let onAddCreature: (creature: Creature) => void;
-  export let onRemoveCreature: ((id: string) => void) | undefined = undefined;
+  export let encounterCounts: Record<string, number> = {};
+  export let onAddToEncounter: (creature: Creature, adjustment: TemplateAdjustmentChoice) => void;
+  export let onRemoveOneFromEncounter: (creatureId: string) => void;
+  export let onImportYamlFiles: ((files: File[]) => void) | undefined = undefined;
+  export let onOpenManageLibrary: (() => void) | undefined = undefined;
 
   let query = '';
+  let adjustment: TemplateAdjustmentChoice = 'normal';
+  let fileInput: HTMLInputElement | undefined;
 
   $: needle = query.trim().toLowerCase();
   $: filtered = needle
@@ -17,6 +24,15 @@
         return creature.traits.some((t) => t.toLowerCase().includes(needle));
       })
     : creatures;
+
+  function handleFileChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length > 0) {
+      onImportYamlFiles?.(files);
+    }
+    input.value = '';
+  }
 </script>
 
 <section class="bestiary" aria-labelledby="bestiary-label">
@@ -24,6 +40,23 @@
     <SectionLabel as="h3" id="bestiary-label">Bestiary</SectionLabel>
     <span class="count">{creatures.length}</span>
   </header>
+
+  <div class="bestiary__actions">
+    {#if onImportYamlFiles}
+      <Button variant="secondary" size="sm" onclick={() => fileInput?.click()}>Import YAML…</Button>
+      <input
+        bind:this={fileInput}
+        type="file"
+        accept=".yaml,.yml,application/yaml,text/yaml"
+        multiple
+        hidden
+        onchange={handleFileChange}
+      />
+    {/if}
+    {#if onOpenManageLibrary}
+      <Button variant="secondary" size="sm" onclick={onOpenManageLibrary}>Manage…</Button>
+    {/if}
+  </div>
 
   <div class="bestiary__search">
     <Input
@@ -36,6 +69,33 @@
     </Input>
   </div>
 
+  <fieldset class="adjustment" aria-label="Adjustment for added creatures">
+    <legend class="adjustment__legend">Adjustment</legend>
+    <div class="adjustment__group">
+      <button
+        type="button"
+        class="adjustment__option"
+        class:adjustment__option--active={adjustment === 'weak'}
+        aria-pressed={adjustment === 'weak'}
+        onclick={() => (adjustment = 'weak')}
+      >Weak</button>
+      <button
+        type="button"
+        class="adjustment__option"
+        class:adjustment__option--active={adjustment === 'normal'}
+        aria-pressed={adjustment === 'normal'}
+        onclick={() => (adjustment = 'normal')}
+      >Normal</button>
+      <button
+        type="button"
+        class="adjustment__option"
+        class:adjustment__option--active={adjustment === 'elite'}
+        aria-pressed={adjustment === 'elite'}
+        onclick={() => (adjustment = 'elite')}
+      >Elite</button>
+    </div>
+  </fieldset>
+
   {#if creatures.length === 0}
     <p class="empty">Import a YAML file to add creatures.</p>
   {:else if filtered.length === 0}
@@ -43,38 +103,35 @@
   {:else}
     <ul class="rows">
       {#each filtered as creature (creature.id)}
+        {@const count = encounterCounts[creature.id] ?? 0}
         <li class="row">
-          <span class="row__level" aria-label="Level {creature.level}">{creature.level}</span>
-          <span class="row__body">
-            <span class="row__name">{creature.name}</span>
-            <span class="row__traits">{creature.traits.join(' · ')}</span>
-          </span>
-          {#if onRemoveCreature}
-            <span class="row__remove">
-              <IconButton
-                ariaLabel="Remove {creature.name}"
-                title="Remove from library"
-                variant="destructive"
-                size={22}
-                onclick={() => onRemoveCreature?.(creature.id)}
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                  <path d="M2 6h8" />
-                </svg>
-              </IconButton>
-            </span>
-          {/if}
-          <IconButton
-            ariaLabel="Add {creature.name}"
+          <button
+            type="button"
+            class="row__add"
+            aria-label="Add {creature.name} to encounter"
             title="Add to encounter"
-            variant="primary"
-            size={26}
-            onclick={() => onAddCreature(creature)}
+            onclick={() => onAddToEncounter(creature, adjustment)}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-              <path d="M7 2v10M2 7h10" />
-            </svg>
-          </IconButton>
+            <span class="row__level" aria-label="Level {creature.level}">{creature.level}</span>
+            <span class="row__body">
+              <span class="row__name">{creature.name}</span>
+              <span class="row__traits">{creature.traits.join(' · ')}</span>
+            </span>
+          </button>
+          {#if count > 0}
+            <span class="row__count" aria-label="{count} in encounter">×{count}</span>
+            <IconButton
+              ariaLabel="Remove one {creature.name} from encounter"
+              title="Remove one from encounter"
+              variant="default"
+              size={22}
+              onclick={() => onRemoveOneFromEncounter(creature.id)}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <path d="M2 6h8" />
+              </svg>
+            </IconButton>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -95,10 +152,72 @@
     gap: var(--space-2);
   }
 
+  .bestiary__actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
   .count {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--color-ink-mute);
+  }
+
+  .adjustment {
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
+    padding: 4px 8px 6px;
+    margin: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .adjustment__legend {
+    padding: 0 var(--space-2);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--color-ink-mute);
+  }
+
+  .adjustment__group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+
+  .adjustment__option {
+    background: transparent;
+    color: var(--color-ink-mute);
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    padding: 4px 6px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .adjustment__option:hover {
+    color: var(--color-ink);
+    border-color: var(--color-ink);
+  }
+
+  .adjustment__option--active {
+    background: var(--color-ink);
+    color: var(--color-panel);
+    border-color: var(--color-ink);
+  }
+
+  .adjustment__option:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
   }
 
   .empty {
@@ -121,10 +240,10 @@
 
   .row {
     display: grid;
-    grid-template-columns: 32px 1fr auto auto;
-    gap: var(--space-3);
+    grid-template-columns: 1fr auto auto;
+    gap: var(--space-2);
     align-items: center;
-    padding: var(--space-2) 0;
+    padding: 0;
     border-bottom: 1px dashed var(--color-rule);
   }
 
@@ -132,16 +251,25 @@
     border-bottom: none;
   }
 
-  /* Destructive remove is de-emphasized but kept in tab order; hover/focus-within
-     reveals it so quick-add stays the dominant affordance. */
-  .row__remove {
-    opacity: 0;
-    transition: opacity 0.12s;
+  .row__add {
+    all: unset;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-2) var(--space-2);
+    min-width: 0;
+    transition: background 0.08s;
   }
 
-  .row:hover .row__remove,
-  .row:focus-within .row__remove {
-    opacity: 1;
+  .row__add:hover {
+    background: var(--color-panel-2);
+  }
+
+  .row__add:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: -2px;
   }
 
   .row__level {
@@ -179,5 +307,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .row__count {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--color-ink);
+    padding: 0 6px;
   }
 </style>

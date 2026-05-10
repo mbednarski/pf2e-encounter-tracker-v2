@@ -90,6 +90,8 @@
 
   $: availableCreatures = storedCreatures;
 
+  $: encounterCounts = computeEncounterCounts(encounter.combatants);
+
   $: xpSummary = computeEncounterXP(encounter);
 
   $: orderedCombatants = encounter.initiative.order
@@ -242,25 +244,48 @@
     runCommand(toCommand('SET_INITIATIVE_ORDER', { order: nextOrder }, nextCommandId()));
   }
 
-  function handleAddCreatures(input: {
-    creature: Creature;
-    adjustment: TemplateAdjustmentChoice;
-    quantity: number;
-    namePrefix: string;
-  }) {
-    const prefix = input.namePrefix.trim();
-    for (let index = 1; index <= input.quantity; index += 1) {
-      const name = prefix
-        ? input.quantity > 1 ? `${prefix} ${index}` : prefix
-        : input.quantity > 1 ? `${input.creature.name} ${index}` : input.creature.name;
-      const combatant = makeCreatureCombatant({
-        creature: input.creature,
-        combatantId: `${input.creature.id}-${combatantCounter++}`,
-        name,
-        adjustment: input.adjustment
-      });
-      addCombatant(combatant);
+  function computeEncounterCounts(
+    combatants: Record<string, CombatantState>
+  ): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const combatant of Object.values(combatants)) {
+      if (combatant.sourceType !== 'creature') continue;
+      counts[combatant.sourceId] = (counts[combatant.sourceId] ?? 0) + 1;
     }
+    return counts;
+  }
+
+  function handleAddOneFromBestiary(creature: Creature, adjustment: TemplateAdjustmentChoice) {
+    const existing = encounterCounts[creature.id] ?? 0;
+    const name = existing > 0 ? `${creature.name} ${existing + 1}` : creature.name;
+    const combatant = makeCreatureCombatant({
+      creature,
+      combatantId: `${creature.id}-${combatantCounter++}`,
+      name,
+      adjustment
+    });
+    addCombatant(combatant);
+  }
+
+  function handleRemoveOneFromBestiaryCount(creatureId: string) {
+    let target: CombatantState | undefined;
+    for (const id of [...encounter.initiative.order].reverse()) {
+      const c = encounter.combatants[id];
+      if (c && c.sourceType === 'creature' && c.sourceId === creatureId) {
+        target = c;
+        break;
+      }
+    }
+    if (!target) {
+      for (const c of Object.values(encounter.combatants)) {
+        if (c.sourceType === 'creature' && c.sourceId === creatureId) {
+          target = c;
+          break;
+        }
+      }
+    }
+    if (!target) return;
+    runCommand(toCommand('REMOVE_COMBATANT', { combatantId: target.id }, nextCommandId()));
   }
 
   async function handleImportYamlFiles(files: File[]) {
@@ -701,7 +726,9 @@
         creatures={availableCreatures}
         partyMembers={storedPartyMembers}
         {conditionOptions}
-        onAddCreatures={handleAddCreatures}
+        {encounterCounts}
+        onAddOneFromBestiary={handleAddOneFromBestiary}
+        onRemoveOneFromBestiaryCount={handleRemoveOneFromBestiaryCount}
         onAddManual={handleAddManual}
         onImportYamlFiles={handleImportYamlFiles}
         onRemoveCreature={handleRemoveCreature}

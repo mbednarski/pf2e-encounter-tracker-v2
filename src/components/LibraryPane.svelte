@@ -6,6 +6,7 @@
     TemplateAdjustmentChoice
   } from '$lib/encounter-app';
   import BestiarySection from './BestiarySection.svelte';
+  import LibraryManageModal from './LibraryManageModal.svelte';
   import PartySection from './PartySection.svelte';
   import SetupPanel from './SetupPanel.svelte';
 
@@ -13,12 +14,9 @@
   export let creatures: Creature[];
   export let partyMembers: PartyMember[];
   export let conditionOptions: ConditionOption[];
-  export let onAddCreatures: (input: {
-    creature: Creature;
-    adjustment: TemplateAdjustmentChoice;
-    quantity: number;
-    namePrefix: string;
-  }) => void;
+  export let encounterCounts: Record<string, number>;
+  export let onAddOneFromBestiary: (creature: Creature, adjustment: TemplateAdjustmentChoice) => void;
+  export let onRemoveOneFromBestiaryCount: (creatureId: string) => void;
   export let onAddManual: (input: Omit<ManualCombatantInput, 'id'>) => void;
   export let onImportYamlFiles: (files: File[]) => void;
   export let onRemoveCreature: (id: string) => void;
@@ -29,8 +27,14 @@
   export let onStart: () => void;
   export let onReset: () => void;
 
-  function quickAdd(creature: Creature) {
-    onAddCreatures({ creature, adjustment: 'normal', quantity: 1, namePrefix: '' });
+  let manageOpen = false;
+
+  function openManage() {
+    manageOpen = true;
+  }
+
+  function closeManage() {
+    manageOpen = false;
   }
 </script>
 
@@ -38,6 +42,14 @@
   <header class="library__header">
     <h2 id="library-title">Library</h2>
   </header>
+  <BestiarySection
+    {creatures}
+    {encounterCounts}
+    onAddToEncounter={onAddOneFromBestiary}
+    onRemoveOneFromEncounter={onRemoveOneFromBestiaryCount}
+    {onImportYamlFiles}
+    onOpenManageLibrary={openManage}
+  />
   <PartySection
     {partyMembers}
     {conditionOptions}
@@ -46,19 +58,14 @@
     {onSavePartyMember}
     {onImportPartyMemberYamlFiles}
   />
-  <BestiarySection {creatures} onAddCreature={quickAdd} {onRemoveCreature} />
   <div class="library__configure">
-    <SetupPanel
-      {canStart}
-      {creatures}
-      {onAddCreatures}
-      {onAddManual}
-      {onImportYamlFiles}
-      {onStart}
-      {onReset}
-    />
+    <SetupPanel {canStart} {onAddManual} {onStart} {onReset} />
   </div>
 </aside>
+
+{#if manageOpen}
+  <LibraryManageModal {creatures} onRemove={onRemoveCreature} onClose={closeManage} />
+{/if}
 
 <style>
   .library {
@@ -86,13 +93,6 @@
     line-height: var(--leading-tight);
   }
 
-  /*
-   * SetupPanel still owns the configure-before-add form (template / quantity /
-   * name prefix), the manual-combatant form, the YAML import flow, and the
-   * Start / Reset buttons. A future slice can split those further (per-row
-   * configure UI in the bestiary) and strip SetupPanel's redundant creature
-   * dropdown; for now the dropdown coexists with the bestiary list above.
-   */
   .library__configure {
     border-top: var(--border-thin);
     padding: var(--space-3) var(--space-4);
