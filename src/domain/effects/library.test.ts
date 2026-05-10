@@ -139,7 +139,7 @@ describe('effectLibrary', () => {
       category: 'persistent-damage',
       hasValue: false,
       modifiers: [],
-      turnStartSuggestion: {
+      turnEndSuggestion: {
         type: 'promptResolution',
         description: 'Take {note} fire damage, then flat check DC 15 to remove.'
       }

@@ -317,7 +317,7 @@ describe('applyCommand prompt resolution slice', () => {
       pendingPrompts: [
         {
           id: 'prompt-persistent',
-          boundary: { type: 'turnStart', ownerId: 'fighter-1' },
+          boundary: { type: 'turnEnd', ownerId: 'fighter-1' },
           targetId: 'fighter-1',
           effectInstanceId: 'persistent-fire-1',
           effectName: 'Persistent Fire',

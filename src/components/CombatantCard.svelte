@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CombatantState, EncounterState } from '../domain';
+  import type { CombatantState, EncounterState, Prompt, PromptResolution } from '../domain';
   import {
     clampValue,
     combatantVisualState,
@@ -11,11 +11,14 @@
   } from '$lib/encounter-app';
   import type { CommittableEdit, HpEditField } from '$lib/hp-input';
   import { templateLabel } from '$lib/template-label';
+  import { persistentEffectIdToDamageType } from '$lib/effects/damage-type-glyph';
   import InlineNumberEdit from './InlineNumberEdit.svelte';
   import Button from './ui/Button.svelte';
   import Chip from './ui/Chip.svelte';
   import IconButton from './ui/IconButton.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
+  import DamageTypeGlyph from './ui/DamageTypeGlyph.svelte';
+  import CombatantPromptResolution from './CombatantPromptResolution.svelte';
 
   export let combatant: CombatantState;
   export let isCurrent: boolean;
@@ -42,6 +45,16 @@
     | undefined = undefined;
   export let initiativeScore: number | undefined = undefined;
   export let onSetInitiative: ((id: string, value: number | null) => void) | undefined = undefined;
+  export let pendingPrompts: Prompt[] = [];
+  export let combatantsById: Record<string, CombatantState> = {};
+  export let onResolvePrompt: (promptId: string, resolution: PromptResolution) => void = () => {};
+  export let onApplyPersistentDamage: (
+    combatantId: string,
+    amount: number,
+    damageType: string
+  ) => void = () => {};
+
+  $: cardPrompts = pendingPrompts.filter((p) => p.targetId === combatant.id);
 
   const LONG_PRESS_MS = 400;
   const LONG_PRESS_TOLERANCE_PX = 6;
@@ -400,8 +413,20 @@
     {/if}
 
     {#each appliedEffectsView as view (view.instanceId)}
-      <span class="condition-chip" class:condition-chip--implied={view.source.kind === 'implied'}>
-        <span class="condition-name">{view.name}</span>
+      {@const isPersistent = view.effectId.startsWith('persistent-')}
+      {@const damageType = isPersistent ? persistentEffectIdToDamageType(view.effectId) : null}
+      <span
+        class="condition-chip"
+        class:condition-chip--implied={view.source.kind === 'implied'}
+        class:condition-chip--persistent={isPersistent}
+      >
+        {#if isPersistent && damageType}
+          <DamageTypeGlyph type={damageType} />
+        {/if}
+        <span class="condition-name">{isPersistent ? (damageType ?? view.name) : view.name}</span>
+        {#if isPersistent && view.note}
+          <span class="condition-dice">{view.note}</span>
+        {/if}
         {#if view.value.kind === 'valued'}
           {#if editingInstanceId === view.instanceId}
             <input
@@ -480,6 +505,18 @@
       </div>
     {/if}
   </div>
+
+  {#if cardPrompts.length > 0}
+    <div class="card-prompt-resolution">
+      <CombatantPromptResolution
+        prompts={cardPrompts}
+        {combatantsById}
+        {phase}
+        onResolve={onResolvePrompt}
+        {onApplyPersistentDamage}
+      />
+    </div>
+  {/if}
 
   <div class="card-turn-actions" aria-label="Turn and lifecycle controls">
     <Button
@@ -808,14 +845,41 @@
     opacity: 0.78;
   }
 
+  .condition-chip--persistent {
+    background: #fff3f0;
+    border-color: var(--color-red);
+    border-left: 3px solid var(--color-red);
+    color: var(--color-red);
+  }
+
+  .condition-chip--persistent .condition-name {
+    text-transform: capitalize;
+  }
+
   .condition-name {
     font-weight: 700;
+  }
+
+  .condition-dice {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--color-red);
+    background: #fff;
+    padding: 0 4px;
+    border: var(--border-thin);
+    border-color: var(--color-red);
+    border-radius: 2px;
   }
 
   .condition-duration {
     color: var(--color-ink-mute);
     font-weight: 500;
     font-size: var(--text-xs);
+  }
+
+  .card-prompt-resolution {
+    margin-top: var(--space-2);
   }
 
   .condition-parent {

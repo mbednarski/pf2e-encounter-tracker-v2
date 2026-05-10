@@ -24,12 +24,12 @@ function persistentDamage(type: string, name: string): EffectDefinition {
     category: 'persistent-damage',
     hasValue: false,
     modifiers: [],
-    turnStartSuggestion: {
+    turnEndSuggestion: {
       type: 'promptResolution',
       description: `Take {note} ${type} damage, then flat check DC 15 to remove.`
     },
     description:
-      'At start of turn: take damage, then DC 15 flat check to end. Assisted recovery lowers DC to 10. Multiple sources: take only the highest.'
+      'At end of turn: take damage, then DC 15 flat check to end. Assisted recovery lowers DC to 10. Multiple sources: take only the highest.'
   };
 }
 

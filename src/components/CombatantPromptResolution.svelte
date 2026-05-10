@@ -35,12 +35,6 @@
   $: setValueDrafts = reconcileDrafts(prompts, persistentBranches, setValueDrafts);
   $: damageDrafts = reconcileDamageDrafts(prompts, persistentBranches, damageDrafts);
 
-  function findEffect(p: Prompt): AppliedEffect | undefined {
-    return combatantsById[p.targetId]?.appliedEffects.find(
-      (effect) => effect.instanceId === p.effectInstanceId
-    );
-  }
-
   function computePersistentBranches(
     list: Prompt[],
     byId: Record<string, CombatantState>
@@ -161,21 +155,18 @@
 </script>
 
 {#if focused}
-  <aside
-    class="prompt-panel"
-    aria-labelledby="prompt-resolution-title"
+  <div
+    class="prompt-block"
+    aria-label="Awaiting resolution"
     aria-live="polite"
   >
-    <header class="prompt-panel__header">
-      <h2 id="prompt-resolution-title">Awaiting GM resolution</h2>
-      <span class="prompt-panel__count">{prompts.length}</span>
-    </header>
+    <SectionLabel>Awaiting resolution</SectionLabel>
     <ol class="prompt-list">
       {#each prompts as prompt (prompt.id)}
         {@const target = targetLabel(prompt)}
         <li class="prompt">
           <div class="prompt__meta">
-            <SectionLabel>{boundaryLabel(prompt)}</SectionLabel>
+            <span class="prompt__boundary">{boundaryLabel(prompt)}</span>
             <span class="prompt__effect">{prompt.effectName}</span>
             {#if target}
               <span class="prompt__target">on {target}</span>
@@ -269,40 +260,18 @@
         </li>
       {/each}
     </ol>
-  </aside>
+  </div>
 {/if}
 
 <style>
-  .prompt-panel {
+  .prompt-block {
+    display: grid;
+    gap: var(--space-2);
     background: #fff7ee;
     border: 1px solid var(--color-amber);
-    border-left: 4px solid var(--color-amber);
+    border-left: 3px solid var(--color-amber);
     border-radius: var(--radius-card);
-    padding: var(--space-3) var(--space-4);
-  }
-
-  .prompt-panel__header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-
-  h2 {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: var(--text-md);
-    font-weight: 600;
-    line-height: var(--leading-tight);
-    color: var(--color-amber);
-  }
-
-  .prompt-panel__count {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-amber);
+    padding: var(--space-2) var(--space-3);
   }
 
   .prompt-list {
@@ -316,7 +285,6 @@
   .prompt {
     background: var(--color-panel);
     border: var(--border-thin);
-    border-left: 3px solid var(--color-amber);
     padding: var(--space-2) var(--space-3);
     display: grid;
     gap: var(--space-2);
@@ -329,6 +297,14 @@
     gap: var(--space-2);
     font-size: var(--text-sm);
     color: var(--color-ink-soft);
+  }
+
+  .prompt__boundary {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-amber);
   }
 
   .prompt__effect {
