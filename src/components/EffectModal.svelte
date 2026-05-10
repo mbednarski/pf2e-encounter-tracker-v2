@@ -8,6 +8,8 @@
     type ConditionOption,
     type EffectModalTab
   } from '$lib/encounter-app';
+  import { persistentEffectIdToDamageType } from '$lib/effects/damage-type-glyph';
+  import DamageTypeGlyph from './ui/DamageTypeGlyph.svelte';
   import type { Duration } from '../domain';
 
   export let combatantName: string;
@@ -35,13 +37,25 @@
     { id: 'effects', label: 'Effects' }
   ];
 
+  const PERSISTENT_DAMAGE_QUICK_PICKS = [
+    '1d4',
+    '1d6',
+    '1d8',
+    '1d10',
+    '1d12',
+    '2d4',
+    '2d6',
+    '2d8'
+  ] as const;
+  const DEFAULT_PERSISTENT_FORMULA = '1d6';
+
   let activeTab: EffectModalTab = initialTab;
   let conditionSearch = '';
   let valuePickerForId: string | null = null;
   let valuePickerValue = 1;
   let valuePickerSource: 'conditions' | 'afflictions' = 'conditions';
   let persistentFormulaForId: string | null = null;
-  let persistentFormula = '1d6';
+  let persistentFormula = DEFAULT_PERSISTENT_FORMULA;
   let durationEditorForId: string | null = null;
   let durationKindBuf: DurationKind = 'unlimited';
   let durationCountBuf = 1;
@@ -80,7 +94,15 @@
 
   function startPersistent(option: ConditionOption) {
     persistentFormulaForId = option.id;
-    persistentFormula = '1d6';
+    persistentFormula = DEFAULT_PERSISTENT_FORMULA;
+  }
+
+  function persistentChipLabel(name: string): string {
+    return name.replace(/^Persistent\s+/i, '');
+  }
+
+  function selectQuickPick(formula: string) {
+    persistentFormula = formula;
   }
 
   function commitPersistent(option: ConditionOption) {
@@ -347,28 +369,53 @@
         {#if persistentOptions.length === 0}
           <p class="empty">No persistent damage types defined.</p>
         {:else}
-          <p class="hint">Pick a damage type, then enter the formula (e.g. <code>1d6</code> or <code>2d4+2</code>).</p>
+          <p class="hint">Pick a damage type, then click a formula (or type a custom one).</p>
           <div class="chip-row">
             {#each persistentOptions as option (option.id)}
+              {@const damageType = persistentEffectIdToDamageType(option.id)}
               <div class="chip-wrap">
                 <button
                   type="button"
-                  class="chip"
+                  class="chip persistent-chip"
                   class:chip-active={persistentFormulaForId === option.id}
                   data-option-id={option.id}
+                  aria-label={option.name}
+                  title={option.name}
                   onclick={() => startPersistent(option)}
                 >
-                  {option.name}
+                  {#if damageType}
+                    <DamageTypeGlyph type={damageType} />
+                  {/if}
+                  <span>{persistentChipLabel(option.name)}</span>
                 </button>
                 {#if persistentFormulaForId === option.id}
-                  <div class="value-picker">
-                    <input
-                      type="text"
-                      bind:value={persistentFormula}
-                      aria-label={`${option.name} damage formula`}
-                    />
-                    <button type="button" class="primary" onclick={() => commitPersistent(option)}>Apply</button>
-                    <button type="button" class="ghost" onclick={() => (persistentFormulaForId = null)}>Cancel</button>
+                  <div class="formula-picker" data-formula-picker>
+                    <div class="formula-chips" role="group" aria-label="Quick formulas">
+                      {#each PERSISTENT_DAMAGE_QUICK_PICKS as formula (formula)}
+                        <button
+                          type="button"
+                          class="chip formula-chip"
+                          class:chip-active={persistentFormula.trim() === formula}
+                          data-formula={formula}
+                          onclick={() => selectQuickPick(formula)}
+                        >
+                          {formula}
+                        </button>
+                      {/each}
+                    </div>
+                    <label class="custom-formula">
+                      <span>Custom</span>
+                      <input
+                        type="text"
+                        bind:value={persistentFormula}
+                        aria-label={`${option.name} damage formula`}
+                        placeholder="e.g. 2d6+3"
+                      />
+                    </label>
+                    <div class="formula-actions">
+                      <button type="button" class="primary" onclick={() => commitPersistent(option)}>Apply</button>
+                      <button type="button" class="ghost" onclick={() => (persistentFormulaForId = null)}>Cancel</button>
+                    </div>
                   </div>
                 {/if}
               </div>
@@ -754,6 +801,12 @@
     border-color: var(--color-ink);
   }
 
+  .persistent-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   .value-picker {
     display: inline-flex;
     align-items: center;
@@ -803,5 +856,52 @@
     justify-content: flex-end;
     padding: var(--space-3) var(--space-4);
     border-top: 1px solid var(--color-rule);
+  }
+
+  .formula-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-panel);
+    border: 1px solid var(--color-rule);
+    border-radius: 4px;
+  }
+
+  .formula-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .formula-chip {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 3px 10px;
+  }
+
+  .custom-formula {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 11px;
+    color: var(--color-ink-mute);
+  }
+
+  .custom-formula input {
+    flex: 1;
+    padding: 2px 6px;
+    font: inherit;
+    font-family: var(--font-mono);
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 3px;
+    background: var(--color-bg);
+    color: inherit;
+  }
+
+  .formula-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
   }
 </style>

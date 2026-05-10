@@ -795,6 +795,10 @@
     runCommand(toCommand('RESOLVE_PROMPT', { promptId, resolution }, nextCommandId()));
   }
 
+  function applyPersistentDamageFromPrompt(combatantId: string, amount: number, damageType: string) {
+    runCommand(toCommand('APPLY_DAMAGE', { combatantId, amount, damageType }, nextCommandId()));
+  }
+
   function selectCombatant(id: string) {
     selection = pickCombatant(selection, id);
   }
@@ -848,6 +852,7 @@
         combatantsById={encounter.combatants}
         phase={encounter.phase}
         onResolve={resolvePrompt}
+        onApplyPersistentDamage={applyPersistentDamageFromPrompt}
       />
       {#if unorderedCombatants.length > 0}
         <div class="not-yet-rolled" aria-label="Not yet rolled">
