@@ -4,8 +4,14 @@ import { combatant } from '../domain/test-support';
 import type { CombatantState } from '../domain';
 import CombatantDetailsPanel from './CombatantDetailsPanel.svelte';
 
-function renderPanel(c: CombatantState | undefined, onSetNote = vi.fn()) {
-  return render(CombatantDetailsPanel, { props: { combatant: c, onSetNote } });
+function renderPanel(c: CombatantState | undefined, props: Record<string, unknown> = {}) {
+  return render(CombatantDetailsPanel, {
+    props: {
+      combatant: c,
+      onSetNote: vi.fn(),
+      ...props
+    }
+  });
 }
 
 describe('CombatantDetailsPanel', () => {
@@ -68,7 +74,7 @@ describe('CombatantDetailsPanel', () => {
     expect(screen.queryByLabelText('Attacks')).not.toBeInTheDocument();
   });
 
-  test('renders attacks with name, type, modifier, and damage', () => {
+  test('renders attacks with name, type, and three MAP buttons', () => {
     renderPanel(
       combatant('goblin-1', {
         attacks: [
@@ -84,31 +90,72 @@ describe('CombatantDetailsPanel', () => {
     );
     const attacks = screen.getByLabelText('Attacks');
     expect(attacks).toHaveTextContent('Longsword');
-    expect(attacks).toHaveTextContent('(melee)');
-    expect(attacks).toHaveTextContent('+12');
-    expect(attacks).toHaveTextContent('1d8+3 slashing');
+    expect(attacks).toHaveTextContent('melee');
+    expect(screen.getByRole('button', { name: 'Roll Longsword 1st attack (+12)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Longsword 2nd attack (+7)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Longsword 3rd attack (+2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Longsword damage (1d8+3 slashing)' })).toBeInTheDocument();
   });
 
-  test('renders multi-component damage with persistent suffix and bonus-only piece', () => {
+  test('agile attack uses -4/-8 MAP', () => {
     renderPanel(
-      combatant('flame-drake-1', {
+      combatant('goblin-1', {
         attacks: [
           {
-            name: 'Bite',
+            name: 'Claw',
             type: 'melee',
-            modifier: 14,
-            traits: ['fire'],
-            damage: [
-              { dice: 2, dieSize: 8, bonus: 4, type: 'piercing' },
-              { dice: 1, dieSize: 6, type: 'fire', persistent: true },
-              { bonus: 2, type: 'precision' }
-            ]
+            modifier: 15,
+            traits: ['agile'],
+            damage: [{ dice: 2, dieSize: 4, bonus: 8, type: 'slashing' }]
           }
         ]
       })
     );
-    const damageLine = screen.getByText(/2d8\+4 piercing/);
-    expect(damageLine).toHaveTextContent('2d8+4 piercing + 1d6 fire persistent + +2 precision');
+    expect(screen.getByRole('button', { name: 'Roll Claw 2nd attack (+11)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Claw 3rd attack (+7)' })).toBeInTheDocument();
+  });
+
+  test('clicking attack button forwards onRollAttack with combatant id, variant, and click origin', async () => {
+    const onRollAttack = vi.fn();
+    renderPanel(
+      combatant('spinesnapper', {
+        attacks: [
+          { name: 'Maul', type: 'melee', modifier: 15, traits: [], damage: [] }
+        ]
+      }),
+      { onRollAttack }
+    );
+    const second = screen.getByRole('button', { name: 'Roll Maul 2nd attack (+10)' });
+    second.click();
+    expect(onRollAttack).toHaveBeenCalledTimes(1);
+    expect(onRollAttack.mock.calls[0][0]).toBe('spinesnapper');
+    expect(onRollAttack.mock.calls[0][1].name).toBe('Maul');
+    expect(onRollAttack.mock.calls[0][2]).toMatchObject({ step: 1, modifier: 10 });
+    expect(onRollAttack.mock.calls[0][3]).toEqual(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
+  });
+
+  test('clicking damage button forwards onRollDamage with the attack and click origin', () => {
+    const onRollDamage = vi.fn();
+    renderPanel(
+      combatant('spinesnapper', {
+        attacks: [
+          {
+            name: 'Maul',
+            type: 'melee',
+            modifier: 15,
+            traits: [],
+            damage: [{ dice: 1, dieSize: 12, bonus: 10, type: 'bludgeoning' }]
+          }
+        ]
+      }),
+      { onRollDamage }
+    );
+    const dmg = screen.getByRole('button', { name: 'Roll Maul damage (1d12+10 bludgeoning)' });
+    dmg.click();
+    expect(onRollDamage).toHaveBeenCalledTimes(1);
+    expect(onRollDamage.mock.calls[0][0]).toBe('spinesnapper');
+    expect(onRollDamage.mock.calls[0][1].name).toBe('Maul');
+    expect(onRollDamage.mock.calls[0][2]).toEqual(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
   });
 
   test('omits each ability sub-section when its array is empty', () => {
@@ -140,7 +187,61 @@ describe('CombatantDetailsPanel', () => {
 
     const active = screen.getByLabelText('Active Abilities');
     expect(active).toHaveTextContent('Brutal Charge');
-    expect(active).toHaveTextContent('2 actions');
+    // Action cost now rendered as glyph; the aria-label/title carries the readable form
+    expect(active.querySelector('[title="2 actions"]')).not.toBeNull();
+  });
+
+  test('renders degree-of-success outcomes in their own labeled rows', () => {
+    renderPanel(
+      combatant('spinesnapper', {
+        activeAbilities: [
+          {
+            name: 'Brutal Blow',
+            actions: 2,
+            description:
+              'The spinesnapper makes a Strike. If it hits, attempt a DC 22 Fortitude save.\n' +
+              'Critical Success The creature is unaffected.\n' +
+              'Success The creature is unaffected.\n' +
+              'Failure The creature is pushed 10 feet.\n' +
+              'Critical Failure The target is pushed 10 feet and knocked prone.'
+          }
+        ]
+      })
+    );
+    const active = screen.getByLabelText('Active Abilities');
+    expect(active).toHaveTextContent('Critical Success');
+    expect(active).toHaveTextContent('The target is pushed 10 feet and knocked prone.');
+  });
+
+  test('omits spellcasting section when combatant has none', () => {
+    renderPanel(combatant('fighter-1'));
+    expect(screen.queryByLabelText('Spellcasting')).not.toBeInTheDocument();
+  });
+
+  test('renders spellcasting block with slot pips that fire onUseSpellSlot', () => {
+    const onUseSpellSlot = vi.fn();
+    renderPanel(
+      combatant('yaashka', {
+        spellcasting: [
+          {
+            blockId: 'b1',
+            name: 'Divine Prepared',
+            tradition: 'divine',
+            type: 'prepared',
+            dc: 24,
+            slots: { 3: 2 },
+            entries: [{ spellSlug: 'harm', name: 'Harm', level: 3 }]
+          }
+        ]
+      }),
+      { onUseSpellSlot }
+    );
+    const sc = screen.getByLabelText('Spellcasting');
+    expect(sc).toHaveTextContent('Divine Prepared');
+    expect(sc).toHaveTextContent('Harm');
+    const useBtn = screen.getAllByRole('button', { name: 'Use a 3rd-rank slot' })[0];
+    useBtn.click();
+    expect(onUseSpellSlot).toHaveBeenCalledWith('yaashka', 'b1', 3);
   });
 
   test('renders existing notes inside the Notes section', () => {
@@ -157,7 +258,7 @@ describe('CombatantDetailsPanel', () => {
 
   test('committing a note forwards onSetNote with the combatant id', async () => {
     const onSetNote = vi.fn();
-    renderPanel(combatant('goblin-1', { notes: '' }), onSetNote);
+    renderPanel(combatant('goblin-1', { notes: '' }), { onSetNote });
     const placeholder = screen.getByRole('button', { name: 'Edit note' });
     placeholder.click();
     const textarea = await screen.findByRole('textbox', { name: 'Edit note' });

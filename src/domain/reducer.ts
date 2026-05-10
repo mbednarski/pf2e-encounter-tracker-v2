@@ -1,6 +1,7 @@
 import type {
   AppliedEffect,
   CombatantId,
+  CombatantSpellcasting,
   CombatantState,
   Command,
   CommandResult,
@@ -11,10 +12,14 @@ import type {
   EffectLibrary,
   EncounterPhase,
   EncounterState,
+  FocusPointPayload,
+  InnateSpellPayload,
   Prompt,
   PromptBoundary,
   PromptResolution,
-  TurnBoundarySuggestion
+  RestoreSpellSlotPayload,
+  TurnBoundarySuggestion,
+  UseSpellSlotPayload
 } from './types';
 
 const allowedPhases: Record<CommandType, EncounterPhase[]> = {
@@ -120,6 +125,18 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
       return markDead(state, command.payload.combatantId, effectLibrary);
     case 'REVIVE':
       return revive(state, command.payload.combatantId);
+    case 'USE_SPELL_SLOT':
+      return useSpellSlot(state, command.payload);
+    case 'RESTORE_SPELL_SLOT':
+      return restoreSpellSlot(state, command.payload);
+    case 'USE_FOCUS_POINT':
+      return useFocusPoint(state, command.payload);
+    case 'RESTORE_FOCUS_POINT':
+      return restoreFocusPoint(state, command.payload);
+    case 'USE_INNATE_SPELL':
+      return useInnateSpell(state, command.payload);
+    case 'RESTORE_INNATE_SPELL':
+      return restoreInnateSpell(state, command.payload);
     default:
       return reject(state, command.type, `${command.type} is not implemented in the first domain slice`);
   }
@@ -1670,6 +1687,231 @@ function revive(state: EncounterState, combatantId: CombatantId): CommandResult 
   }
 
   return updateCombatant(state, { ...combatant, isAlive: true }, [{ type: 'combatant-revived', combatantId }]);
+}
+
+interface SpellLookup {
+  combatant: CombatantState;
+  block: CombatantSpellcasting;
+  blockIndex: number;
+}
+
+function findSpellBlock(
+  state: EncounterState,
+  combatantId: CombatantId,
+  blockId: string,
+  commandType: CommandType
+): SpellLookup | { rejection: CommandResult } {
+  const combatant = state.combatants[combatantId];
+  if (!combatant) {
+    return { rejection: reject(state, commandType, `Combatant ${combatantId} not found`) };
+  }
+  const blocks = combatant.spellcasting;
+  if (!blocks || blocks.length === 0) {
+    return {
+      rejection: reject(state, commandType, `Combatant ${combatantId} has no spellcasting blocks`)
+    };
+  }
+  const blockIndex = blocks.findIndex((b) => b.blockId === blockId);
+  if (blockIndex === -1) {
+    return { rejection: reject(state, commandType, `Spellcasting block ${blockId} not found`) };
+  }
+  return { combatant, block: blocks[blockIndex], blockIndex };
+}
+
+function withUpdatedSpellBlock(
+  state: EncounterState,
+  combatant: CombatantState,
+  blockIndex: number,
+  updatedBlock: CombatantSpellcasting,
+  events: DomainEvent[]
+): CommandResult {
+  const blocks = combatant.spellcasting!.slice();
+  blocks[blockIndex] = updatedBlock;
+  return updateCombatant(state, { ...combatant, spellcasting: blocks }, events);
+}
+
+function useSpellSlot(state: EncounterState, payload: UseSpellSlotPayload): CommandResult {
+  const lookup = findSpellBlock(state, payload.combatantId, payload.blockId, 'USE_SPELL_SLOT');
+  if ('rejection' in lookup) return lookup.rejection;
+  const { combatant, block, blockIndex } = lookup;
+
+  if (!block.slots || block.slots[payload.rank] === undefined) {
+    return reject(state, 'USE_SPELL_SLOT', `Block ${block.blockId} has no rank ${payload.rank} slots`);
+  }
+  const total = block.slots[payload.rank];
+  const used = block.usedSlots?.[payload.rank] ?? 0;
+  if (used >= total) {
+    return reject(state, 'USE_SPELL_SLOT', `No rank ${payload.rank} slots remaining`);
+  }
+
+  const updatedBlock: CombatantSpellcasting = {
+    ...block,
+    usedSlots: { ...(block.usedSlots ?? {}), [payload.rank]: used + 1 }
+  };
+  return withUpdatedSpellBlock(state, combatant, blockIndex, updatedBlock, [
+    {
+      type: 'spell-usage-changed',
+      combatantId: combatant.id,
+      blockId: block.blockId,
+      blockName: block.name,
+      kind: 'slot',
+      action: 'used',
+      rank: payload.rank
+    }
+  ]);
+}
+
+function restoreSpellSlot(state: EncounterState, payload: RestoreSpellSlotPayload): CommandResult {
+  const lookup = findSpellBlock(state, payload.combatantId, payload.blockId, 'RESTORE_SPELL_SLOT');
+  if ('rejection' in lookup) return lookup.rejection;
+  const { combatant, block, blockIndex } = lookup;
+
+  if (!block.slots || block.slots[payload.rank] === undefined) {
+    return reject(state, 'RESTORE_SPELL_SLOT', `Block ${block.blockId} has no rank ${payload.rank} slots`);
+  }
+  const used = block.usedSlots?.[payload.rank] ?? 0;
+  if (used <= 0) {
+    return reject(state, 'RESTORE_SPELL_SLOT', `No rank ${payload.rank} slots used`);
+  }
+
+  const updatedBlock: CombatantSpellcasting = {
+    ...block,
+    usedSlots: { ...(block.usedSlots ?? {}), [payload.rank]: used - 1 }
+  };
+  return withUpdatedSpellBlock(state, combatant, blockIndex, updatedBlock, [
+    {
+      type: 'spell-usage-changed',
+      combatantId: combatant.id,
+      blockId: block.blockId,
+      blockName: block.name,
+      kind: 'slot',
+      action: 'restored',
+      rank: payload.rank
+    }
+  ]);
+}
+
+function useFocusPoint(state: EncounterState, payload: FocusPointPayload): CommandResult {
+  const lookup = findSpellBlock(state, payload.combatantId, payload.blockId, 'USE_FOCUS_POINT');
+  if ('rejection' in lookup) return lookup.rejection;
+  const { combatant, block, blockIndex } = lookup;
+
+  if (block.type !== 'focus' || block.focusPoints === undefined) {
+    return reject(state, 'USE_FOCUS_POINT', `Block ${block.blockId} is not a focus block`);
+  }
+  const used = block.usedFocusPoints ?? 0;
+  if (used >= block.focusPoints) {
+    return reject(state, 'USE_FOCUS_POINT', `No focus points remaining`);
+  }
+
+  const updatedBlock: CombatantSpellcasting = { ...block, usedFocusPoints: used + 1 };
+  return withUpdatedSpellBlock(state, combatant, blockIndex, updatedBlock, [
+    {
+      type: 'spell-usage-changed',
+      combatantId: combatant.id,
+      blockId: block.blockId,
+      blockName: block.name,
+      kind: 'focus',
+      action: 'used'
+    }
+  ]);
+}
+
+function restoreFocusPoint(state: EncounterState, payload: FocusPointPayload): CommandResult {
+  const lookup = findSpellBlock(state, payload.combatantId, payload.blockId, 'RESTORE_FOCUS_POINT');
+  if ('rejection' in lookup) return lookup.rejection;
+  const { combatant, block, blockIndex } = lookup;
+
+  if (block.type !== 'focus') {
+    return reject(state, 'RESTORE_FOCUS_POINT', `Block ${block.blockId} is not a focus block`);
+  }
+  const used = block.usedFocusPoints ?? 0;
+  if (used <= 0) {
+    return reject(state, 'RESTORE_FOCUS_POINT', `No focus points used`);
+  }
+
+  const updatedBlock: CombatantSpellcasting = { ...block, usedFocusPoints: used - 1 };
+  return withUpdatedSpellBlock(state, combatant, blockIndex, updatedBlock, [
+    {
+      type: 'spell-usage-changed',
+      combatantId: combatant.id,
+      blockId: block.blockId,
+      blockName: block.name,
+      kind: 'focus',
+      action: 'restored'
+    }
+  ]);
+}
+
+function useInnateSpell(state: EncounterState, payload: InnateSpellPayload): CommandResult {
+  const lookup = findSpellBlock(state, payload.combatantId, payload.blockId, 'USE_INNATE_SPELL');
+  if ('rejection' in lookup) return lookup.rejection;
+  const { combatant, block, blockIndex } = lookup;
+
+  const entry = block.entries.find((e) => e.spellSlug === payload.spellSlug);
+  if (!entry) {
+    return reject(state, 'USE_INNATE_SPELL', `Spell ${payload.spellSlug} not found on block ${block.blockId}`);
+  }
+  if (!entry.frequency || entry.frequency.type !== 'perDay') {
+    return reject(
+      state,
+      'USE_INNATE_SPELL',
+      `Spell ${payload.spellSlug} is not a per-day innate spell`
+    );
+  }
+  const used = block.usedEntries?.[payload.spellSlug] ?? 0;
+  if (used >= entry.frequency.uses) {
+    return reject(state, 'USE_INNATE_SPELL', `No uses remaining for ${payload.spellSlug}`);
+  }
+
+  const updatedBlock: CombatantSpellcasting = {
+    ...block,
+    usedEntries: { ...(block.usedEntries ?? {}), [payload.spellSlug]: used + 1 }
+  };
+  return withUpdatedSpellBlock(state, combatant, blockIndex, updatedBlock, [
+    {
+      type: 'spell-usage-changed',
+      combatantId: combatant.id,
+      blockId: block.blockId,
+      blockName: block.name,
+      kind: 'innate',
+      action: 'used',
+      spellSlug: entry.spellSlug,
+      spellName: entry.name
+    }
+  ]);
+}
+
+function restoreInnateSpell(state: EncounterState, payload: InnateSpellPayload): CommandResult {
+  const lookup = findSpellBlock(state, payload.combatantId, payload.blockId, 'RESTORE_INNATE_SPELL');
+  if ('rejection' in lookup) return lookup.rejection;
+  const { combatant, block, blockIndex } = lookup;
+
+  const entry = block.entries.find((e) => e.spellSlug === payload.spellSlug);
+  if (!entry) {
+    return reject(state, 'RESTORE_INNATE_SPELL', `Spell ${payload.spellSlug} not found on block ${block.blockId}`);
+  }
+  const used = block.usedEntries?.[payload.spellSlug] ?? 0;
+  if (used <= 0) {
+    return reject(state, 'RESTORE_INNATE_SPELL', `No uses recorded for ${payload.spellSlug}`);
+  }
+
+  const updatedBlock: CombatantSpellcasting = {
+    ...block,
+    usedEntries: { ...(block.usedEntries ?? {}), [payload.spellSlug]: used - 1 }
+  };
+  return withUpdatedSpellBlock(state, combatant, blockIndex, updatedBlock, [
+    {
+      type: 'spell-usage-changed',
+      combatantId: combatant.id,
+      blockId: block.blockId,
+      blockName: block.name,
+      kind: 'innate',
+      action: 'restored',
+      spellSlug: entry.spellSlug,
+      spellName: entry.name
+    }
+  ]);
 }
 
 function updateHp(

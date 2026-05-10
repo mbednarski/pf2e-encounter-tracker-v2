@@ -1,37 +1,34 @@
 <script lang="ts">
-  import type { Ability, ActionCost, Attack, CombatantState, DamageComponent } from '../domain';
+  import type { Ability, Attack, CombatantState } from '../domain';
   import { templateLabel } from '$lib/template-label';
+  import { formatModifier } from '$lib/abilities/format-damage';
+  import type { MapVariant } from '$lib/dice/map';
   import Chip from './ui/Chip.svelte';
   import NotesEditor from './NotesEditor.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
+  import AbilityCard from './details/AbilityCard.svelte';
+  import AttackRow from './details/AttackRow.svelte';
+  import SpellcastingBlockView from './details/SpellcastingBlockView.svelte';
 
   export let combatant: CombatantState | undefined;
   export let onSetNote: (combatantId: string, note: string | null) => void;
-
-  function formatDamage(damage: DamageComponent[]): string {
-    return damage
-      .map((d) => {
-        const dice = d.dice && d.dieSize ? `${d.dice}d${d.dieSize}` : '';
-        const bonus = d.bonus ? (d.bonus > 0 ? `+${d.bonus}` : `${d.bonus}`) : '';
-        const persistent = d.persistent ? ' persistent' : '';
-        const head = `${dice}${bonus}` || (d.bonus === 0 ? '0' : '');
-        const tail = `${d.type}${persistent}`;
-        return head ? `${head} ${tail}` : tail;
-      })
-      .join(' + ');
-  }
-
-  function formatActionCost(cost: ActionCost | undefined): string {
-    if (cost === undefined) return '';
-    if (cost === 'free') return 'Free action';
-    if (cost === 'reaction') return 'Reaction';
-    if (cost === 1) return '1 action';
-    return `${cost} actions`;
-  }
-
-  function formatModifier(value: number): string {
-    return value >= 0 ? `+${value}` : `${value}`;
-  }
+  export let onRollAttack: (
+    combatantId: string,
+    attack: Attack,
+    variant: MapVariant,
+    origin: { x: number; y: number }
+  ) => void = () => {};
+  export let onRollDamage: (
+    combatantId: string,
+    attack: Attack,
+    origin: { x: number; y: number }
+  ) => void = () => {};
+  export let onUseSpellSlot: (combatantId: string, blockId: string, rank: number) => void = () => {};
+  export let onRestoreSpellSlot: (combatantId: string, blockId: string, rank: number) => void = () => {};
+  export let onUseFocusPoint: (combatantId: string, blockId: string) => void = () => {};
+  export let onRestoreFocusPoint: (combatantId: string, blockId: string) => void = () => {};
+  export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
+  export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
 
   function templateChipVariant(adjustment: 'elite' | 'weak' | undefined) {
     if (adjustment === 'elite') return 'warning';
@@ -105,55 +102,74 @@
       </dl>
     </section>
 
+    {#if combatant.passiveAbilities.length > 0}
+      <section class="details__section" aria-label="Passive Abilities">
+        <SectionLabel as="h3">Passive Abilities</SectionLabel>
+        <ul class="entry-list">
+          {#each combatant.passiveAbilities as ability, i (i)}
+            <li><AbilityCard ability={ability as Ability} /></li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    {#if combatant.reactiveAbilities.length > 0}
+      <section class="details__section" aria-label="Reactive Abilities">
+        <SectionLabel as="h3">Reactive Abilities</SectionLabel>
+        <ul class="entry-list">
+          {#each combatant.reactiveAbilities as ability, i (i)}
+            <li><AbilityCard ability={ability as Ability} /></li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
     {#if combatant.attacks.length > 0}
       <section class="details__section" aria-label="Attacks">
         <SectionLabel as="h3">Attacks</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.attacks as attack, attackIndex (attackIndex)}
-            {@const a = attack as Attack}
+          {#each combatant.attacks as attack, i (i)}
             <li>
-              <div class="entry-head">
-                <span class="entry-name">{a.name}</span>
-                <span class="muted">({a.type})</span>
-                <span class="entry-modifier">{formatModifier(a.modifier)}</span>
-              </div>
-              {#if a.damage.length > 0}
-                <div class="entry-meta entry-meta--mono">{formatDamage(a.damage)}</div>
-              {/if}
+              <AttackRow
+                attack={attack as Attack}
+                onRollAttack={(a, v, origin) => onRollAttack(combatant.id, a, v, origin)}
+                onRollDamage={(a, origin) => onRollDamage(combatant.id, a, origin)}
+              />
             </li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#each [
-      { title: 'Passive Abilities', list: combatant.passiveAbilities },
-      { title: 'Reactive Abilities', list: combatant.reactiveAbilities },
-      { title: 'Active Abilities', list: combatant.activeAbilities }
-    ] as group (group.title)}
-      {#if group.list.length > 0}
-        <section class="details__section" aria-label={group.title}>
-          <SectionLabel as="h3">{group.title}</SectionLabel>
-          <ul class="entry-list">
-            {#each group.list as ability, abilityIndex (abilityIndex)}
-              {@const ab = ability as Ability}
-              <li>
-                <div class="entry-head">
-                  <span class="entry-name">{ab.name}</span>
-                  {#if ab.actions !== undefined}
-                    <span class="entry-cost">{formatActionCost(ab.actions)}</span>
-                  {/if}
-                </div>
-                {#if ab.frequency}<div class="entry-meta"><strong>Frequency:</strong> {ab.frequency}</div>{/if}
-                {#if ab.trigger}<div class="entry-meta"><strong>Trigger:</strong> {ab.trigger}</div>{/if}
-                {#if ab.requirements}<div class="entry-meta"><strong>Requirements:</strong> {ab.requirements}</div>{/if}
-                <p class="entry-desc">{ab.description}</p>
-              </li>
-            {/each}
-          </ul>
-        </section>
-      {/if}
-    {/each}
+    {#if combatant.activeAbilities.length > 0}
+      <section class="details__section" aria-label="Active Abilities">
+        <SectionLabel as="h3">Active Abilities</SectionLabel>
+        <ul class="entry-list">
+          {#each combatant.activeAbilities as ability, i (i)}
+            <li><AbilityCard ability={ability as Ability} /></li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    {#if combatant.spellcasting && combatant.spellcasting.length > 0}
+      <section class="details__section" aria-label="Spellcasting">
+        <SectionLabel as="h3">Spellcasting</SectionLabel>
+        <div class="spellcasting-stack">
+          {#each combatant.spellcasting as block (block.blockId)}
+            <SpellcastingBlockView
+              {block}
+              onUseSlot={(blockId, rank) => onUseSpellSlot(combatant.id, blockId, rank)}
+              onRestoreSlot={(blockId, rank) => onRestoreSpellSlot(combatant.id, blockId, rank)}
+              onUseFocus={(blockId) => onUseFocusPoint(combatant.id, blockId)}
+              onRestoreFocus={(blockId) => onRestoreFocusPoint(combatant.id, blockId)}
+              onUseInnate={(blockId, slug) => onUseInnateSpell(combatant.id, blockId, slug)}
+              onRestoreInnate={(blockId, slug) => onRestoreInnateSpell(combatant.id, blockId, slug)}
+            />
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     <section class="details__section" aria-label="Notes">
       <SectionLabel as="h3">GM Notes</SectionLabel>
@@ -294,50 +310,8 @@
     padding-top: 0;
   }
 
-  .entry-head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-  }
-
-  .entry-name {
-    color: var(--color-ink);
-    font-size: var(--text-base);
-    font-weight: 600;
-  }
-
-  .entry-modifier {
-    margin-left: auto;
-    color: var(--color-red);
-    font-family: var(--font-mono);
-    font-size: var(--text-base);
-    font-weight: 700;
-    border-bottom: 2px solid var(--color-red);
-    padding: 0 4px;
-  }
-
-  .entry-meta {
-    margin-top: 2px;
-    color: var(--color-ink-soft);
-    font-size: var(--text-base);
-  }
-
-  .entry-meta--mono {
-    font-family: var(--font-mono);
-  }
-
-  .entry-cost {
-    color: var(--color-ink-mute);
-    font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-wide);
-  }
-
-  .entry-desc {
-    margin: var(--space-1) 0 0;
-    color: var(--color-ink);
-    font-size: var(--text-base);
-    line-height: var(--leading-relaxed);
+  .spellcasting-stack {
+    display: grid;
+    gap: var(--space-3);
   }
 </style>

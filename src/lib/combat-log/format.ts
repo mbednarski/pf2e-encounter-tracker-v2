@@ -138,9 +138,80 @@ export function formatEvent(event: DomainEvent, options: FormatOptions): LogEntr
     }
     case 'hp-reached-zero':
       return entry(id, `${nameOf(state, event.combatantId)} dropped to 0 HP.`, 'danger');
+    case 'spell-usage-changed':
+      return entry(id, formatSpellUsage(state, event), 'info');
     case 'command-rejected':
       return entry(id, `${event.commandType} rejected: ${event.reason}.`, 'danger');
   }
+}
+
+function formatSpellUsage(
+  state: EncounterState,
+  event: Extract<DomainEvent, { type: 'spell-usage-changed' }>
+): string {
+  const target = nameOf(state, event.combatantId);
+  if (event.kind === 'slot') {
+    if (event.action === 'used') {
+      const remaining = remainingSlots(state, event.combatantId, event.blockId, event.rank);
+      const suffix = remaining ? ` (${remaining})` : '';
+      return `${target} cast a ${ordinal(event.rank ?? 0)}-rank spell${suffix}.`;
+    }
+    return `${target} recovered a ${ordinal(event.rank ?? 0)}-rank slot.`;
+  }
+  if (event.kind === 'focus') {
+    if (event.action === 'used') {
+      const remaining = remainingFocus(state, event.combatantId, event.blockId);
+      const suffix = remaining ? ` (${remaining})` : '';
+      return `${target} spent a focus point${suffix}.`;
+    }
+    return `${target} recovered a focus point.`;
+  }
+  // innate
+  if (event.action === 'used') {
+    const remaining = remainingInnate(state, event.combatantId, event.blockId, event.spellSlug);
+    const suffix = remaining ? ` (${remaining})` : '';
+    return `${target} used ${event.spellName ?? event.spellSlug ?? 'an innate spell'}${suffix}.`;
+  }
+  return `${target} recovered a use of ${event.spellName ?? event.spellSlug ?? 'an innate spell'}.`;
+}
+
+function remainingSlots(state: EncounterState, combatantId: CombatantId, blockId: string, rank: number | undefined): string {
+  if (rank === undefined) return '';
+  const block = state.combatants[combatantId]?.spellcasting?.find((b) => b.blockId === blockId);
+  if (!block?.slots) return '';
+  const total = block.slots[rank] ?? 0;
+  const used = block.usedSlots?.[rank] ?? 0;
+  return `${total - used}/${total} remaining`;
+}
+
+function remainingFocus(state: EncounterState, combatantId: CombatantId, blockId: string): string {
+  const block = state.combatants[combatantId]?.spellcasting?.find((b) => b.blockId === blockId);
+  if (!block || block.focusPoints === undefined) return '';
+  const used = block.usedFocusPoints ?? 0;
+  return `${block.focusPoints - used}/${block.focusPoints} remaining`;
+}
+
+function remainingInnate(
+  state: EncounterState,
+  combatantId: CombatantId,
+  blockId: string,
+  spellSlug: string | undefined
+): string {
+  if (!spellSlug) return '';
+  const block = state.combatants[combatantId]?.spellcasting?.find((b) => b.blockId === blockId);
+  const entry = block?.entries.find((e) => e.spellSlug === spellSlug);
+  if (!entry?.frequency || entry.frequency.type !== 'perDay') return '';
+  const used = block?.usedEntries?.[spellSlug] ?? 0;
+  return `${entry.frequency.uses - used}/${entry.frequency.uses} remaining`;
+}
+
+function ordinal(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${n}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${n}rd`;
+  return `${n}th`;
 }
 
 /**

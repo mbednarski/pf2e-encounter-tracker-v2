@@ -11,7 +11,9 @@
   import PromptResolutionPanel from '../components/PromptResolutionPanel.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import EffectModal from '../components/EffectModal.svelte';
+  import RollBubble from '../components/RollBubble.svelte';
   import {
+    appendInfoLog,
     combatantCardActions,
     currentCombatant,
     dispatchEncounterCommand,
@@ -35,6 +37,10 @@
     type ManualCombatantInput,
     type TemplateAdjustmentChoice
   } from '$lib/encounter-app';
+  import { rollAttack as rollAttackDice, rollDamage as rollDamageDice } from '$lib/dice/roll';
+  import type { MapVariant } from '$lib/dice/map';
+  import { formatModifier } from '$lib/abilities/format-damage';
+  import type { Attack } from '../domain';
   import {
     resolveHpEdit,
     type CommittableEdit,
@@ -690,6 +696,101 @@
     runCommand(toCommand('SET_NOTE', { combatantId, note }, nextCommandId()));
   }
 
+  let rollCounter = 1;
+  function nextRollId() {
+    return `local-roll-${rollCounter++}`;
+  }
+
+  type BubbleTone = 'normal' | 'crit' | 'fumble' | 'damage';
+  interface RollBubbleEntry {
+    id: string;
+    x: number;
+    y: number;
+    total: string;
+    detail: string;
+    tone: BubbleTone;
+    badge: string;
+  }
+  let bubbles: RollBubbleEntry[] = [];
+  const BUBBLE_LIFETIME_MS = 1800;
+
+  function showBubble(entry: Omit<RollBubbleEntry, 'id'>) {
+    const id = nextRollId();
+    bubbles = [...bubbles, { ...entry, id }];
+    setTimeout(() => {
+      bubbles = bubbles.filter((b) => b.id !== id);
+    }, BUBBLE_LIFETIME_MS);
+  }
+
+  function rollAttackFor(combatantId: string, attack: Attack, variant: MapVariant, origin: { x: number; y: number }) {
+    const c = encounter.combatants[combatantId];
+    if (!c) return;
+    const result = rollAttackDice(variant.modifier);
+    const isCrit = result.d20 === 20;
+    const isFumble = result.d20 === 1;
+    const logTone = isCrit ? 'success' : isFumble ? 'danger' : 'info';
+    const bubbleTone: BubbleTone = isCrit ? 'crit' : isFumble ? 'fumble' : 'normal';
+    const badge = isCrit ? 'NAT 20' : isFumble ? 'NAT 1' : `${attack.name} · ${variant.label}`;
+
+    encounter = appendInfoLog(
+      encounter,
+      nextRollId(),
+      `${c.name} ${attack.name} ${variant.label}: 1d20(${result.d20}) ${formatModifier(variant.modifier)} = ${result.total}`,
+      logTone
+    );
+    persistence.persist(encounter);
+
+    showBubble({
+      x: origin.x,
+      y: origin.y,
+      total: String(result.total),
+      detail: `1d20(${result.d20}) ${formatModifier(variant.modifier)}`,
+      tone: bubbleTone,
+      badge
+    });
+  }
+
+  function rollDamageFor(combatantId: string, attack: Attack, origin: { x: number; y: number }) {
+    const c = encounter.combatants[combatantId];
+    if (!c || attack.damage.length === 0) return;
+    const result = rollDamageDice(attack.damage);
+    encounter = appendInfoLog(
+      encounter,
+      nextRollId(),
+      `${c.name} ${attack.name} damage: ${result.breakdown} = ${result.total}`,
+      'danger'
+    );
+    persistence.persist(encounter);
+
+    showBubble({
+      x: origin.x,
+      y: origin.y,
+      total: `${result.total} dmg`,
+      detail: result.breakdown,
+      tone: 'damage',
+      badge: `${attack.name}`
+    });
+  }
+
+  function useSpellSlot(combatantId: string, blockId: string, rank: number) {
+    runCommand(toCommand('USE_SPELL_SLOT', { combatantId, blockId, rank }, nextCommandId()));
+  }
+  function restoreSpellSlot(combatantId: string, blockId: string, rank: number) {
+    runCommand(toCommand('RESTORE_SPELL_SLOT', { combatantId, blockId, rank }, nextCommandId()));
+  }
+  function useFocusPoint(combatantId: string, blockId: string) {
+    runCommand(toCommand('USE_FOCUS_POINT', { combatantId, blockId }, nextCommandId()));
+  }
+  function restoreFocusPoint(combatantId: string, blockId: string) {
+    runCommand(toCommand('RESTORE_FOCUS_POINT', { combatantId, blockId }, nextCommandId()));
+  }
+  function useInnateSpell(combatantId: string, blockId: string, spellSlug: string) {
+    runCommand(toCommand('USE_INNATE_SPELL', { combatantId, blockId, spellSlug }, nextCommandId()));
+  }
+  function restoreInnateSpell(combatantId: string, blockId: string, spellSlug: string) {
+    runCommand(toCommand('RESTORE_INNATE_SPELL', { combatantId, blockId, spellSlug }, nextCommandId()));
+  }
+
   function resolvePrompt(promptId: string, resolution: PromptResolution) {
     runCommand(toCommand('RESOLVE_PROMPT', { promptId, resolution }, nextCommandId()));
   }
@@ -798,7 +899,18 @@
     </section>
 
     <aside class="workspace__details">
-      <CombatantDetailsPanel combatant={selectedCombatant} onSetNote={setNote} />
+      <CombatantDetailsPanel
+        combatant={selectedCombatant}
+        onSetNote={setNote}
+        onRollAttack={rollAttackFor}
+        onRollDamage={rollDamageFor}
+        onUseSpellSlot={useSpellSlot}
+        onRestoreSpellSlot={restoreSpellSlot}
+        onUseFocusPoint={useFocusPoint}
+        onRestoreFocusPoint={restoreFocusPoint}
+        onUseInnateSpell={useInnateSpell}
+        onRestoreInnateSpell={restoreInnateSpell}
+      />
     </aside>
 
     <section class="workspace__log">
@@ -821,6 +933,17 @@
     onClose={closeRadial}
   />
 {/if}
+
+{#each bubbles as bubble (bubble.id)}
+  <RollBubble
+    x={bubble.x}
+    y={bubble.y}
+    total={bubble.total}
+    detail={bubble.detail}
+    tone={bubble.tone}
+    badge={bubble.badge}
+  />
+{/each}
 
 {#if effectModal && effectModalCombatant}
   <EffectModal
@@ -871,6 +994,11 @@
 
   .workspace__details {
     grid-area: details;
+    position: sticky;
+    top: 12px;
+    align-self: start;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
   }
 
   .workspace__log {
@@ -950,6 +1078,12 @@
         'library track'
         'details details'
         'log     log';
+    }
+
+    .workspace__details {
+      position: static;
+      max-height: none;
+      overflow: visible;
     }
   }
 

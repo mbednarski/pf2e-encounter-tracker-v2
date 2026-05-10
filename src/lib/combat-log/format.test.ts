@@ -330,6 +330,97 @@ describe('formatEvent — exhaustive over DomainEvent', () => {
       message: "ghost's turn (round 1)."
     });
   });
+
+  test('spell-usage-changed: slot used with remaining count', () => {
+    const caster = makeCombatant('yaashka', 'Yaashka');
+    const stateWithCaster: EncounterState = {
+      ...newEncounterState(),
+      combatants: {
+        yaashka: {
+          ...caster,
+          spellcasting: [
+            {
+              blockId: 'b1',
+              name: 'Divine Prepared',
+              tradition: 'divine',
+              type: 'prepared',
+              dc: 24,
+              slots: { 3: 3 },
+              usedSlots: { 3: 1 },
+              entries: []
+            }
+          ]
+        }
+      } as EncounterState['combatants']
+    };
+    expect(
+      fmt(
+        {
+          type: 'spell-usage-changed',
+          combatantId: 'yaashka',
+          blockId: 'b1',
+          blockName: 'Divine Prepared',
+          kind: 'slot',
+          action: 'used',
+          rank: 3
+        },
+        stateWithCaster
+      )
+    ).toMatchObject({ message: 'Yaashka cast a 3rd-rank spell (2/3 remaining).', tone: 'info' });
+  });
+
+  test('spell-usage-changed: slot restored', () => {
+    expect(
+      fmt({
+        type: 'spell-usage-changed',
+        combatantId: 'goblin-1',
+        blockId: 'b',
+        blockName: 'X',
+        kind: 'slot',
+        action: 'restored',
+        rank: 1
+      })
+    ).toMatchObject({ message: 'Goblin Warrior recovered a 1st-rank slot.' });
+  });
+
+  test('spell-usage-changed: focus used and restored', () => {
+    expect(
+      fmt({
+        type: 'spell-usage-changed',
+        combatantId: 'goblin-1',
+        blockId: 'b',
+        blockName: 'X',
+        kind: 'focus',
+        action: 'used'
+      })
+    ).toMatchObject({ message: 'Goblin Warrior spent a focus point.' });
+
+    expect(
+      fmt({
+        type: 'spell-usage-changed',
+        combatantId: 'goblin-1',
+        blockId: 'b',
+        blockName: 'X',
+        kind: 'focus',
+        action: 'restored'
+      })
+    ).toMatchObject({ message: 'Goblin Warrior recovered a focus point.' });
+  });
+
+  test('spell-usage-changed: innate used names the spell', () => {
+    expect(
+      fmt({
+        type: 'spell-usage-changed',
+        combatantId: 'goblin-1',
+        blockId: 'b',
+        blockName: 'X',
+        kind: 'innate',
+        action: 'used',
+        spellSlug: 'wall-of-fire',
+        spellName: 'Wall of Fire'
+      })
+    ).toMatchObject({ message: 'Goblin Warrior used Wall of Fire.' });
+  });
 });
 
 describe('formatEvents — batch with stable ids', () => {

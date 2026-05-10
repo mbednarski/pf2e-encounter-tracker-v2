@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
+  appendInfoLog,
   clampValue,
   combatantCardActions,
   combatantVisualState,
+  COMBAT_LOG_CAP,
   dispatchEncounterCommand,
   formatDuration,
   groupConditionsByCategory,
@@ -979,5 +981,36 @@ describe('resolveApplyChoice with note', () => {
       effectId: 'off-guard',
       note: undefined
     });
+  });
+});
+
+describe('appendInfoLog', () => {
+  test('appends an entry with the supplied id, message, and tone', () => {
+    const state = newEncounterState();
+    const next = appendInfoLog(state, 'roll-1', 'Goblin attacked at +12: 18', 'info');
+    expect(next.combatLog).toEqual([{ id: 'roll-1', message: 'Goblin attacked at +12: 18', tone: 'info' }]);
+  });
+
+  test('defaults tone to info', () => {
+    const next = appendInfoLog(newEncounterState(), 'roll-1', 'msg');
+    expect(next.combatLog[0].tone).toBe('info');
+  });
+
+  test('respects COMBAT_LOG_CAP by dropping oldest entries', () => {
+    let state = newEncounterState();
+    for (let i = 0; i < COMBAT_LOG_CAP + 1; i++) {
+      state = appendInfoLog(state, `roll-${i}`, `m-${i}`);
+    }
+    expect(state.combatLog).toHaveLength(COMBAT_LOG_CAP);
+    // oldest (roll-0) should have been dropped
+    expect(state.combatLog[0].id).toBe('roll-1');
+    expect(state.combatLog[state.combatLog.length - 1].id).toBe(`roll-${COMBAT_LOG_CAP}`);
+  });
+
+  test('returns a new state object (does not mutate input)', () => {
+    const state = newEncounterState();
+    const next = appendInfoLog(state, 'roll-1', 'msg');
+    expect(next).not.toBe(state);
+    expect(state.combatLog).toEqual([]);
   });
 });
