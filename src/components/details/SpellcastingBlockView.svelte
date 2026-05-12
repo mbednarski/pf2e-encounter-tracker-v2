@@ -91,7 +91,7 @@
           </div>
           {#if rank.entries.length > 0}
             <ul class="spell-list">
-              {#each rank.entries as entry (entry.spellSlug)}
+              {#each rank.entries as entry, i (i)}
                 <li>{entry.name}{entry.count > 1 ? ` (×${entry.count})` : ''}</li>
               {/each}
             </ul>
@@ -131,7 +131,7 @@
           </div>
           {#if rank.entries.length > 0}
             <ul class="spell-list">
-              {#each rank.entries as entry (entry.spellSlug)}
+              {#each rank.entries as entry, i (i)}
                 <li>{entry.name}</li>
               {/each}
             </ul>
@@ -169,7 +169,7 @@
       </div>
       {#if view.entries.length > 0}
         <ul class="spell-list">
-          {#each view.entries as entry (entry.spellSlug)}
+          {#each view.entries as entry, i (i)}
             <li>{entry.name} <span class="muted">({ordinal(entry.level)})</span></li>
           {/each}
         </ul>
@@ -178,7 +178,7 @@
   {:else}
     {#if view.entries.length > 0}
       <ul class="innate-list">
-        {#each view.entries as entry (entry.spellSlug)}
+        {#each view.entries as entry, i (i)}
           <li class="innate-row">
             <span class="innate-name">{entry.name} <span class="muted">({ordinal(entry.level)})</span></span>
             {#if entry.interactive && entry.max !== undefined}

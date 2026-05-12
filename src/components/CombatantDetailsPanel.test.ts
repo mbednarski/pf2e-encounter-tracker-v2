@@ -244,6 +244,37 @@ describe('CombatantDetailsPanel', () => {
     expect(onUseSpellSlot).toHaveBeenCalledWith('yaashka', 'b1', 3);
   });
 
+  test('renders innate spellcasting with a repeated spell slug and stays in sync on rerender', async () => {
+    // PF2e creatures can list the same innate spell at more than one rank (heightened
+    // separately). Keying the spell list by slug used to throw `each_key_duplicate`,
+    // which aborted the rest of the panel update and left stale content (e.g. the name).
+    const caster = combatant('archmage', {
+      name: 'Archmage',
+      spellcasting: [
+        {
+          blockId: 'arcane-innate',
+          name: 'Arcane Innate',
+          tradition: 'arcane',
+          type: 'innate',
+          dc: 30,
+          attackModifier: 22,
+          entries: [
+            { spellSlug: 'charm', name: 'Charm', level: 5, frequency: { type: 'atWill' } },
+            { spellSlug: 'charm', name: 'Charm', level: 4, frequency: { type: 'atWill' } }
+          ]
+        }
+      ]
+    });
+
+    const { rerender } = renderPanel(caster);
+    expect(screen.getByRole('heading', { level: 2, name: 'Archmage' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Spellcasting')).toHaveTextContent('Charm');
+
+    await rerender({ combatant: combatant('goblin-1', { name: 'Goblin Sneak' }), onSetNote: vi.fn() });
+    expect(screen.getByRole('heading', { level: 2, name: 'Goblin Sneak' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Spellcasting')).not.toBeInTheDocument();
+  });
+
   test('renders existing notes inside the Notes section', () => {
     renderPanel(combatant('goblin-1', { notes: 'Hiding behind the cart.' }));
     const notes = screen.getByLabelText('Notes');
