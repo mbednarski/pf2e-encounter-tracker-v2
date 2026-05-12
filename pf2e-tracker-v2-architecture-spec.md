@@ -332,8 +332,8 @@ type StatTarget =
   | "ac"
   | "fortitude" | "reflex" | "will" | "allSaves"
   | "perception"
-  | "attackRolls"
-  | "allDCs"
+  | "attackRolls" | "damageRolls"
+  | "allDCs" | "spellDcs" | "spellAttacks"
   | "allSkills"
   | string    // specific skill: "athletics", "stealth", etc.
 ```
@@ -365,7 +365,10 @@ interface ComputedStats {
   will: { final: number; base: number; modifiers: AppliedModifier[] }
   perception: { final: number; base: number; modifiers: AppliedModifier[] }
   attackRolls: { total: number; modifiers: AppliedModifier[] }
+  damageRolls: { total: number; modifiers: AppliedModifier[] }
   allDCs: { total: number; modifiers: AppliedModifier[] }
+  spellDcs: { total: number; modifiers: AppliedModifier[] }
+  spellAttacks: { total: number; modifiers: AppliedModifier[] }
   skills: Record<string, { final: number; base: number; modifiers: AppliedModifier[] }>
 }
 

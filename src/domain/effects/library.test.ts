@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { effectLibrary } from './library';
-import type { BonusType, Modifier, ModifierValue, StatTarget, TurnBoundarySuggestion } from '../types';
+import { deriveStats } from './derivation';
+import type {
+  AppliedEffect,
+  BonusType,
+  CreatureBaseStats,
+  Modifier,
+  ModifierValue,
+  StatTarget,
+  TurnBoundarySuggestion
+} from '../types';
 
 const supportedBonusTypes = new Set<BonusType>(['status', 'circumstance', 'item', 'untyped']);
 
@@ -12,7 +21,10 @@ const supportedStatTargets = new Set<StatTarget>([
   'allSaves',
   'perception',
   'attackRolls',
+  'damageRolls',
   'allDCs',
+  'spellDcs',
+  'spellAttacks',
   'allSkills',
   'strSkills',
   'dexSkills',
@@ -130,6 +142,109 @@ describe('effectLibrary', () => {
       hasValue: false,
       impliedEffects: ['clumsy']
     });
+  });
+
+  test('wires Stupefied to spell DC and spell attack rolls via deriveStats', () => {
+    const baseStats: CreatureBaseStats = {
+      hp: 30,
+      ac: 18,
+      fortitude: 7,
+      reflex: 7,
+      will: 9,
+      perception: 8,
+      speed: 25,
+      skills: { arcana: 10, occultism: 9 }
+    };
+    const applied: AppliedEffect = {
+      instanceId: 'stupefied-2',
+      effectId: 'stupefied',
+      value: 2,
+      duration: { type: 'unlimited' }
+    };
+
+    const computed = deriveStats(baseStats, [applied], effectLibrary);
+
+    expect(computed.spellDcs.total).toBe(-2);
+    expect(computed.spellAttacks.total).toBe(-2);
+    expect(computed.will.final).toBe(7);
+    expect(computed.skills.arcana.final).toBe(8);
+  });
+
+  test('wires Bless and Bane attack-roll modifiers', () => {
+    const baseStats: CreatureBaseStats = {
+      hp: 20,
+      ac: 18,
+      fortitude: 7,
+      reflex: 7,
+      will: 7,
+      perception: 6,
+      speed: 25,
+      skills: {}
+    };
+    const blessed: AppliedEffect = { instanceId: 'b1', effectId: 'bless', duration: { type: 'unlimited' } };
+    const baned: AppliedEffect = { instanceId: 'b2', effectId: 'bane', duration: { type: 'unlimited' } };
+
+    expect(deriveStats(baseStats, [blessed], effectLibrary).attackRolls.total).toBe(1);
+    expect(deriveStats(baseStats, [baned], effectLibrary).attackRolls.total).toBe(-1);
+  });
+
+  test('wires Inspire Courage to attack and damage rolls', () => {
+    const baseStats: CreatureBaseStats = {
+      hp: 20,
+      ac: 18,
+      fortitude: 7,
+      reflex: 7,
+      will: 7,
+      perception: 6,
+      speed: 25,
+      skills: {}
+    };
+    const applied: AppliedEffect = { instanceId: 'ic', effectId: 'inspire-courage', duration: { type: 'unlimited' } };
+
+    const computed = deriveStats(baseStats, [applied], effectLibrary);
+
+    expect(computed.attackRolls.total).toBe(1);
+    expect(computed.damageRolls.total).toBe(1);
+  });
+
+  test('wires Inspire Defense to AC and saves', () => {
+    const baseStats: CreatureBaseStats = {
+      hp: 20,
+      ac: 18,
+      fortitude: 7,
+      reflex: 7,
+      will: 7,
+      perception: 6,
+      speed: 25,
+      skills: {}
+    };
+    const applied: AppliedEffect = { instanceId: 'id', effectId: 'inspire-defense', duration: { type: 'unlimited' } };
+
+    const computed = deriveStats(baseStats, [applied], effectLibrary);
+
+    expect(computed.ac.final).toBe(19);
+    expect(computed.fortitude.final).toBe(8);
+    expect(computed.reflex.final).toBe(8);
+    expect(computed.will.final).toBe(8);
+  });
+
+  test('wires Mage Armor to AC as item bonus', () => {
+    const baseStats: CreatureBaseStats = {
+      hp: 20,
+      ac: 18,
+      fortitude: 7,
+      reflex: 7,
+      will: 7,
+      perception: 6,
+      speed: 25,
+      skills: {}
+    };
+    const applied: AppliedEffect = { instanceId: 'ma', effectId: 'mage-armor', duration: { type: 'unlimited' } };
+
+    const computed = deriveStats(baseStats, [applied], effectLibrary);
+
+    expect(computed.ac.final).toBe(19);
+    expect(computed.ac.modifiers[0]?.bonusType).toBe('item');
   });
 
   test('models persistent damage as note-driven prompt definitions', () => {

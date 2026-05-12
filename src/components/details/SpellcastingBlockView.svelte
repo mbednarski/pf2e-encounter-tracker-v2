@@ -4,6 +4,10 @@
   import { formatModifier } from '$lib/abilities/format-damage';
 
   export let block: CombatantSpellcasting;
+  export let dcBonus: number = 0;
+  export let attackBonus: number = 0;
+  export let dcTooltip: string = '';
+  export let attackTooltip: string = '';
   export let onUseSlot: (blockId: string, rank: number) => void;
   export let onRestoreSlot: (blockId: string, rank: number) => void;
   export let onUseFocus: (blockId: string) => void;
@@ -39,10 +43,10 @@
       <span>·</span>
       <span>{view.header.type}</span>
       <span>·</span>
-      <span>DC {view.header.dc}</span>
+      <span class:modified={dcBonus !== 0} title={dcTooltip}>DC {view.header.dc + dcBonus}</span>
       {#if view.header.attackModifier !== undefined}
         <span>·</span>
-        <span>attack {formatModifier(view.header.attackModifier)}</span>
+        <span class:modified={attackBonus !== 0} title={attackTooltip}>attack {formatModifier(view.header.attackModifier + attackBonus)}</span>
       {/if}
     </div>
   </header>
@@ -373,5 +377,12 @@
     color: var(--color-ink-mute);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
+  }
+
+  .block__meta .modified {
+    color: var(--effect-cond);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
   }
 </style>

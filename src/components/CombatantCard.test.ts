@@ -282,3 +282,98 @@ describe('CombatantCard save rolls', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
+
+describe('CombatantCard conditions modify stats', () => {
+  function withFrightened(value: number) {
+    return combatant('goblin-1', {
+      name: 'Goblin Warrior',
+      appliedEffects: [
+        {
+          instanceId: 'frightened-1',
+          effectId: 'frightened',
+          value,
+          duration: { type: 'unlimited' }
+        }
+      ]
+    });
+  }
+
+  test('Frightened 2: AC = base − 2 and save buttons drop by 2', () => {
+    const c = withFrightened(2);
+    c.baseStats.ac = 18;
+    c.baseStats.fortitude = 9;
+    c.baseStats.reflex = 8;
+    c.baseStats.will = 7;
+    const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
+
+    const acValue = container.querySelector('.stat-readout__value');
+    expect(acValue?.textContent).toBe('16');
+    expect(acValue?.classList.contains('modified')).toBe(true);
+
+    expect(screen.getByRole('button', { name: 'Roll Goblin Warrior Fortitude save (+7)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Goblin Warrior Reflex save (+6)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Goblin Warrior Will save (+5)' })).toBeInTheDocument();
+  });
+
+  test('Off-Guard alone: AC = base − 2 (circumstance)', () => {
+    const c = combatant('goblin-1', {
+      name: 'Goblin Warrior',
+      appliedEffects: [
+        { instanceId: 'og-1', effectId: 'off-guard', duration: { type: 'unlimited' } }
+      ]
+    });
+    c.baseStats.ac = 18;
+    const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
+
+    const acValue = container.querySelector('.stat-readout__value');
+    expect(acValue?.textContent).toBe('16');
+  });
+
+  test('Frightened 2 + Off-Guard: AC stacks to base − 4 (status + circumstance)', () => {
+    const c = combatant('goblin-1', {
+      name: 'Goblin Warrior',
+      appliedEffects: [
+        { instanceId: 'fr-1', effectId: 'frightened', value: 2, duration: { type: 'unlimited' } },
+        { instanceId: 'og-1', effectId: 'off-guard', duration: { type: 'unlimited' } }
+      ]
+    });
+    c.baseStats.ac = 18;
+    const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
+
+    const acValue = container.querySelector('.stat-readout__value');
+    expect(acValue?.textContent).toBe('14');
+  });
+
+  test('Frightened 1 + Sickened 2: AC = base − 2 (only worse same-type status applies)', () => {
+    const c = combatant('goblin-1', {
+      name: 'Goblin Warrior',
+      appliedEffects: [
+        { instanceId: 'fr-1', effectId: 'frightened', value: 1, duration: { type: 'unlimited' } },
+        { instanceId: 'sk-1', effectId: 'sickened', value: 2, duration: { type: 'unlimited' } }
+      ]
+    });
+    c.baseStats.ac = 18;
+    const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
+
+    const acValue = container.querySelector('.stat-readout__value');
+    expect(acValue?.textContent).toBe('16');
+  });
+
+  test('Roll initiative uses computed perception (Frightened 2 → die + perception − 2)', async () => {
+    const c = combatant('goblin-1', { name: 'Goblin Warrior' });
+    c.baseStats.perception = 7;
+    c.appliedEffects = [
+      { instanceId: 'fr-1', effectId: 'frightened', value: 2, duration: { type: 'unlimited' } }
+    ];
+    const onSetInitiative = vi.fn();
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.5); // d20 = 11
+    try {
+      render(CombatantCard, { props: baseProps({ combatant: c, onSetInitiative }) });
+      await fireEvent.click(screen.getByRole('button', { name: 'Roll initiative for Goblin Warrior' }));
+      // 11 + (7 - 2) = 16
+      expect(onSetInitiative).toHaveBeenCalledWith('goblin-1', 16);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

@@ -7,12 +7,15 @@
   export let modifier: number;
   export let disabled = false;
   export let title: string | undefined = undefined;
+  export let breakdownTitle: string | undefined = undefined;
+  export let modified = false;
   export let ariaLabel: string | undefined = undefined;
   export let tone: Tone = 'default';
   export let onRoll: (origin: { x: number; y: number }) => void = () => {};
 
   $: signedModifier = formatModifier(modifier);
   $: computedAriaLabel = ariaLabel ?? `Roll ${label} (${signedModifier})`;
+  $: effectiveTitle = breakdownTitle ?? title;
 
   function handleClick(event: MouseEvent) {
     onRoll({ x: event.clientX, y: event.clientY });
@@ -29,9 +32,10 @@
 <button
   type="button"
   {disabled}
-  {title}
+  title={effectiveTitle}
   aria-label={computedAriaLabel}
   class="stat-roll stat-roll--{tone}"
+  class:stat-roll--modified={modified}
   onclick={handleClick}
   onkeydown={handleKeyDown}
 >
@@ -129,5 +133,12 @@
   .stat-roll--save:hover:not(:disabled) {
     background: var(--color-panel);
     border-color: var(--roll-sav);
+  }
+
+  .stat-roll--modified .stat-roll__mod {
+    color: var(--effect-cond);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
   }
 </style>

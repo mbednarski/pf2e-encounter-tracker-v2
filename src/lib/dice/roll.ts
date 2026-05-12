@@ -24,8 +24,14 @@ export function rollAttack(modifier: number, rng: Rng = defaultRng): AttackRollR
   return { d20, modifier, total: d20 + modifier };
 }
 
+export interface RollDamageOptions {
+  flatBonus?: number;
+  flatBonusLabel?: string;
+}
+
 export function rollDamage(
   components: readonly DamageComponent[],
+  options: RollDamageOptions = {},
   rng: Rng = defaultRng
 ): DamageRollResult {
   let total = 0;
@@ -49,6 +55,14 @@ export function rollDamage(
     const label = formula ? `${formula} ${tail}` : tail;
     parts.push(`${label} (${sub})`);
     total += sub;
+  }
+
+  const flatBonus = options.flatBonus ?? 0;
+  if (flatBonus !== 0) {
+    const sign = flatBonus > 0 ? '+' : '';
+    const label = options.flatBonusLabel ?? 'status';
+    parts.push(`${sign}${flatBonus} ${label}`);
+    total += flatBonus;
   }
 
   return { total, breakdown: parts.join(' + ') };

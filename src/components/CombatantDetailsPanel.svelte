@@ -1,7 +1,12 @@
 <script lang="ts">
-  import type { Ability, Attack, CombatantState } from '../domain';
+  import type { Ability, Attack, CombatantState, ComputedStats } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
+  import {
+    computeCombatantStats,
+    formatModifierBreakdown,
+    formatStatTooltip
+  } from '$lib/encounter-app';
   import type { MapVariant } from '$lib/dice/map';
   import Chip from './ui/Chip.svelte';
   import NotesEditor from './NotesEditor.svelte';
@@ -53,6 +58,19 @@
         .filter(Boolean)
         .join(' · ')
     : '';
+
+  $: computed = combatant ? computeCombatantStats(combatant) : null;
+
+  function statTooltip(stat: ComputedStats['ac']): string {
+    return formatStatTooltip(stat.base, stat.final, stat.modifiers);
+  }
+
+  function bucketTooltip(label: string, total: number, mods: ComputedStats['attackRolls']['modifiers']): string {
+    if (total === 0) return '';
+    const breakdown = formatModifierBreakdown(mods);
+    const sign = total >= 0 ? '+' : '';
+    return breakdown ? `${label} ${sign}${total} (${breakdown})` : `${label} ${sign}${total}`;
+  }
 </script>
 
 <aside class="details" aria-label="Combatant details">
@@ -76,7 +94,10 @@
       <dl class="defenses-grid">
         <div class="stat">
           <SectionLabel>AC</SectionLabel>
-          <dd>{combatant.baseStats.ac}</dd>
+          <dd
+            title={computed ? statTooltip(computed.ac) : ''}
+            class:modified={computed && computed.ac.final !== computed.ac.base}
+          >{computed ? computed.ac.final : combatant.baseStats.ac}</dd>
         </div>
         <div class="stat">
           <SectionLabel>HP</SectionLabel>
@@ -87,7 +108,10 @@
         </div>
         <div class="stat">
           <SectionLabel>Perception</SectionLabel>
-          <dd>{formatModifier(combatant.baseStats.perception)}</dd>
+          <dd
+            title={computed ? statTooltip(computed.perception) : ''}
+            class:modified={computed && computed.perception.final !== computed.perception.base}
+          >{formatModifier(computed ? computed.perception.final : combatant.baseStats.perception)}</dd>
         </div>
         <div class="stat">
           <SectionLabel>Speed</SectionLabel>
@@ -97,23 +121,29 @@
       <div class="saves-grid">
         <StatRollButton
           label="Fort"
-          modifier={combatant.baseStats.fortitude}
+          modifier={computed ? computed.fortitude.final : combatant.baseStats.fortitude}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(combatant.baseStats.fortitude)})`}
+          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed ? computed.fortitude.final : combatant.baseStats.fortitude)})`}
+          breakdownTitle={computed ? statTooltip(computed.fortitude) : undefined}
+          modified={!!computed && computed.fortitude.final !== computed.fortitude.base}
           onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
         />
         <StatRollButton
           label="Ref"
-          modifier={combatant.baseStats.reflex}
+          modifier={computed ? computed.reflex.final : combatant.baseStats.reflex}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(combatant.baseStats.reflex)})`}
+          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed ? computed.reflex.final : combatant.baseStats.reflex)})`}
+          breakdownTitle={computed ? statTooltip(computed.reflex) : undefined}
+          modified={!!computed && computed.reflex.final !== computed.reflex.base}
           onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
         />
         <StatRollButton
           label="Will"
-          modifier={combatant.baseStats.will}
+          modifier={computed ? computed.will.final : combatant.baseStats.will}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(combatant.baseStats.will)})`}
+          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed ? computed.will.final : combatant.baseStats.will)})`}
+          breakdownTitle={computed ? statTooltip(computed.will) : undefined}
+          modified={!!computed && computed.will.final !== computed.will.base}
           onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
         />
       </div>
@@ -149,6 +179,14 @@
             <li>
               <AttackRow
                 attack={attack as Attack}
+                attackBonus={computed ? computed.attackRolls.total : 0}
+                damageBonus={computed ? computed.damageRolls.total : 0}
+                attackTooltip={computed
+                  ? bucketTooltip('attack', computed.attackRolls.total, computed.attackRolls.modifiers)
+                  : ''}
+                damageTooltip={computed
+                  ? bucketTooltip('damage', computed.damageRolls.total, computed.damageRolls.modifiers)
+                  : ''}
                 onRollAttack={(a, v, origin) => onRollAttack(combatant.id, a, v, origin)}
                 onRollDamage={(a, origin) => onRollDamage(combatant.id, a, origin)}
               />
@@ -176,6 +214,14 @@
           {#each combatant.spellcasting as block (block.blockId)}
             <SpellcastingBlockView
               {block}
+              dcBonus={computed ? computed.spellDcs.total : 0}
+              attackBonus={computed ? computed.spellAttacks.total : 0}
+              dcTooltip={computed
+                ? bucketTooltip('DC', computed.spellDcs.total, computed.spellDcs.modifiers)
+                : ''}
+              attackTooltip={computed
+                ? bucketTooltip('attack', computed.spellAttacks.total, computed.spellAttacks.modifiers)
+                : ''}
               onUseSlot={(blockId, rank) => onUseSpellSlot(combatant.id, blockId, rank)}
               onRestoreSlot={(blockId, rank) => onRestoreSpellSlot(combatant.id, blockId, rank)}
               onUseFocus={(blockId) => onUseFocusPoint(combatant.id, blockId)}
@@ -288,6 +334,13 @@
     font-size: var(--text-xl);
     font-weight: 600;
     line-height: var(--leading-tight);
+  }
+
+  .stat dd.modified {
+    color: var(--effect-cond);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
   }
 
   .muted {

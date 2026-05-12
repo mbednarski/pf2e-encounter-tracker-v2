@@ -14,8 +14,10 @@
   import {
     appendInfoLog,
     combatantCardActions,
+    computeCombatantStats,
     currentCombatant,
     dispatchEncounterCommand,
+    formatModifierBreakdown,
     groupConditionsByCategory,
     listAfflictionOptions,
     listConditionOptions,
@@ -558,7 +560,7 @@
       const c = encounter.combatants[id];
       if (!c) continue;
       const die = Math.floor(Math.random() * 20) + 1;
-      patch[id] = die + c.baseStats.perception;
+      patch[id] = die + computeCombatantStats(c).perception.final;
     }
     if (Object.keys(patch).length === 0) return;
     runCommand(toCommand('SET_INITIATIVE_SCORES', { scores: patch }, nextCommandId()));
@@ -731,10 +733,14 @@
     const bubbleTone: BubbleTone = isCrit ? 'crit' : isFumble ? 'fumble' : 'normal';
     const badge = isCrit ? 'NAT 20' : isFumble ? 'NAT 1' : `${attack.name} · ${variant.label}`;
 
+    const stats = computeCombatantStats(c);
+    const breakdown = formatModifierBreakdown(stats.attackRolls.modifiers);
+    const breakdownSuffix = breakdown ? ` (${breakdown})` : '';
+
     encounter = appendInfoLog(
       encounter,
       nextRollId(),
-      `${c.name} ${attack.name} ${variant.label}: 1d20(${result.d20}) ${formatModifier(variant.modifier)} = ${result.total}`,
+      `${c.name} ${attack.name} ${variant.label}: 1d20(${result.d20}) ${formatModifier(variant.modifier)} = ${result.total}${breakdownSuffix}`,
       logTone
     );
     persistence.persist(encounter);
@@ -759,7 +765,9 @@
   function rollSaveFor(combatantId: string, save: SaveKey, origin: { x: number; y: number }) {
     const c = encounter.combatants[combatantId];
     if (!c) return;
-    const mod = c.baseStats[save];
+    const stats = computeCombatantStats(c);
+    const stat = stats[save];
+    const mod = stat.final;
     const result = rollAttackDice(mod);
     const isCrit = result.d20 === 20;
     const isFumble = result.d20 === 1;
@@ -768,10 +776,13 @@
     const label = SAVE_LABELS[save];
     const badge = isCrit ? 'NAT 20' : isFumble ? 'NAT 1' : `${label} save`;
 
+    const breakdown = formatModifierBreakdown(stat.modifiers);
+    const breakdownSuffix = breakdown ? ` (base ${formatModifier(stat.base)}, ${breakdown})` : '';
+
     encounter = appendInfoLog(
       encounter,
       nextRollId(),
-      `${c.name} ${label} save: 1d20(${result.d20}) ${formatModifier(mod)} = ${result.total}`,
+      `${c.name} ${label} save: 1d20(${result.d20}) ${formatModifier(mod)} = ${result.total}${breakdownSuffix}`,
       logTone
     );
     persistence.persist(encounter);
@@ -789,11 +800,15 @@
   function rollDamageFor(combatantId: string, attack: Attack, origin: { x: number; y: number }) {
     const c = encounter.combatants[combatantId];
     if (!c || attack.damage.length === 0) return;
-    const result = rollDamageDice(attack.damage);
+    const stats = computeCombatantStats(c);
+    const flatBonus = stats.damageRolls.total;
+    const result = rollDamageDice(attack.damage, { flatBonus, flatBonusLabel: 'status' });
+    const breakdown = formatModifierBreakdown(stats.damageRolls.modifiers);
+    const breakdownSuffix = breakdown ? ` (${breakdown})` : '';
     encounter = appendInfoLog(
       encounter,
       nextRollId(),
-      `${c.name} ${attack.name} damage: ${result.breakdown} = ${result.total}`,
+      `${c.name} ${attack.name} damage: ${result.breakdown} = ${result.total}${breakdownSuffix}`,
       'danger'
     );
     persistence.persist(encounter);

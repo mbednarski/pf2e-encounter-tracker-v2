@@ -56,7 +56,9 @@ These are added to the `StatTarget` type:
 ```typescript
 type StatTarget =
   | "ac" | "fortitude" | "reflex" | "will" | "perception"
-  | "attackRolls" | "allDCs" | "allSaves" | "allSkills"
+  | "attackRolls" | "damageRolls"
+  | "allDCs" | "spellDcs" | "spellAttacks"
+  | "allSaves" | "allSkills"
   | "strSkills" | "dexSkills" | "intSkills" | "wisSkills" | "chaSkills"
   | "mentalSkills"
   | string            // specific skill: "athletics", "stealth", etc.
@@ -199,12 +201,14 @@ Status penalty equal to value on mental checks, spell attack rolls, and spell DC
   modifiers: [
     { stat: "mentalSkills", bonusType: "status", value: { kind: "effectValue", sign: -1 } },
     { stat: "will",         bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "spellDcs",     bonusType: "status", value: { kind: "effectValue", sign: -1 } },
+    { stat: "spellAttacks", bonusType: "status", value: { kind: "effectValue", sign: -1 } },
   ],
-  description: "Also applies to spell attack rolls and spell DCs (not in stat model). When casting a spell, DC 5 + value flat check or spell is lost.",
+  description: "When casting a spell, DC 5 + value flat check or the spell is lost.",
 }
 ```
 
-No automated spell attack or spell DC modifiers — those spell stats are outside the current combatant stat model.
+Spell DCs and spell attacks are automated via the `spellDcs` and `spellAttacks` stat targets. The DC 5 + value flat check on spellcasting is procedural and stays in `description` for GM reference.
 
 #### Drained (1–4)
 

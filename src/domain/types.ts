@@ -491,7 +491,10 @@ export type StatTarget =
   | 'allSaves'
   | 'perception'
   | 'attackRolls'
+  | 'damageRolls'
   | 'allDCs'
+  | 'spellDcs'
+  | 'spellAttacks'
   | 'allSkills'
   | 'strSkills'
   | 'dexSkills'
@@ -537,7 +540,10 @@ export interface ComputedStats {
   perception: ComputedStat;
   skills: Record<string, ComputedStat>;
   attackRolls: ComputedModifierBucket;
+  damageRolls: ComputedModifierBucket;
   allDCs: ComputedModifierBucket;
+  spellDcs: ComputedModifierBucket;
+  spellAttacks: ComputedModifierBucket;
 }
 
 export type TurnBoundarySuggestion =

@@ -148,7 +148,49 @@ describe('deriveStats', () => {
     expect(computed.perception).toEqual({ base: 6, final: 6, modifiers: [] });
     expect(computed.skills.stealth).toEqual({ base: 11, final: 11, modifiers: [] });
     expect(computed.attackRolls).toEqual({ total: 0, modifiers: [] });
+    expect(computed.damageRolls).toEqual({ total: 0, modifiers: [] });
     expect(computed.allDCs).toEqual({ total: 0, modifiers: [] });
+    expect(computed.spellDcs).toEqual({ total: 0, modifiers: [] });
+    expect(computed.spellAttacks).toEqual({ total: 0, modifiers: [] });
+  });
+
+  test('routes damageRolls, spellDcs, spellAttacks status modifiers to their own buckets', () => {
+    const customWithBuckets: EffectLibrary = {
+      ...customLibrary,
+      damageStatus: {
+        id: 'damageStatus',
+        name: 'Damage Status',
+        category: 'custom',
+        hasValue: false,
+        modifiers: [{ stat: 'damageRolls', bonusType: 'status', value: -2 }]
+      },
+      spellDcStatus: {
+        id: 'spellDcStatus',
+        name: 'Spell DC Status',
+        category: 'custom',
+        hasValue: false,
+        modifiers: [{ stat: 'spellDcs', bonusType: 'status', value: -2 }]
+      },
+      spellAttackStatus: {
+        id: 'spellAttackStatus',
+        name: 'Spell Attack Status',
+        category: 'custom',
+        hasValue: false,
+        modifiers: [{ stat: 'spellAttacks', bonusType: 'status', value: -2 }]
+      }
+    };
+
+    const computed = deriveStats(
+      baseStats,
+      [applied('damageStatus'), applied('spellDcStatus'), applied('spellAttackStatus')],
+      customWithBuckets
+    );
+
+    expect(computed.damageRolls.total).toBe(-2);
+    expect(computed.spellDcs.total).toBe(-2);
+    expect(computed.spellAttacks.total).toBe(-2);
+    expect(computed.attackRolls.total).toBe(0);
+    expect(computed.allDCs.total).toBe(0);
   });
 
   test('keeps only the worse same-type status penalty from Frightened and Sickened', () => {
