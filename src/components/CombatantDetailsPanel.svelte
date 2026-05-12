@@ -211,7 +211,7 @@
       <section class="details__section" aria-label="Spellcasting">
         <SectionLabel as="h3">Spellcasting</SectionLabel>
         <div class="spellcasting-stack">
-          {#each combatant.spellcasting as block (block.blockId)}
+          {#each combatant.spellcasting as block, i (i)}
             <SpellcastingBlockView
               {block}
               dcBonus={computed ? computed.spellDcs.total : 0}
