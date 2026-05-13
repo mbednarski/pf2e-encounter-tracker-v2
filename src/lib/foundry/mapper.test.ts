@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { mapFoundryNpcToCreature, slugifyName } from './mapper';
+import { mapFoundryNpcToCreature, parseDamageString, slugifyName } from './mapper';
 import type { FoundryNpc } from './types';
 
 function baseNpc(overrides: Partial<FoundryNpc> = {}): FoundryNpc {
@@ -34,6 +34,50 @@ function baseNpc(overrides: Partial<FoundryNpc> = {}): FoundryNpc {
     ...overrides
   };
 }
+
+describe('parseDamageString', () => {
+  test('parses standard dice + bonus', () => {
+    expect(parseDamageString('1d6+1')).toEqual({ dice: 1, dieSize: 6, bonus: 1, type: 'untyped' });
+    expect(parseDamageString('2d8+5')).toEqual({ dice: 2, dieSize: 8, bonus: 5, type: 'untyped' });
+  });
+
+  test('parses dice with no bonus', () => {
+    expect(parseDamageString('2d8')).toEqual({ dice: 2, dieSize: 8, type: 'untyped' });
+    expect(parseDamageString('3d10')).toEqual({ dice: 3, dieSize: 10, type: 'untyped' });
+  });
+
+  test('parses negative bonus', () => {
+    expect(parseDamageString('1d4-1')).toEqual({ dice: 1, dieSize: 4, bonus: -1, type: 'untyped' });
+    expect(parseDamageString('1d6-2')).toEqual({ dice: 1, dieSize: 6, bonus: -2, type: 'untyped' });
+  });
+
+  test('parses flat damage (bonus only, no dice)', () => {
+    expect(parseDamageString('+5')).toEqual({ bonus: 5, type: 'untyped' });
+  });
+
+  test('tolerates whitespace inside the expression', () => {
+    expect(parseDamageString('  1d6 + 1  ')).toEqual({
+      dice: 1,
+      dieSize: 6,
+      bonus: 1,
+      type: 'untyped'
+    });
+  });
+
+  test('returns null for unparseable strings', () => {
+    expect(parseDamageString('foo')).toBeNull();
+    expect(parseDamageString('1d')).toBeNull();
+    expect(parseDamageString('1dX')).toBeNull();
+    expect(parseDamageString('1d6+')).toBeNull();
+    expect(parseDamageString('')).toBeNull();
+    expect(parseDamageString('   ')).toBeNull();
+  });
+
+  test('returns null for an expression with neither dice nor bonus', () => {
+    // The regex matches "" → groups all undefined, then guard rejects.
+    expect(parseDamageString('   ')).toBeNull();
+  });
+});
 
 describe('slugifyName', () => {
   test('lowercases and kebab-cases names', () => {
@@ -340,5 +384,381 @@ describe('mapFoundryNpcToCreature', () => {
     const result = mapFoundryNpcToCreature(npc);
     if (!result.ok) throw new Error(result.error);
     expect(result.value.source).toBe('Pathfinder Bestiary');
+  });
+
+  describe('action partitioning edge cases', () => {
+    test("'free' actionType lands in reactiveAbilities", () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'f1',
+            name: 'Quick Quaff',
+            type: 'action',
+            system: {
+              actionType: { value: 'free' },
+              description: { value: '<p>Free.</p>' }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.reactiveAbilities.map((a) => a.name)).toEqual(['Quick Quaff']);
+      expect(result.value.reactiveAbilities[0]!.actions).toBe('free');
+    });
+
+    test('formats frequency on an ability', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'rare1',
+            name: 'Rare Ability',
+            type: 'action',
+            system: {
+              actionType: { value: 'action' },
+              actions: { value: 1 },
+              frequency: { max: 1, per: 'day' },
+              description: { value: '<p>Once daily.</p>' }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.activeAbilities[0]!.frequency).toBe('1 per day');
+    });
+  });
+
+  describe('damage parsing edge cases', () => {
+    test('flags persistent damage on a melee strike', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'fang',
+            name: 'Fang',
+            type: 'melee',
+            system: {
+              bonus: { value: 12 },
+              damageRolls: {
+                '0': { damage: '2d8+5', damageType: 'piercing' },
+                '1': { damage: '1d6', damageType: 'acid', category: 'persistent' }
+              },
+              range: null,
+              traits: { value: [] }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      const damage = result.value.attacks[0]!.damage;
+      expect(damage).toHaveLength(2);
+      const persistent = damage.find((d) => d.persistent);
+      expect(persistent).toMatchObject({
+        dice: 1,
+        dieSize: 6,
+        type: 'acid',
+        persistent: true
+      });
+    });
+
+    test('silently drops a damage roll with an unparseable damage string', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'mix',
+            name: 'Weird Strike',
+            type: 'melee',
+            system: {
+              bonus: { value: 8 },
+              damageRolls: {
+                '0': { damage: '1d6+1', damageType: 'slashing' },
+                '1': { damage: 'special — see text', damageType: 'untyped' }
+              },
+              range: null,
+              traits: { value: [] }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      // Only the parseable roll survives.
+      expect(result.value.attacks[0]!.damage).toEqual([
+        { dice: 1, dieSize: 6, bonus: 1, type: 'slashing' }
+      ]);
+    });
+
+    test('keeps an attack even when every damage roll is unparseable', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'odd',
+            name: 'Ineffable',
+            type: 'melee',
+            system: {
+              bonus: { value: 0 },
+              damageRolls: { '0': { damage: 'varies', damageType: 'untyped' } },
+              range: null,
+              traits: { value: [] }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.attacks).toHaveLength(1);
+      expect(result.value.attacks[0]!.damage).toEqual([]);
+    });
+  });
+
+  describe('spellcasting edge cases', () => {
+    test('handles multiple spellcasting blocks on one creature', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'innate',
+            name: 'Divine Innate',
+            type: 'spellcastingEntry',
+            system: {
+              prepared: { value: 'innate' },
+              tradition: { value: 'divine' },
+              spelldc: { dc: 18 }
+            }
+          },
+          {
+            _id: 'prep',
+            name: 'Divine Prepared',
+            type: 'spellcastingEntry',
+            system: {
+              prepared: { value: 'prepared' },
+              tradition: { value: 'divine' },
+              spelldc: { dc: 19 },
+              slots: { slot1: { max: 4 }, slot2: { max: 3 } }
+            }
+          },
+          {
+            _id: 's-innate',
+            name: 'Heal',
+            type: 'spell',
+            system: { level: { value: 4 }, location: { value: 'innate' }, traits: { value: [] } }
+          },
+          {
+            _id: 's-prep',
+            name: 'Bless',
+            type: 'spell',
+            system: { level: { value: 1 }, location: { value: 'prep' }, traits: { value: [] } }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.spellcasting).toHaveLength(2);
+      const byName = new Map(result.value.spellcasting!.map((b) => [b.name, b]));
+      expect(byName.get('Divine Innate')!.entries.map((e) => e.name)).toEqual(['Heal']);
+      expect(byName.get('Divine Prepared')!.entries.map((e) => e.name)).toEqual(['Bless']);
+      expect(byName.get('Divine Prepared')!.slots).toEqual({ 1: 4, 2: 3 });
+    });
+
+    test('silently drops orphan spells whose location matches no entry', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'block1',
+            name: 'Arcane',
+            type: 'spellcastingEntry',
+            system: { prepared: { value: 'innate' }, tradition: { value: 'arcane' }, spelldc: { dc: 15 } }
+          },
+          {
+            _id: 'orphan',
+            name: 'Lost Spell',
+            type: 'spell',
+            system: { level: { value: 1 }, location: { value: 'nonexistent-block' }, traits: { value: [] } }
+          },
+          {
+            _id: 'kept',
+            name: 'Kept Spell',
+            type: 'spell',
+            system: { level: { value: 1 }, location: { value: 'block1' }, traits: { value: [] } }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.spellcasting).toHaveLength(1);
+      expect(result.value.spellcasting![0]!.entries.map((e) => e.name)).toEqual(['Kept Spell']);
+    });
+
+    test('drops zero-slot ranks but keeps non-zero ones', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'prep',
+            name: 'Prepared',
+            type: 'spellcastingEntry',
+            system: {
+              prepared: { value: 'prepared' },
+              tradition: { value: 'divine' },
+              spelldc: { dc: 18 },
+              slots: { slot1: { max: 4 }, slot2: { max: 0 }, slot3: { max: 2 } }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.spellcasting![0]!.slots).toEqual({ 1: 4, 3: 2 });
+    });
+
+    test('falls back to safe defaults for unknown tradition / type strings', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'x',
+            name: 'Weird',
+            type: 'spellcastingEntry',
+            system: {
+              prepared: { value: 'unknown-style' },
+              tradition: { value: 'pyromantic' },
+              spelldc: { dc: 12 }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.spellcasting![0]!.tradition).toBe('arcane');
+      expect(result.value.spellcasting![0]!.type).toBe('innate');
+    });
+  });
+
+  describe('size and rarity mapping', () => {
+    test.each([
+      ['tiny', 'tiny'],
+      ['sm', 'small'],
+      ['small', 'small'],
+      ['med', 'medium'],
+      ['medium', 'medium'],
+      ['lg', 'large'],
+      ['large', 'large'],
+      ['huge', 'huge'],
+      ['grg', 'gargantuan'],
+      ['gargantuan', 'gargantuan']
+    ] as const)('maps Foundry size %s to %s', (foundrySize, expected) => {
+      const npc = baseNpc({
+        system: { ...baseNpc().system, traits: { rarity: 'common', size: { value: foundrySize }, value: [] } }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.size).toBe(expected);
+    });
+
+    test('falls back to medium for an unknown size', () => {
+      const npc = baseNpc({
+        system: { ...baseNpc().system, traits: { rarity: 'common', size: { value: 'colossal' }, value: [] } }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.size).toBe('medium');
+    });
+
+    test.each(['common', 'uncommon', 'rare', 'unique'] as const)('passes through %s rarity', (rarity) => {
+      const npc = baseNpc({
+        system: { ...baseNpc().system, traits: { rarity, size: { value: 'med' }, value: [] } }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.rarity).toBe(rarity);
+    });
+
+    test('falls back to common for an unknown rarity', () => {
+      const npc = baseNpc({
+        system: {
+          ...baseNpc().system,
+          traits: { rarity: 'legendary', size: { value: 'med' }, value: [] }
+        }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.rarity).toBe('common');
+    });
+  });
+
+  describe('graceful degradation on missing data', () => {
+    test('produces a Creature with zeroed defenses when system is entirely missing', () => {
+      const result = mapFoundryNpcToCreature({ name: 'Skeletal Stub', type: 'npc' });
+      if (!result.ok) throw new Error(result.error);
+      const c = result.value;
+      expect(c.name).toBe('Skeletal Stub');
+      expect(c.id).toBe('skeletal-stub');
+      expect(c.level).toBe(0);
+      expect(c.ac).toBe(0);
+      expect(c.hp).toBe(0);
+      expect(c.fortitude).toBe(0);
+      expect(c.reflex).toBe(0);
+      expect(c.will).toBe(0);
+      expect(c.perception).toBe(0);
+      expect(c.speed).toEqual({});
+      expect(c.immunities).toEqual([]);
+      expect(c.resistances).toEqual([]);
+      expect(c.weaknesses).toEqual([]);
+      expect(c.attacks).toEqual([]);
+      expect(c.passiveAbilities).toEqual([]);
+      expect(c.spellcasting).toBeUndefined();
+      expect(c.abilities).toBeUndefined();
+      expect(c.senses).toBeUndefined();
+      expect(c.languages).toBeUndefined();
+    });
+
+    test('uses hp.value when hp.max is missing', () => {
+      const npc = baseNpc({
+        system: {
+          ...baseNpc().system,
+          attributes: { ...baseNpc().system!.attributes, hp: { value: 7 } }
+        }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.hp).toBe(7);
+    });
+
+    test('skips malformed sense entries instead of failing', () => {
+      const npc = baseNpc({
+        system: {
+          ...baseNpc().system,
+          perception: {
+            mod: 5,
+            senses: [{ type: 'darkvision' }, { range: 60 } as unknown as { type: string }]
+          }
+        }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.senses).toEqual([{ type: 'darkvision' }]);
+    });
+
+    test('omits languages when both value is empty and details is empty', () => {
+      const npc = baseNpc({
+        system: {
+          ...baseNpc().system,
+          details: { level: { value: 1 }, languages: { value: [], details: '' } }
+        }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.languages).toBeUndefined();
+    });
+
+    test('keeps languages when only details is present', () => {
+      const npc = baseNpc({
+        system: {
+          ...baseNpc().system,
+          details: { level: { value: 1 }, languages: { value: [], details: 'telepathy 100 feet' } }
+        }
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.languages).toEqual({ value: [], details: 'telepathy 100 feet' });
+    });
   });
 });

@@ -65,7 +65,7 @@ export function slugifyName(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-function parseDamageString(raw: string): DamageComponent | null {
+export function parseDamageString(raw: string): DamageComponent | null {
   // Examples: "1d6+1", "2d8", "1d4-1", "5"
   const m = /^\s*(?:(\d+)d(\d+))?\s*(?:([+\-])\s*(\d+))?\s*$/.exec(raw);
   if (!m) return null;
