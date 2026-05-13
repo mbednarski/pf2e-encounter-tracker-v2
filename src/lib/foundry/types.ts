@@ -86,7 +86,13 @@ export interface FoundrySpellcastingEntrySystem {
 
 export interface FoundrySpellSystem {
   level?: { value?: number };
-  location?: { value?: string };
+  location?: {
+    value?: string;
+    // Innate daily-limited spells carry their uses on the spell item itself,
+    // not on the spellcastingEntry — `max` is what the mapper turns into a
+    // perDay frequency.
+    uses?: { max?: number; value?: number };
+  };
   traits?: { value?: string[]; traditions?: string[] };
   time?: { value?: string };
   range?: { value?: string } | string;

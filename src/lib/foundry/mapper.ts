@@ -3,6 +3,7 @@ import type {
   AbilityScores,
   ActionCost,
   Attack,
+  AttackType,
   Creature,
   CreatureImmunity,
   CreatureRarity,
@@ -34,6 +35,8 @@ export type MapResult =
   | { ok: true; value: Creature; warnings: string[] }
   | { ok: false; error: string };
 
+type Warn = (msg: string) => void;
+
 const SIZE_MAP: Record<string, CreatureSize> = {
   tiny: 'tiny',
   sm: 'small',
@@ -56,6 +59,7 @@ const SPELLCASTING_TYPES: ReadonlySet<SpellcastingType> = new Set([
   'focus'
 ]);
 const SENSE_ACUITIES: ReadonlySet<SenseAcuity> = new Set(['precise', 'imprecise', 'vague']);
+const THROWN_TRAIT = /^thrown(-\d+)?$/;
 
 export function slugifyName(name: string): string {
   return name
@@ -66,7 +70,7 @@ export function slugifyName(name: string): string {
 }
 
 export function parseDamageString(raw: string): DamageComponent | null {
-  // Examples: "1d6+1", "2d8", "1d4-1", "5"
+  // Examples: "1d6+1", "2d8", "1d4-1", "+5"
   const m = /^\s*(?:(\d+)d(\d+))?\s*(?:([+\-])\s*(\d+))?\s*$/.exec(raw);
   if (!m) return null;
   const dice = m[1] ? Number(m[1]) : undefined;
@@ -79,6 +83,10 @@ export function parseDamageString(raw: string): DamageComponent | null {
   if (dieSize !== undefined) out.dieSize = dieSize;
   if (bonusAbs !== undefined) out.bonus = sign * bonusAbs;
   return { ...out, type: 'untyped' };
+}
+
+function requireNum(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function mapSize(raw: string | undefined): CreatureSize {
@@ -189,10 +197,15 @@ function mapAttack(item: FoundryMeleeItem): Attack | null {
   if (typeof item.name !== 'string') return null;
   const sys: FoundryMeleeSystem = item.system ?? {};
   const modifier = typeof sys.bonus?.value === 'number' ? sys.bonus.value : 0;
-  const type = isRangedAttack(sys.range) ? 'ranged' : 'melee';
   const traits = Array.isArray(sys.traits?.value)
     ? sys.traits.value.filter((t): t is string => typeof t === 'string')
     : [];
+  // Foundry stores thrown melee weapons (javelin, dagger) as type:"melee" with a
+  // positive range.increment so the engine can resolve both modes. Bestiary
+  // statblocks render these as melee Strikes, so prefer melee when the trait
+  // says thrown.
+  const thrown = traits.some((t) => THROWN_TRAIT.test(t));
+  const type: AttackType = thrown ? 'melee' : isRangedAttack(sys.range) ? 'ranged' : 'melee';
 
   const damage: DamageComponent[] = [];
   for (const roll of Object.values(sys.damageRolls ?? {})) {
@@ -248,7 +261,10 @@ function mapAbility(item: FoundryActionItem): Ability | null {
   return ability;
 }
 
-function partitionAbilities(actions: FoundryItem[]): {
+function partitionAbilities(
+  actions: FoundryItem[],
+  warn: Warn
+): {
   passive: Ability[];
   reactive: Ability[];
   active: Ability[];
@@ -265,7 +281,11 @@ function partitionAbilities(actions: FoundryItem[]): {
     const kind = sys?.actionType?.value ?? 'passive';
     if (kind === 'passive') passive.push(ability);
     else if (kind === 'reaction' || kind === 'free') reactive.push(ability);
-    else active.push(ability);
+    else if (kind === 'action') active.push(ability);
+    else {
+      warn(`Ability "${ability.name}": unknown actionType "${kind}", treated as active`);
+      active.push(ability);
+    }
   }
   return { passive, reactive, active };
 }
@@ -285,12 +305,17 @@ function mapSpellListEntry(
     entry.isCantrip = true;
     entry.frequency = { type: 'atWill' };
   } else if (blockType === 'innate') {
-    entry.frequency = { type: 'atWill' };
+    const usesMax = sys.location?.uses?.max;
+    if (typeof usesMax === 'number' && Number.isFinite(usesMax) && usesMax > 0) {
+      entry.frequency = { type: 'perDay', uses: usesMax };
+    } else {
+      entry.frequency = { type: 'atWill' };
+    }
   }
   return entry;
 }
 
-function mapSpellcasting(items: FoundryItem[]): SpellcastingBlock[] {
+function mapSpellcasting(items: FoundryItem[], warn: Warn): SpellcastingBlock[] {
   const entries: FoundrySpellcastingEntryItem[] = items
     .filter((i) => i.type === 'spellcastingEntry')
     .map((i) => i as FoundrySpellcastingEntryItem);
@@ -311,16 +336,25 @@ function mapSpellcasting(items: FoundryItem[]): SpellcastingBlock[] {
   for (const entry of entries) {
     const sys: FoundrySpellcastingEntrySystem = entry.system ?? {};
     const blockId = typeof entry._id === 'string' && entry._id ? entry._id : (entry.name ?? 'spellcasting');
+    const blockLabel = typeof entry.name === 'string' && entry.name ? entry.name : blockId;
 
     const tradRaw = typeof sys.tradition?.value === 'string' ? sys.tradition.value : '';
-    const tradition: SpellTradition = TRADITIONS.has(tradRaw as SpellTradition)
-      ? (tradRaw as SpellTradition)
-      : 'arcane';
+    let tradition: SpellTradition;
+    if (TRADITIONS.has(tradRaw as SpellTradition)) {
+      tradition = tradRaw as SpellTradition;
+    } else {
+      warn(`Spellcasting block "${blockLabel}": unknown tradition "${tradRaw}", defaulted to arcane`);
+      tradition = 'arcane';
+    }
 
     const typeRaw = typeof sys.prepared?.value === 'string' ? sys.prepared.value : '';
-    const type: SpellcastingType = SPELLCASTING_TYPES.has(typeRaw as SpellcastingType)
-      ? (typeRaw as SpellcastingType)
-      : 'innate';
+    let type: SpellcastingType;
+    if (SPELLCASTING_TYPES.has(typeRaw as SpellcastingType)) {
+      type = typeRaw as SpellcastingType;
+    } else {
+      warn(`Spellcasting block "${blockLabel}": unknown type "${typeRaw}", defaulted to innate`);
+      type = 'innate';
+    }
 
     const dc = typeof sys.spelldc?.dc === 'number' ? sys.spelldc.dc : 0;
     const attackModifier = typeof sys.spelldc?.value === 'number' ? sys.spelldc.value : undefined;
@@ -367,7 +401,34 @@ export function mapFoundryNpcToCreature(npc: unknown): MapResult {
     return { ok: false, error: 'Foundry NPC is missing a name' };
   }
 
+  const sys = doc.system ?? {};
+
+  const level = requireNum(sys.details?.level?.value);
+  const ac = requireNum(sys.attributes?.ac?.value);
+  const fortitude = requireNum(sys.saves?.fortitude?.value);
+  const reflex = requireNum(sys.saves?.reflex?.value);
+  const will = requireNum(sys.saves?.will?.value);
+  const perception = requireNum(sys.perception?.mod);
+  const hp = requireNum(sys.attributes?.hp?.max) ?? requireNum(sys.attributes?.hp?.value);
+
+  const missing: string[] = [];
+  if (level === null) missing.push('system.details.level.value');
+  if (ac === null) missing.push('system.attributes.ac.value');
+  if (fortitude === null) missing.push('system.saves.fortitude.value');
+  if (reflex === null) missing.push('system.saves.reflex.value');
+  if (will === null) missing.push('system.saves.will.value');
+  if (perception === null) missing.push('system.perception.mod');
+  if (hp === null) missing.push('system.attributes.hp.max or .value');
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      error: `Foundry NPC "${doc.name}" is missing required fields: ${missing.join(', ')}`
+    };
+  }
+
   const warnings: string[] = [];
+  const warn: Warn = (msg) => warnings.push(msg);
   const items = Array.isArray(doc.items) ? doc.items : [];
 
   const attacks: Attack[] = [];
@@ -377,32 +438,27 @@ export function mapFoundryNpcToCreature(npc: unknown): MapResult {
     if (a) attacks.push(a);
   }
 
-  const { passive, reactive, active } = partitionAbilities(items);
-  const spellcasting = mapSpellcasting(items);
+  const { passive, reactive, active } = partitionAbilities(items, warn);
+  const spellcasting = mapSpellcasting(items, warn);
 
-  const sys = doc.system ?? {};
   const source = sys.details?.publication?.title;
   const notes = stripFoundryMarkup(sys.details?.publicNotes);
 
   const creature: Creature = {
     id: slugifyName(doc.name),
     name: doc.name,
-    level: typeof sys.details?.level?.value === 'number' ? sys.details.level.value : 0,
+    level: level!,
     traits: Array.isArray(sys.traits?.value)
       ? sys.traits.value.filter((t): t is string => typeof t === 'string')
       : [],
     size: mapSize(sys.traits?.size?.value),
     rarity: mapRarity(sys.traits?.rarity),
-    ac: typeof sys.attributes?.ac?.value === 'number' ? sys.attributes.ac.value : 0,
-    fortitude: typeof sys.saves?.fortitude?.value === 'number' ? sys.saves.fortitude.value : 0,
-    reflex: typeof sys.saves?.reflex?.value === 'number' ? sys.saves.reflex.value : 0,
-    will: typeof sys.saves?.will?.value === 'number' ? sys.saves.will.value : 0,
-    perception: typeof sys.perception?.mod === 'number' ? sys.perception.mod : 0,
-    hp: typeof sys.attributes?.hp?.max === 'number'
-      ? sys.attributes.hp.max
-      : typeof sys.attributes?.hp?.value === 'number'
-        ? sys.attributes.hp.value
-        : 0,
+    ac: ac!,
+    fortitude: fortitude!,
+    reflex: reflex!,
+    will: will!,
+    perception: perception!,
+    hp: hp!,
     immunities: mapImmunities(doc),
     resistances: mapDamageTypeArray(sys.attributes?.resistances),
     weaknesses: mapDamageTypeArray(sys.attributes?.weaknesses),

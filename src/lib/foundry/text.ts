@@ -58,8 +58,8 @@ function prettifyDamage(body: string): string {
   return head.replace(/\[([^\]]+)\]/g, ' $1').trim();
 }
 
-export function stripFoundryMarkup(input: string | undefined | null): string {
-  if (input == null) return '';
+export function stripFoundryMarkup(input: unknown): string {
+  if (typeof input !== 'string') return '';
   let text = input;
 
   text = text.replace(UUID_WITH_LABEL, (_, label) => label);
@@ -69,7 +69,6 @@ export function stripFoundryMarkup(input: string | undefined | null): string {
   text = text.replace(LOCALIZE, '');
   text = text.replace(INLINE_ROLL, (_, expr) => expr);
 
-  // Paragraph and break tags → newline before stripping the rest.
   text = text.replace(/<\/(p|div|li|h[1-6])>/gi, '\n');
   text = text.replace(/<br\s*\/?>/gi, '\n');
   text = text.replace(/<hr\s*\/?>/gi, '\n');
@@ -77,8 +76,6 @@ export function stripFoundryMarkup(input: string | undefined | null): string {
   text = text.replace(HTML_TAG, '');
   text = text.replace(NBSP, ' ');
 
-  // Normalize whitespace: collapse runs of spaces, but preserve paragraph
-  // breaks. We do this by splitting on newlines first.
   const lines = text.split('\n').map((line) => line.replace(MULTI_WHITESPACE, ' ').trim());
   return lines.filter((l) => l.length > 0).join('\n').trim();
 }

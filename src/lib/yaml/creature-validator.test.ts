@@ -420,7 +420,6 @@ describe('validateCreature - spellcasting', () => {
       const data = { ...minimalCreature, immunities: ['fire', 'sleep'] };
       const result = validateCreature(data, 0);
       expect(result.ok).toBe(false);
-      // Each string element is checked as an object — both should fail with the same shape error.
       expect(result.issues.some((i) => /immunities\[\d+\]/.test(i.path))).toBe(true);
     });
 

@@ -40,22 +40,18 @@ describe('importCreatureFoundryJson', () => {
     expect(c.speed.land).toBe(20);
     expect(c.speed.fly).toBe(40);
 
-    // immunities arrive as objects, not strings.
     expect(c.immunities.length).toBeGreaterThan(0);
     expect(typeof c.immunities[0]).toBe('object');
     expect(c.immunities.map((im) => im.type)).toEqual(
       expect.arrayContaining(['bleed', 'paralyzed', 'poison', 'sleep'])
     );
 
-    // ability scores closed the backlog gap.
     expect(c.abilities).toBeDefined();
     expect(c.abilities!.dex).toBe(4);
 
-    // senses present.
     expect(c.senses).toBeDefined();
     expect(c.senses!.some((s) => s.type === 'darkvision')).toBe(true);
 
-    // has at least the claw attack with parsed damage.
     expect(c.attacks.length).toBeGreaterThan(0);
     const claw = c.attacks.find((a) => a.name === 'Claw');
     expect(claw).toBeDefined();
@@ -67,7 +63,6 @@ describe('importCreatureFoundryJson', () => {
       type: 'slashing'
     });
 
-    // spellcasting block was synthesized.
     expect(c.spellcasting).toBeDefined();
     expect(c.spellcasting!.length).toBeGreaterThanOrEqual(1);
     const block = c.spellcasting![0]!;
@@ -108,7 +103,6 @@ describe('importCreatureFoundryJson', () => {
     const c = result.creatures[0]!;
     expect(c.name).toBe('Aasimar Redeemer');
 
-    // Two distinct spellcasting blocks: Divine Innate + Champion Devotion (focus).
     expect(c.spellcasting).toBeDefined();
     expect(c.spellcasting!.length).toBeGreaterThanOrEqual(2);
     const traditions = c.spellcasting!.map((b) => b.tradition);
@@ -116,7 +110,6 @@ describe('importCreatureFoundryJson', () => {
     const types = c.spellcasting!.map((b) => b.type);
     expect(types).toEqual(expect.arrayContaining(['innate', 'focus']));
 
-    // Devotion (focus) block carries the Lay on Hands family of spells.
     const focusBlock = c.spellcasting!.find((b) => b.type === 'focus');
     expect(focusBlock).toBeDefined();
     expect(focusBlock!.entries.some((e) => /lay on hands/i.test(e.name))).toBe(true);
@@ -131,16 +124,13 @@ describe('importCreatureFoundryJson', () => {
     expect(c.name).toBe('Barbazu');
     expect(c.size).toBe('medium');
 
-    // Reposition is a free action and should land in reactiveAbilities.
     const reposition = c.reactiveAbilities.find((a) => a.name === 'Reposition');
     expect(reposition).toBeDefined();
     expect(reposition!.actions).toBe('free');
 
-    // Languages carry both array values and the structured field.
     expect(c.languages).toBeDefined();
     expect(c.languages!.value.length).toBeGreaterThan(0);
 
-    // At least one innate-spellcasting block.
     expect(c.spellcasting).toBeDefined();
     expect(c.spellcasting!.some((b) => b.type === 'innate')).toBe(true);
   });
@@ -154,15 +144,12 @@ describe('importCreatureFoundryJson', () => {
     expect(c.name).toBe('Bloodseeker');
     expect(c.size).toBe('tiny');
 
-    // Has the Barbed Leg melee attack.
     expect(c.attacks.some((a) => a.name === 'Barbed Leg')).toBe(true);
 
-    // Senses include darkvision and scent.
     expect(c.senses).toBeDefined();
     const senseTypes = c.senses!.map((s) => s.type);
     expect(senseTypes).toEqual(expect.arrayContaining(['darkvision', 'scent']));
 
-    // Has the Attach and Blood Drain abilities partitioned correctly.
     const allAbilityNames = [
       ...c.passiveAbilities,
       ...c.reactiveAbilities,

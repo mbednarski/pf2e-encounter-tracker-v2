@@ -74,7 +74,6 @@ describe('parseDamageString', () => {
   });
 
   test('returns null for an expression with neither dice nor bonus', () => {
-    // The regex matches "" → groups all undefined, then guard rejects.
     expect(parseDamageString('   ')).toBeNull();
   });
 });
@@ -234,6 +233,48 @@ describe('mapFoundryNpcToCreature', () => {
         damage: [{ dice: 1, dieSize: 6, bonus: 1, type: 'slashing' }]
       }
     ]);
+  });
+
+  test('keeps thrown weapons classified as melee even when range.increment is positive', () => {
+    const npc = baseNpc({
+      items: [
+        {
+          _id: 'jav',
+          name: 'Javelin',
+          type: 'melee',
+          system: {
+            bonus: { value: 8 },
+            damageRolls: { '0': { damage: '1d6+2', damageType: 'piercing' } },
+            range: { increment: 30, max: null },
+            traits: { value: ['thrown-30'] }
+          }
+        }
+      ]
+    });
+    const result = mapFoundryNpcToCreature(npc);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.attacks[0]!.type).toBe('melee');
+  });
+
+  test('plain thrown trait (no range suffix) also stays melee', () => {
+    const npc = baseNpc({
+      items: [
+        {
+          _id: 'dag',
+          name: 'Dagger',
+          type: 'melee',
+          system: {
+            bonus: { value: 6 },
+            damageRolls: { '0': { damage: '1d4+1', damageType: 'piercing' } },
+            range: { increment: 10, max: null },
+            traits: { value: ['agile', 'thrown'] }
+          }
+        }
+      ]
+    });
+    const result = mapFoundryNpcToCreature(npc);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.value.attacks[0]!.type).toBe('melee');
   });
 
   test('detects ranged attacks via non-null range', () => {
@@ -407,6 +448,26 @@ describe('mapFoundryNpcToCreature', () => {
       expect(result.value.reactiveAbilities[0]!.actions).toBe('free');
     });
 
+    test('warns and treats unknown actionType as active', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'odd',
+            name: 'Downtime Ritual',
+            type: 'action',
+            system: {
+              actionType: { value: 'downtime' as never },
+              description: { value: '<p>Performed over hours.</p>' }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.value.activeAbilities.map((a) => a.name)).toEqual(['Downtime Ritual']);
+      expect(result.warnings.some((w) => /Downtime Ritual.*downtime/.test(w))).toBe(true);
+    });
+
     test('formats frequency on an ability', () => {
       const npc = baseNpc({
         items: [
@@ -483,7 +544,6 @@ describe('mapFoundryNpcToCreature', () => {
       });
       const result = mapFoundryNpcToCreature(npc);
       if (!result.ok) throw new Error(result.error);
-      // Only the parseable roll survives.
       expect(result.value.attacks[0]!.damage).toEqual([
         { dice: 1, dieSize: 6, bonus: 1, type: 'slashing' }
       ]);
@@ -610,7 +670,7 @@ describe('mapFoundryNpcToCreature', () => {
       expect(result.value.spellcasting![0]!.slots).toEqual({ 1: 4, 3: 2 });
     });
 
-    test('falls back to safe defaults for unknown tradition / type strings', () => {
+    test('falls back to safe defaults for unknown tradition / type strings and warns', () => {
       const npc = baseNpc({
         items: [
           {
@@ -629,6 +689,52 @@ describe('mapFoundryNpcToCreature', () => {
       if (!result.ok) throw new Error(result.error);
       expect(result.value.spellcasting![0]!.tradition).toBe('arcane');
       expect(result.value.spellcasting![0]!.type).toBe('innate');
+      expect(result.warnings.some((w) => /tradition.*pyromantic/.test(w))).toBe(true);
+      expect(result.warnings.some((w) => /type.*unknown-style/.test(w))).toBe(true);
+    });
+
+    test('innate daily-limited spells become perDay frequency', () => {
+      const npc = baseNpc({
+        items: [
+          {
+            _id: 'sce',
+            name: 'Innate Arcane',
+            type: 'spellcastingEntry',
+            system: {
+              prepared: { value: 'innate' },
+              tradition: { value: 'arcane' },
+              spelldc: { dc: 17 }
+            }
+          },
+          {
+            _id: 'sp-daily',
+            name: 'Dispel Magic',
+            type: 'spell',
+            system: {
+              level: { value: 3 },
+              location: { value: 'sce', uses: { max: 1, value: 1 } },
+              traits: { value: [] }
+            }
+          },
+          {
+            _id: 'sp-atwill',
+            name: 'Blur',
+            type: 'spell',
+            system: {
+              level: { value: 2 },
+              location: { value: 'sce' },
+              traits: { value: [] }
+            }
+          }
+        ]
+      });
+      const result = mapFoundryNpcToCreature(npc);
+      if (!result.ok) throw new Error(result.error);
+      const entries = result.value.spellcasting![0]!.entries;
+      const daily = entries.find((e) => e.name === 'Dispel Magic');
+      expect(daily!.frequency).toEqual({ type: 'perDay', uses: 1 });
+      const atWill = entries.find((e) => e.name === 'Blur');
+      expect(atWill!.frequency).toEqual({ type: 'atWill' });
     });
   });
 
@@ -685,29 +791,23 @@ describe('mapFoundryNpcToCreature', () => {
   });
 
   describe('graceful degradation on missing data', () => {
-    test('produces a Creature with zeroed defenses when system is entirely missing', () => {
+    test('rejects when load-bearing combat stats are missing', () => {
       const result = mapFoundryNpcToCreature({ name: 'Skeletal Stub', type: 'npc' });
-      if (!result.ok) throw new Error(result.error);
-      const c = result.value;
-      expect(c.name).toBe('Skeletal Stub');
-      expect(c.id).toBe('skeletal-stub');
-      expect(c.level).toBe(0);
-      expect(c.ac).toBe(0);
-      expect(c.hp).toBe(0);
-      expect(c.fortitude).toBe(0);
-      expect(c.reflex).toBe(0);
-      expect(c.will).toBe(0);
-      expect(c.perception).toBe(0);
-      expect(c.speed).toEqual({});
-      expect(c.immunities).toEqual([]);
-      expect(c.resistances).toEqual([]);
-      expect(c.weaknesses).toEqual([]);
-      expect(c.attacks).toEqual([]);
-      expect(c.passiveAbilities).toEqual([]);
-      expect(c.spellcasting).toBeUndefined();
-      expect(c.abilities).toBeUndefined();
-      expect(c.senses).toBeUndefined();
-      expect(c.languages).toBeUndefined();
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('expected ok: false');
+      expect(result.error).toMatch(/missing required fields/);
+      expect(result.error).toMatch(/ac/);
+      expect(result.error).toMatch(/hp/);
+      expect(result.error).toMatch(/fortitude/);
+    });
+
+    test('rejects when a single required stat is missing and names it in the error', () => {
+      const npc = baseNpc();
+      delete npc.system!.saves!.reflex;
+      const result = mapFoundryNpcToCreature(npc);
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('expected ok: false');
+      expect(result.error).toMatch(/saves\.reflex/);
     });
 
     test('uses hp.value when hp.max is missing', () => {

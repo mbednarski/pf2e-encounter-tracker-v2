@@ -544,16 +544,13 @@ export function validateCreature(raw: unknown, documentIndex: number): ParseOutc
 
   const immunitiesRaw = requireArray(bag, 'immunities', obj.immunities);
   const immunities: CreatureImmunity[] = [];
-  let immunitiesOk: boolean = immunitiesRaw !== null;
   if (immunitiesRaw === null) {
     ok = false;
   } else {
     for (let i = 0; i < immunitiesRaw.length; i++) {
       const im = validateCreatureImmunity(bag, `immunities[${i}]`, immunitiesRaw[i]);
-      if (im === null) {
-        ok = false;
-        immunitiesOk = false;
-      } else immunities.push(im);
+      if (im === null) ok = false;
+      else immunities.push(im);
     }
   }
 
@@ -685,7 +682,6 @@ export function validateCreature(raw: unknown, documentIndex: number): ParseOutc
     will === null ||
     perception === null ||
     hp === null ||
-    !immunitiesOk ||
     speed === null ||
     passive === null ||
     reactive === null ||

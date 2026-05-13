@@ -169,6 +169,11 @@ export interface PartyMember {
   skills?: Record<string, number>;
   resistances?: { type: string; value: number }[];
   weaknesses?: { type: string; value: number }[];
+  /**
+   * Party members are authored manually (no importer), so their immunities
+   * stay as a flat string[] — they don't need the exceptions shape that
+   * Creature.immunities carries.
+   */
   immunities?: string[];
 
   persistentEffects: AppliedEffect[];

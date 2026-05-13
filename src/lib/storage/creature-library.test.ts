@@ -10,8 +10,7 @@ import { CREATURE_LIBRARY_STORE, getDb } from './db';
 
 /**
  * Plants a raw object directly into the creature-library store, bypassing the
- * typed `addCreatures` path. Used to simulate pre-migration entries already
- * sitting in IndexedDB.
+ * typed `addCreatures` path.
  */
 async function plantRaw(id: string, value: unknown): Promise<void> {
   const promise = getDb();
@@ -205,6 +204,38 @@ describe('creature library storage', () => {
 
       const stored = await loadOrThrow();
       expect(stored.find((c) => c.id === 'empty')).toBeDefined();
+    });
+
+    it('returns droppedLegacy count so callers can surface a recovery prompt', async () => {
+      const legacyA = {
+        ...makeCreature({ id: 'a', name: 'A' }),
+        immunities: ['fire']
+      };
+      const legacyB = {
+        ...makeCreature({ id: 'b', name: 'B' }),
+        immunities: ['cold']
+      };
+      const modern = makeCreature({
+        id: 'c',
+        immunities: [{ type: 'sleep' }]
+      });
+      await plantRaw('a', legacyA);
+      await plantRaw('b', legacyB);
+      await plantRaw('c', modern);
+
+      const result = await loadCreatures();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.droppedLegacy).toBe(2);
+        expect(result.creatures.map((c) => c.id)).toEqual(['c']);
+      }
+    });
+
+    it('returns droppedLegacy: 0 when nothing legacy is present', async () => {
+      await addCreatures([makeCreature({ id: 'x', immunities: [{ type: 'sleep' }] })]);
+      const result = await loadCreatures();
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.droppedLegacy).toBe(0);
     });
   });
 

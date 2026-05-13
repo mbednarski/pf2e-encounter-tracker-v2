@@ -43,11 +43,17 @@ export function importCreatureFoundryJson(text: string): CreatureImportResult {
     };
   }
 
+  const warningIssues = mapped.warnings.map((message) => ({
+    documentIndex: 0,
+    path: '',
+    message: `Note: ${message}`
+  }));
+
   const validation = validateCreature(mapped.value, 0);
   if (!validation.ok) {
-    return { creatures: [], issues: validation.issues, skipped: [] };
+    return { creatures: [], issues: [...warningIssues, ...validation.issues], skipped: [] };
   }
 
   const creatures: Creature[] = [validation.value];
-  return { creatures, issues: validation.issues, skipped: [] };
+  return { creatures, issues: [...warningIssues, ...validation.issues], skipped: [] };
 }
