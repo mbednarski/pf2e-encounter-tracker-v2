@@ -44,7 +44,7 @@ interface YamlDocument<T> {
 }
 ```
 
-`schemaVersion` is always `1` for V2. Migration code may be stubbed, but no migration behavior is required yet.
+`schemaVersion` accepts `1` (original) or `2` (adds optional adjustment-aware fields — see §7). Version 1 documents continue to load unchanged.
 
 ---
 
@@ -98,3 +98,42 @@ The LLM parser may emit `creature` and `effect-definition` documents together wh
 3. **Effect definition round-trip** - condition, persistent damage, and affliction definitions preserve suggestions, modifiers, traits, and affliction data.
 4. **Multi-document import** - creature plus affliction effect definitions returns all valid documents and per-document validation issues.
 5. **Sensitive data exclusion** - settings and API keys never appear in exported YAML.
+
+---
+
+## 7. Schema v2 — Adjustment-Aware Optional Fields
+
+Version 2 adds optional fields the weak/elite adjustment logic reads so structured save DCs and damage scale correctly. Every field is optional. Documents that omit them behave as v1 did — description prose is shown verbatim and adjustments only shift the flat numbers (AC, saves, Perception, skills, strike modifier, strike damage, HP, spellcasting block DC/attack).
+
+```typescript
+interface Attack {
+  // …existing fields…
+  primaryDamageIndex?: number; // which damage line absorbs the ±2/±4
+}
+
+interface AbilitySave {
+  defense: 'fortitude' | 'reflex' | 'will';
+  dc: number;
+  basic?: boolean;
+}
+
+interface Ability {
+  // …existing fields…
+  save?: AbilitySave;
+  damage?: DamageComponent[];
+  isLimitedUse?: boolean; // true ⇒ ±4 damage instead of ±2
+}
+
+interface SpellEntrySave {
+  defense: 'fortitude' | 'reflex' | 'will';
+  basic?: boolean;
+}
+
+interface SpellListEntry {
+  // …existing fields…
+  save?: SpellEntrySave;
+  damage?: DamageComponent[];
+}
+```
+
+Limited-use is derived for spell entries: cantrips and at-will/constant innate frequencies are *not* limited-use; perDay frequencies and slotted prepared / spontaneous / focus blocks *are*.

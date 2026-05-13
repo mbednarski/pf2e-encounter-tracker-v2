@@ -24,6 +24,7 @@ Active work is grouped into three parallel tracks. Within each track items are d
 - [x] Implement weak/elite template adjustments.
 - [x] Add encounter preparation UI for adding, naming, and ordering combatants.
 - [x] Add basic creature display data on combatants.
+- [x] Creature adjustments redesign: snapshot + derive on read; structured optional fields (`save`, `damage`, `isLimitedUse`, `primaryDamageIndex`) under YAML `schemaVersion: 2`; mid-encounter `SET_TEMPLATE_ADJUSTMENT` toggle. (Spec: `docs/superpowers/specs/2026-05-13-creature-adjustments-design.md`.)
 
 ## M2 Initiative and Combat State
 
