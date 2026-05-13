@@ -1,4 +1,5 @@
 import type { CombatantId, CombatantState, EncounterState } from './types';
+import { getEffectiveLevel } from './creatures/adjusted-view';
 
 export type EncounterDifficulty = 'Trivial' | 'Low' | 'Moderate' | 'Severe' | 'Extreme';
 
@@ -112,7 +113,7 @@ export function classifyDifficulty(
 }
 
 function effectiveCreatureLevel(c: CombatantState): number | null {
-  return c.level ?? null;
+  return getEffectiveLevel(c.baseSnapshot.level, c.templateAdjustment ?? 'normal');
 }
 
 export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
@@ -121,7 +122,7 @@ export function computeEncounterXP(state: EncounterState): EncounterXPSummary {
   const partyMembers = combatants.filter((c) => c.sourceType === 'partyMember');
   const partySize = partyMembers.length;
   const partyLevels = partyMembers
-    .map((c) => c.level)
+    .map((c) => c.baseSnapshot.level)
     .filter((lvl): lvl is number => typeof lvl === 'number');
   const partyLevel = partyLevels.length > 0 ? Math.max(...partyLevels) : null;
 

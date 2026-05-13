@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Command, CombatantState, Creature, Duration, LogEntry, PartyMember, PromptResolution } from '../domain';
-  import { computeEncounterXP } from '../domain';
+  import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
@@ -593,7 +593,7 @@
     if (!combatant) return;
     const intent = resolveHpEdit(field, parsed, {
       hp: combatant.currentHp,
-      maxHp: combatant.baseStats.hp,
+      maxHp: getAdjustedView(combatant).hp,
       tempHp: combatant.tempHp
     });
     if (!intent) return;
@@ -987,6 +987,10 @@
         onRestoreFocusPoint={restoreFocusPoint}
         onUseInnateSpell={useInnateSpell}
         onRestoreInnateSpell={restoreInnateSpell}
+        onSetAdjustment={(combatantId, adjustment) =>
+          runCommand(
+            toCommand('SET_TEMPLATE_ADJUSTMENT', { combatantId, adjustment }, nextCommandId())
+          )}
       />
     </aside>
 
@@ -1000,7 +1004,7 @@
   <RadialConditionMenu
     combatantId={radialCombatant.id}
     combatantName={radialCombatant.name}
-    combatantHpLabel={`${radialCombatant.currentHp}/${radialCombatant.baseStats.hp} HP`}
+    combatantHpLabel={`${radialCombatant.currentHp}/${getAdjustedView(radialCombatant).hp} HP`}
     anchor={radialAnchor}
     recentOptions={radialRecentOptions}
     appliedCount={radialRemovable.length}
@@ -1025,7 +1029,7 @@
 {#if effectModal && effectModalCombatant}
   <EffectModal
     combatantName={effectModalCombatant.name}
-    combatantHpLabel={`${effectModalCombatant.currentHp}/${effectModalCombatant.baseStats.hp} HP`}
+    combatantHpLabel={`${effectModalCombatant.currentHp}/${getAdjustedView(effectModalCombatant).hp} HP`}
     initialTab={effectModal.tab}
     appliedEffects={effectModalApplied}
     {conditionGroups}

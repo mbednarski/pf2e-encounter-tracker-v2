@@ -117,7 +117,7 @@ describe('CombatantCard initiative control', () => {
 
   test('PREPARING: shows initiative input, Roll button, and perception hint', () => {
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.perception = 5;
+    c.baseSnapshot.perception = 5;
     render(CombatantCard, { props: withInitiative({ combatant: c }) });
 
     expect(screen.getByRole('spinbutton', { name: 'Initiative for Goblin Warrior' })).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe('CombatantCard initiative control', () => {
 
   test('Roll button rolls 1d20 + perception and dispatches onSetInitiative', async () => {
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.perception = 7;
+    c.baseSnapshot.perception = 7;
     const onSetInitiative = vi.fn();
     const spy = vi.spyOn(Math, 'random').mockReturnValue(0.5); // floor(0.5*20)+1 = 11
     try {
@@ -179,7 +179,7 @@ describe('CombatantCard initiative control', () => {
 
   test('negative perception is rendered with explicit minus sign', () => {
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.perception = -1;
+    c.baseSnapshot.perception = -1;
     render(CombatantCard, { props: withInitiative({ combatant: c }) });
     expect(screen.getByText('(-1 Perception)')).toBeInTheDocument();
   });
@@ -228,9 +228,9 @@ describe('CombatantCard faction styling', () => {
 describe('CombatantCard save rolls', () => {
   test('renders a button per save with signed modifier', () => {
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.fortitude = 12;
-    c.baseStats.reflex = 9;
-    c.baseStats.will = -1;
+    c.baseSnapshot.fortitude = 12;
+    c.baseSnapshot.reflex = 9;
+    c.baseSnapshot.will = -1;
     render(CombatantCard, { props: baseProps({ combatant: c }) });
 
     const fort = screen.getByRole('button', {
@@ -255,7 +255,7 @@ describe('CombatantCard save rolls', () => {
   test('clicking a save button forwards onRollSave with combatant id, save key, and click origin', async () => {
     const onRollSave = vi.fn();
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.reflex = 7;
+    c.baseSnapshot.reflex = 7;
     render(CombatantCard, { props: baseProps({ combatant: c, onRollSave }) });
 
     await fireEvent.click(
@@ -271,7 +271,7 @@ describe('CombatantCard save rolls', () => {
     const onSelect = vi.fn();
     const onRollSave = vi.fn();
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.fortitude = 5;
+    c.baseSnapshot.fortitude = 5;
     render(CombatantCard, { props: baseProps({ combatant: c, onSelect, onRollSave }) });
 
     await fireEvent.click(
@@ -300,10 +300,10 @@ describe('CombatantCard conditions modify stats', () => {
 
   test('Frightened 2: AC = base − 2 and save buttons drop by 2', () => {
     const c = withFrightened(2);
-    c.baseStats.ac = 18;
-    c.baseStats.fortitude = 9;
-    c.baseStats.reflex = 8;
-    c.baseStats.will = 7;
+    c.baseSnapshot.ac = 18;
+    c.baseSnapshot.fortitude = 9;
+    c.baseSnapshot.reflex = 8;
+    c.baseSnapshot.will = 7;
     const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
 
     const acValue = container.querySelector('.stat-readout__value');
@@ -322,7 +322,7 @@ describe('CombatantCard conditions modify stats', () => {
         { instanceId: 'og-1', effectId: 'off-guard', duration: { type: 'unlimited' } }
       ]
     });
-    c.baseStats.ac = 18;
+    c.baseSnapshot.ac = 18;
     const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
 
     const acValue = container.querySelector('.stat-readout__value');
@@ -337,7 +337,7 @@ describe('CombatantCard conditions modify stats', () => {
         { instanceId: 'og-1', effectId: 'off-guard', duration: { type: 'unlimited' } }
       ]
     });
-    c.baseStats.ac = 18;
+    c.baseSnapshot.ac = 18;
     const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
 
     const acValue = container.querySelector('.stat-readout__value');
@@ -352,7 +352,7 @@ describe('CombatantCard conditions modify stats', () => {
         { instanceId: 'sk-1', effectId: 'sickened', value: 2, duration: { type: 'unlimited' } }
       ]
     });
-    c.baseStats.ac = 18;
+    c.baseSnapshot.ac = 18;
     const { container } = render(CombatantCard, { props: baseProps({ combatant: c }) });
 
     const acValue = container.querySelector('.stat-readout__value');
@@ -361,7 +361,7 @@ describe('CombatantCard conditions modify stats', () => {
 
   test('Roll initiative uses computed perception (Frightened 2 → die + perception − 2)', async () => {
     const c = combatant('goblin-1', { name: 'Goblin Warrior' });
-    c.baseStats.perception = 7;
+    c.baseSnapshot.perception = 7;
     c.appliedEffects = [
       { instanceId: 'fr-1', effectId: 'frightened', value: 2, duration: { type: 'unlimited' } }
     ];

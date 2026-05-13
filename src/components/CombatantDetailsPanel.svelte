@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Ability, Attack, CombatantState, ComputedStats } from '../domain';
+  import type { Ability, Attack, CombatantState, ComputedStats, TemplateAdjustment } from '../domain';
+  import { adjustedAbility, adjustedAttack, adjustedSpellBlock, getAdjustedView } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
   import {
@@ -42,17 +43,26 @@
   export let onRestoreFocusPoint: (combatantId: string, blockId: string) => void = () => {};
   export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
+  export let onSetAdjustment: (combatantId: string, adjustment: TemplateAdjustment) => void = () => {};
 
-  function templateChipVariant(adjustment: 'elite' | 'weak' | undefined) {
+  const ADJUSTMENT_OPTIONS: TemplateAdjustment[] = ['weak', 'normal', 'elite'];
+  const ADJUSTMENT_LABEL: Record<TemplateAdjustment, string> = {
+    weak: 'Weak',
+    normal: 'Normal',
+    elite: 'Elite'
+  };
+
+  function templateChipVariant(adjustment: TemplateAdjustment | undefined) {
     if (adjustment === 'elite') return 'warning';
     if (adjustment === 'weak') return 'pc';
     return 'default';
   }
 
   $: badgeLabel = combatant ? templateLabel(combatant.templateAdjustment) : '';
+  $: adjustedView = combatant ? getAdjustedView(combatant) : null;
   $: subtitle = combatant
     ? [
-        combatant.level !== undefined ? `Level ${combatant.level}` : null,
+        adjustedView ? `Level ${adjustedView.level}` : null,
         ...(combatant.traits ?? [])
       ]
         .filter(Boolean)
@@ -60,6 +70,28 @@
     : '';
 
   $: computed = combatant ? computeCombatantStats(combatant) : null;
+  $: adjustment = combatant?.templateAdjustment ?? 'normal';
+  $: adjustedAttacks = combatant ? combatant.attacks.map((a) => adjustedAttack(a, adjustment)) : [];
+  $: adjustedPassive = combatant
+    ? combatant.passiveAbilities.map((a) => adjustedAbility(a, adjustment))
+    : [];
+  $: adjustedReactive = combatant
+    ? combatant.reactiveAbilities.map((a) => adjustedAbility(a, adjustment))
+    : [];
+  $: adjustedActive = combatant
+    ? combatant.activeAbilities.map((a) => adjustedAbility(a, adjustment))
+    : [];
+  $: adjustedSpellcasting = combatant?.spellcasting
+    ? combatant.spellcasting.map((block) => {
+        const view = adjustedSpellBlock(block, adjustment);
+        return {
+          ...view,
+          usedSlots: block.usedSlots,
+          usedFocusPoints: block.usedFocusPoints,
+          usedEntries: block.usedEntries
+        };
+      })
+    : undefined;
 
   function statTooltip(stat: ComputedStats['ac']): string {
     return formatStatTooltip(stat.base, stat.final, stat.modifiers);
@@ -87,6 +119,23 @@
       {#if subtitle}
         <div class="details__subtitle">{subtitle}</div>
       {/if}
+      {#if combatant.sourceType === 'creature'}
+        <div
+          class="details__adjustment"
+          role="group"
+          aria-label="Template adjustment"
+        >
+          {#each ADJUSTMENT_OPTIONS as opt (opt)}
+            <button
+              type="button"
+              class="details__adjustment-opt"
+              class:details__adjustment-opt--active={adjustment === opt}
+              aria-pressed={adjustment === opt}
+              onclick={() => onSetAdjustment(combatant.id, opt)}
+            >{ADJUSTMENT_LABEL[opt]}</button>
+          {/each}
+        </div>
+      {/if}
     </header>
 
     <section class="details__section" aria-label="Defenses">
@@ -97,12 +146,12 @@
           <dd
             title={computed ? statTooltip(computed.ac) : ''}
             class:modified={computed && computed.ac.final !== computed.ac.base}
-          >{computed ? computed.ac.final : combatant.baseStats.ac}</dd>
+          >{computed ? computed.ac.final : adjustedView!.ac}</dd>
         </div>
         <div class="stat">
           <SectionLabel>HP</SectionLabel>
           <dd>
-            {combatant.currentHp}<span class="muted">/{combatant.baseStats.hp}</span>
+            {combatant.currentHp}<span class="muted">/{adjustedView!.hp}</span>
             {#if combatant.tempHp > 0}<span class="temp">+{combatant.tempHp} temp</span>{/if}
           </dd>
         </div>
@@ -111,37 +160,37 @@
           <dd
             title={computed ? statTooltip(computed.perception) : ''}
             class:modified={computed && computed.perception.final !== computed.perception.base}
-          >{formatModifier(computed ? computed.perception.final : combatant.baseStats.perception)}</dd>
+          >{formatModifier(computed ? computed.perception.final : adjustedView!.perception)}</dd>
         </div>
         <div class="stat">
           <SectionLabel>Speed</SectionLabel>
-          <dd>{combatant.baseStats.speed} ft</dd>
+          <dd>{adjustedView!.speed} ft</dd>
         </div>
       </dl>
       <div class="saves-grid">
         <StatRollButton
           label="Fort"
-          modifier={computed ? computed.fortitude.final : combatant.baseStats.fortitude}
+          modifier={computed ? computed.fortitude.final : adjustedView!.fortitude}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed ? computed.fortitude.final : combatant.baseStats.fortitude)})`}
+          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed ? computed.fortitude.final : adjustedView!.fortitude)})`}
           breakdownTitle={computed ? statTooltip(computed.fortitude) : undefined}
           modified={!!computed && computed.fortitude.final !== computed.fortitude.base}
           onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
         />
         <StatRollButton
           label="Ref"
-          modifier={computed ? computed.reflex.final : combatant.baseStats.reflex}
+          modifier={computed ? computed.reflex.final : adjustedView!.reflex}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed ? computed.reflex.final : combatant.baseStats.reflex)})`}
+          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed ? computed.reflex.final : adjustedView!.reflex)})`}
           breakdownTitle={computed ? statTooltip(computed.reflex) : undefined}
           modified={!!computed && computed.reflex.final !== computed.reflex.base}
           onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
         />
         <StatRollButton
           label="Will"
-          modifier={computed ? computed.will.final : combatant.baseStats.will}
+          modifier={computed ? computed.will.final : adjustedView!.will}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed ? computed.will.final : combatant.baseStats.will)})`}
+          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed ? computed.will.final : adjustedView!.will)})`}
           breakdownTitle={computed ? statTooltip(computed.will) : undefined}
           modified={!!computed && computed.will.final !== computed.will.base}
           onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}
@@ -149,33 +198,33 @@
       </div>
     </section>
 
-    {#if combatant.passiveAbilities.length > 0}
+    {#if adjustedPassive.length > 0}
       <section class="details__section" aria-label="Passive Abilities">
         <SectionLabel as="h3">Passive Abilities</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.passiveAbilities as ability, i (i)}
+          {#each adjustedPassive as ability, i (i)}
             <li><AbilityCard ability={ability as Ability} /></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#if combatant.reactiveAbilities.length > 0}
+    {#if adjustedReactive.length > 0}
       <section class="details__section" aria-label="Reactive Abilities">
         <SectionLabel as="h3">Reactive Abilities</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.reactiveAbilities as ability, i (i)}
+          {#each adjustedReactive as ability, i (i)}
             <li><AbilityCard ability={ability as Ability} /></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#if combatant.attacks.length > 0}
+    {#if adjustedAttacks.length > 0}
       <section class="details__section" aria-label="Attacks">
         <SectionLabel as="h3">Attacks</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.attacks as attack, i (i)}
+          {#each adjustedAttacks as attack, i (i)}
             <li>
               <AttackRow
                 attack={attack as Attack}
@@ -196,22 +245,22 @@
       </section>
     {/if}
 
-    {#if combatant.activeAbilities.length > 0}
+    {#if adjustedActive.length > 0}
       <section class="details__section" aria-label="Active Abilities">
         <SectionLabel as="h3">Active Abilities</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.activeAbilities as ability, i (i)}
+          {#each adjustedActive as ability, i (i)}
             <li><AbilityCard ability={ability as Ability} /></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#if combatant.spellcasting && combatant.spellcasting.length > 0}
+    {#if adjustedSpellcasting && adjustedSpellcasting.length > 0}
       <section class="details__section" aria-label="Spellcasting">
         <SectionLabel as="h3">Spellcasting</SectionLabel>
         <div class="spellcasting-stack">
-          {#each combatant.spellcasting as block, i (i)}
+          {#each adjustedSpellcasting as block, i (i)}
             <SpellcastingBlockView
               {block}
               dcBonus={computed ? computed.spellDcs.total : 0}
@@ -269,6 +318,47 @@
     padding: var(--space-4);
     background: var(--color-panel-2);
     border-bottom: var(--border-thin);
+  }
+
+  .details__adjustment {
+    margin-top: var(--space-2);
+    display: inline-flex;
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .details__adjustment-opt {
+    background: transparent;
+    color: var(--color-ink-mute);
+    border: 0;
+    border-left: var(--border-thin);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .details__adjustment-opt:first-child {
+    border-left: 0;
+  }
+
+  .details__adjustment-opt:hover {
+    color: var(--color-ink);
+  }
+
+  .details__adjustment-opt--active {
+    background: var(--color-ink);
+    color: var(--color-panel);
+  }
+
+  .details__adjustment-opt:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: -2px;
   }
 
   .details__title {

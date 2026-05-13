@@ -23,12 +23,12 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<YamlDocumentKind>([
 
 const ENVELOPE_FIELDS: ReadonlySet<string> = new Set(['kind', 'schemaVersion', 'data']);
 
-const SUPPORTED_SCHEMA_VERSION = 1;
+const SUPPORTED_SCHEMA_VERSIONS = new Set<number>([1, 2]);
 
 export interface ParsedEnvelope<K extends YamlDocumentKind = YamlDocumentKind> {
   documentIndex: number;
   kind: K;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   data: unknown;
 }
 
@@ -162,7 +162,7 @@ export function parseYamlEnvelopes(text: string): EnvelopeParseResult {
         path: 'schemaVersion',
         message: '`schemaVersion` is required'
       });
-    } else if (versionValue !== SUPPORTED_SCHEMA_VERSION) {
+    } else if (typeof versionValue !== 'number' || !SUPPORTED_SCHEMA_VERSIONS.has(versionValue)) {
       docIssues.push({
         documentIndex: i,
         path: 'schemaVersion',
@@ -196,7 +196,7 @@ export function parseYamlEnvelopes(text: string): EnvelopeParseResult {
     envelopes.push({
       documentIndex: i,
       kind: kindValue as YamlDocumentKind,
-      schemaVersion: SUPPORTED_SCHEMA_VERSION,
+      schemaVersion: versionValue as 1 | 2,
       data: raw.data
     });
   }

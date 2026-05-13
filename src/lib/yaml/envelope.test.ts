@@ -74,7 +74,7 @@ data:
 
   it('rejects unsupported schemaVersion with an issue', () => {
     const text = `kind: creature
-schemaVersion: 2
+schemaVersion: 99
 data:
   id: x
 `;
@@ -84,6 +84,18 @@ data:
     expect(result.issues.some((i) => i.path === 'schemaVersion' && /unsupported/i.test(i.message))).toBe(
       true
     );
+  });
+
+  it('accepts schemaVersion: 2 alongside v1', () => {
+    const text = `kind: creature
+schemaVersion: 2
+data:
+  id: x
+`;
+    const result = parseYamlEnvelopes(text);
+    expect(result.issues).toEqual([]);
+    expect(result.envelopes).toHaveLength(1);
+    expect(result.envelopes[0].schemaVersion).toBe(2);
   });
 
   it('rejects schemaVersion as a string (must be the numeric literal 1)', () => {

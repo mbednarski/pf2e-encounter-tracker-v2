@@ -96,6 +96,8 @@ export interface FoundrySpellSystem {
   traits?: { value?: string[]; traditions?: string[] };
   time?: { value?: string };
   range?: { value?: string } | string;
+  damage?: Record<string, { damage?: string; damageType?: string }>;
+  defense?: { save?: { statistic?: 'fortitude' | 'reflex' | 'will'; basic?: boolean } };
 }
 
 export interface FoundryActionSystem {
@@ -105,6 +107,8 @@ export interface FoundryActionSystem {
   traits?: { value?: string[] };
   description?: { value?: string };
   frequency?: { max?: number; per?: string };
+  damageRolls?: Record<string, { damage?: string; damageType?: string; category?: string | null }>;
+  savingThrow?: { statistic?: 'fortitude' | 'reflex' | 'will'; dc?: number; basic?: boolean };
 }
 
 interface FoundryItemBase {

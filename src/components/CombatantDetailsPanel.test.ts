@@ -23,12 +23,87 @@ describe('CombatantDetailsPanel', () => {
   test('renders header with name and no template badge by default', () => {
     renderPanel(combatant('goblin-1', { name: 'Goblin Warrior' }));
     expect(screen.getByRole('heading', { level: 2, name: 'Goblin Warrior' })).toBeInTheDocument();
-    expect(screen.queryByText(/Elite|Weak|Normal/)).not.toBeInTheDocument();
+    // No chip in the title row; the adjustment toggle still exists.
+    const title = screen.getByRole('heading', { level: 2, name: 'Goblin Warrior' }).parentElement!;
+    expect(title.textContent?.trim()).toBe('Goblin Warrior');
   });
 
   test('renders Elite badge when templateAdjustment is elite', () => {
     renderPanel(combatant('goblin-1', { name: 'Goblin', templateAdjustment: 'elite' }));
-    expect(screen.getByText('Elite')).toBeInTheDocument();
+    // The badge is a Chip; the adjustment toggle also has a button labeled Elite,
+    // so scope the lookup to the title row.
+    const title = screen.getByRole('heading', { level: 2, name: 'Goblin' }).parentElement!;
+    expect(title.textContent).toContain('Elite');
+  });
+
+  test('renders adjusted attack modifier and damage for an elite combatant', () => {
+    renderPanel(
+      combatant('goblin-1', {
+        templateAdjustment: 'elite',
+        attacks: [
+          {
+            name: 'Claw',
+            type: 'melee',
+            modifier: 10,
+            traits: [],
+            damage: [{ dice: 1, dieSize: 6, bonus: 3, type: 'slashing' }]
+          }
+        ]
+      })
+    );
+    // base +10 → elite +12, damage 1d6+3 → 1d6+5
+    expect(screen.getByRole('button', { name: 'Roll Claw 1st attack (+12)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Claw damage (1d6+5 slashing)' })).toBeInTheDocument();
+  });
+
+  test('renders adjusted structured save DC on an elite ability', () => {
+    renderPanel(
+      combatant('basilisk-1', {
+        templateAdjustment: 'elite',
+        activeAbilities: [
+          {
+            name: 'Petrifying Gaze',
+            actions: 2,
+            description: 'Targets within 30 feet must save.',
+            save: { defense: 'fortitude', dc: 22 }
+          }
+        ]
+      })
+    );
+    // DC 22 → 24 (elite)
+    expect(screen.getByText(/DC 24 Fort/)).toBeInTheDocument();
+  });
+
+  test('clicking the Elite button fires onSetAdjustment with the combatant id', async () => {
+    const onSetAdjustment = vi.fn();
+    renderPanel(combatant('goblin-1', { name: 'Goblin' }), { onSetAdjustment });
+    const eliteBtn = screen.getByRole('button', { name: 'Elite' });
+    eliteBtn.click();
+    expect(onSetAdjustment).toHaveBeenCalledWith('goblin-1', 'elite');
+  });
+
+  test('toggle is hidden for party-member combatants', () => {
+    renderPanel(combatant('lyra-1', { name: 'Lyra', sourceType: 'partyMember' }));
+    expect(screen.queryByRole('group', { name: 'Template adjustment' })).toBeNull();
+  });
+
+  test('renders ±4 damage on a limited-use elite ability', () => {
+    renderPanel(
+      combatant('dragon-1', {
+        templateAdjustment: 'elite',
+        activeAbilities: [
+          {
+            name: 'Breath Weapon',
+            actions: 2,
+            description: '6d6 fire.',
+            damage: [{ dice: 6, dieSize: 6, type: 'fire' }],
+            isLimitedUse: true
+          }
+        ]
+      })
+    );
+    // 6d6 → 6d6+4 (limited-use elite)
+    expect(screen.getByText(/6d6\+4 fire/)).toBeInTheDocument();
   });
 
   test('renders defenses block with HP, AC, saves, perception, speed', () => {
@@ -36,7 +111,8 @@ describe('CombatantDetailsPanel', () => {
       combatant('goblin-1', {
         currentHp: 12,
         tempHp: 0,
-        baseStats: {
+        baseSnapshot: {
+          level: 1,
           hp: 18,
           ac: 17,
           fortitude: 5,

@@ -57,7 +57,8 @@ export function combatant(id: string, overrides: Partial<CombatantState> = {}): 
     sourceId: `${id}-creature`,
     name: id,
     sourceType: 'creature',
-    baseStats: {
+    baseSnapshot: {
+      level: 1,
       hp: 20,
       ac: 16,
       fortitude: 7,
@@ -67,6 +68,7 @@ export function combatant(id: string, overrides: Partial<CombatantState> = {}): 
       speed: 25,
       skills: {}
     },
+    templateAdjustment: 'normal',
     currentHp: 20,
     tempHp: 0,
     appliedEffects: [],

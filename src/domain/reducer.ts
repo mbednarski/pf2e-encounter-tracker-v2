@@ -18,9 +18,11 @@ import type {
   PromptBoundary,
   PromptResolution,
   RestoreSpellSlotPayload,
+  TemplateAdjustment,
   TurnBoundarySuggestion,
   UseSpellSlotPayload
 } from './types';
+import { getAdjustedView } from './creatures/adjusted-view';
 
 const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   START_ENCOUNTER: ['PREPARING'],
@@ -59,7 +61,8 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   RESET_REACTION: ['ACTIVE', 'RESOLVING'],
   SET_NOTE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   MARK_DEAD: ['PREPARING', 'ACTIVE', 'RESOLVING'],
-  REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING']
+  REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
+  SET_TEMPLATE_ADJUSTMENT: ['PREPARING', 'ACTIVE', 'RESOLVING']
 };
 
 export function applyCommand(state: EncounterState, command: Command, effectLibrary: EffectLibrary): CommandResult {
@@ -137,6 +140,8 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
       return useInnateSpell(state, command.payload);
     case 'RESTORE_INNATE_SPELL':
       return restoreInnateSpell(state, command.payload);
+    case 'SET_TEMPLATE_ADJUSTMENT':
+      return setTemplateAdjustment(state, command.payload.combatantId, command.payload.adjustment);
     default:
       return reject(state, command.type, `${command.type} is not implemented in the first domain slice`);
   }
@@ -818,7 +823,7 @@ function resetEncounter(state: EncounterState): CommandResult {
       combatantId,
       {
         ...combatant,
-        currentHp: combatant.baseStats.hp,
+        currentHp: getAdjustedView(combatant).hp,
         tempHp: 0,
         appliedEffects: [],
         reactionUsedThisRound: false,
@@ -881,7 +886,7 @@ function applyHealing(state: EncounterState, combatantId: CombatantId, amount: n
     return reject(state, 'APPLY_HEALING', `Combatant ${combatantId} not found`);
   }
 
-  const nextHp = Math.min(combatant.currentHp + amount, combatant.baseStats.hp);
+  const nextHp = Math.min(combatant.currentHp + amount, getAdjustedView(combatant).hp);
 
   return updateHp(state, combatant, nextHp, combatant.tempHp, {
     type: 'hp-changed',
@@ -1687,6 +1692,51 @@ function revive(state: EncounterState, combatantId: CombatantId): CommandResult 
   }
 
   return updateCombatant(state, { ...combatant, isAlive: true }, [{ type: 'combatant-revived', combatantId }]);
+}
+
+function setTemplateAdjustment(
+  state: EncounterState,
+  combatantId: CombatantId,
+  adjustment: TemplateAdjustment
+): CommandResult {
+  const target = state.combatants[combatantId];
+  if (!target) {
+    return reject(state, 'SET_TEMPLATE_ADJUSTMENT', `Combatant ${combatantId} not found`);
+  }
+  if (target.sourceType !== 'creature') {
+    return reject(
+      state,
+      'SET_TEMPLATE_ADJUSTMENT',
+      `Combatant ${combatantId} is not a creature (sourceType=${target.sourceType})`
+    );
+  }
+  const from: TemplateAdjustment = target.templateAdjustment ?? 'normal';
+  if (from === adjustment) {
+    return { newState: state, events: [] };
+  }
+
+  const hpMaxFrom = getAdjustedView(target).hp;
+  const next: CombatantState = { ...target, templateAdjustment: adjustment };
+  const hpMaxTo = getAdjustedView(next).hp;
+  const currentHpFrom = target.currentHp;
+  const currentHpTo = Math.min(target.currentHp, hpMaxTo);
+  const updated: CombatantState = { ...next, currentHp: currentHpTo };
+
+  return {
+    newState: { ...state, combatants: { ...state.combatants, [combatantId]: updated } },
+    events: [
+      {
+        type: 'template-adjustment-changed',
+        combatantId,
+        from,
+        to: adjustment,
+        hpMaxFrom,
+        hpMaxTo,
+        currentHpFrom,
+        currentHpTo
+      }
+    ]
+  };
 }
 
 interface SpellLookup {

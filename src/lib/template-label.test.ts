@@ -10,8 +10,8 @@ describe('templateLabel', () => {
     expect(templateLabel('weak')).toBe('Weak');
   });
 
-  test('returns "Normal" for explicit normal adjustment', () => {
-    expect(templateLabel('normal')).toBe('Normal');
+  test('returns empty string for normal adjustment (Normal is the default; no chip)', () => {
+    expect(templateLabel('normal')).toBe('');
   });
 
   test('returns empty string for undefined', () => {
