@@ -2993,3 +2993,101 @@ describe('spellcasting commands', () => {
     expectSerializable(result.newState);
   });
 });
+
+describe('SET_TEMPLATE_ADJUSTMENT', () => {
+  function eliteState() {
+    const goblin = combatant('goblin-1', {
+      baseSnapshot: { level: 1, hp: 18, ac: 16, fortitude: 6, reflex: 8, will: 5, perception: 7, speed: 25, skills: {} },
+      currentHp: 18
+    });
+    return encounter({ combatants: { 'goblin-1': goblin } });
+  }
+
+  test('normal → elite grows max HP, leaves current HP unchanged, emits event', () => {
+    const state = eliteState();
+    const result = applyCommand(
+      state,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'goblin-1', adjustment: 'elite' }),
+      emptyEffects
+    );
+    const c = result.newState.combatants['goblin-1'];
+    expect(c.templateAdjustment).toBe('elite');
+    expect(c.currentHp).toBe(18);
+    expect(result.events).toEqual([
+      {
+        type: 'template-adjustment-changed',
+        combatantId: 'goblin-1',
+        from: 'normal',
+        to: 'elite',
+        hpMaxFrom: 18,
+        hpMaxTo: 28,
+        currentHpFrom: 18,
+        currentHpTo: 18
+      }
+    ]);
+  });
+
+  test('normal → weak shrinks max HP and clamps current HP', () => {
+    const state = eliteState();
+    const result = applyCommand(
+      state,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'goblin-1', adjustment: 'weak' }),
+      emptyEffects
+    );
+    const c = result.newState.combatants['goblin-1'];
+    expect(c.templateAdjustment).toBe('weak');
+    expect(c.currentHp).toBe(8); // base 18 - weakHpDecrease(1) of 10 = 8, current 18 clamped
+  });
+
+  test('elite → weak recomputes from base level (not compounded)', () => {
+    const initial = eliteState();
+    const elite = applyCommand(
+      initial,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'goblin-1', adjustment: 'elite' }),
+      emptyEffects
+    ).newState;
+    const weak = applyCommand(
+      elite,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'goblin-1', adjustment: 'weak' }),
+      emptyEffects
+    ).newState;
+    expect(weak.combatants['goblin-1'].templateAdjustment).toBe('weak');
+    expect(weak.combatants['goblin-1'].currentHp).toBe(8); // recomputed from base 18
+  });
+
+  test('rejects party-member combatants', () => {
+    const member = combatant('lyra-1', { sourceType: 'partyMember' });
+    const state = encounter({ combatants: { 'lyra-1': member } });
+    const result = applyCommand(
+      state,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'lyra-1', adjustment: 'elite' }),
+      emptyEffects
+    );
+    expectRejected(
+      result,
+      'SET_TEMPLATE_ADJUSTMENT',
+      'Combatant lyra-1 is not a creature (sourceType=partyMember)'
+    );
+  });
+
+  test('no-op when the adjustment is unchanged', () => {
+    const state = eliteState();
+    const result = applyCommand(
+      state,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'goblin-1', adjustment: 'normal' }),
+      emptyEffects
+    );
+    expect(result.events).toEqual([]);
+    expect(result.newState).toBe(state);
+  });
+
+  test('rejects unknown combatant', () => {
+    const state = eliteState();
+    const result = applyCommand(
+      state,
+      command('SET_TEMPLATE_ADJUSTMENT', { combatantId: 'ghost', adjustment: 'elite' }),
+      emptyEffects
+    );
+    expectRejected(result, 'SET_TEMPLATE_ADJUSTMENT', 'Combatant ghost not found');
+  });
+});
