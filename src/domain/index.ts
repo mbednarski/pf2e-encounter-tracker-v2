@@ -19,6 +19,7 @@ export type {
 } from './encounter-xp';
 export type {
   Ability,
+  AbilityScores,
   AppliedModifier,
   AppliedEffect,
   Attack,
@@ -37,6 +38,7 @@ export type {
   ComputedStats,
   Creature,
   CreatureBaseStats,
+  CreatureImmunity,
   CreatureRarity,
   CreatureSize,
   DamageComponent,
@@ -48,6 +50,7 @@ export type {
   EncounterPhase,
   EncounterState,
   InitiativeState,
+  Languages,
   LogEntry,
   LogEntryTone,
   Modifier,
@@ -58,6 +61,8 @@ export type {
   PromptResolution,
   RemoveEffectPayload,
   ResolvePromptPayload,
+  Sense,
+  SenseAcuity,
   SetEffectDurationPayload,
   SetEffectValuePayload,
   SourceType,

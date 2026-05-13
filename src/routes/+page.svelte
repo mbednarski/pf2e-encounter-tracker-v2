@@ -72,6 +72,7 @@
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
   import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
+  import { importCreatureFoundryJson } from '$lib/foundry';
 
   const conditionOptions = listConditionOptions();
   const conditionGroups = groupConditionsByCategory();
@@ -186,6 +187,14 @@
     }
     if (loadResult.ok) {
       storedCreatures = loadResult.creatures;
+      if (loadResult.droppedLegacy > 0) {
+        const n = loadResult.droppedLegacy;
+        appendFeedback(
+          nextFeedbackId('legacy-drop'),
+          `Dropped ${n} creature${n === 1 ? '' : 's'} from a previous version of the schema. Re-import the YAML or JSON to recover ${n === 1 ? 'it' : 'them'}.`,
+          'info'
+        );
+      }
     } else {
       appendFeedback(
         nextFeedbackId('library-load-fail'),
@@ -295,7 +304,7 @@
     runCommand(toCommand('REMOVE_COMBATANT', { combatantId: target.id }, nextCommandId()));
   }
 
-  async function handleImportYamlFiles(files: File[]) {
+  async function handleImportCreatureFiles(files: File[]) {
     for (const file of files) {
       let text: string;
       try {
@@ -308,11 +317,24 @@
         continue;
       }
 
+      const lower = file.name.toLowerCase();
+      const isJson = lower.endsWith('.json');
+      const isYaml = lower.endsWith('.yaml') || lower.endsWith('.yml');
+      if (!isJson && !isYaml) {
+        appendFeedback(
+          nextFeedbackId('import-bad-ext'),
+          `"${file.name}": unsupported file type. Use .yaml, .yml, or .json.`
+        );
+        continue;
+      }
+
       let creatures: Creature[];
       let issues: ReturnType<typeof importCreatureYaml>['issues'];
       let skipped: ReturnType<typeof importCreatureYaml>['skipped'];
       try {
-        ({ creatures, issues, skipped } = importCreatureYaml(text));
+        ({ creatures, issues, skipped } = isJson
+          ? importCreatureFoundryJson(text)
+          : importCreatureYaml(text));
       } catch (err) {
         appendFeedback(
           nextFeedbackId('import-fail'),
@@ -886,7 +908,7 @@
         onAddOneFromBestiary={handleAddOneFromBestiary}
         onRemoveOneFromBestiaryCount={handleRemoveOneFromBestiaryCount}
         onAddManual={handleAddManual}
-        onImportYamlFiles={handleImportYamlFiles}
+        onImportCreatureFiles={handleImportCreatureFiles}
         onRemoveCreature={handleRemoveCreature}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}

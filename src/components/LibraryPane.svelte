@@ -18,7 +18,7 @@
   export let onAddOneFromBestiary: (creature: Creature, adjustment: TemplateAdjustmentChoice) => void;
   export let onRemoveOneFromBestiaryCount: (creatureId: string) => void;
   export let onAddManual: (input: Omit<ManualCombatantInput, 'id'>) => void;
-  export let onImportYamlFiles: (files: File[]) => void;
+  export let onImportCreatureFiles: (files: File[]) => void;
   export let onRemoveCreature: (id: string) => void;
   export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
   export let onRemovePartyMember: (id: string) => void;
@@ -47,7 +47,7 @@
     {encounterCounts}
     onAddToEncounter={onAddOneFromBestiary}
     onRemoveOneFromEncounter={onRemoveOneFromBestiaryCount}
-    {onImportYamlFiles}
+    {onImportCreatureFiles}
     onOpenManageLibrary={openManage}
   />
   <PartySection

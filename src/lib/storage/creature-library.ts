@@ -5,7 +5,7 @@ import { CREATURE_LIBRARY_STORE, getDb } from './db';
 export type StorageFailureReason = 'unavailable' | 'failed';
 
 export type LoadCreaturesResult =
-  | { ok: true; creatures: Creature[] }
+  | { ok: true; creatures: Creature[]; droppedLegacy: number }
   | { ok: false; reason: StorageFailureReason; error?: unknown };
 
 export type AddCreaturesResult =
@@ -20,13 +20,22 @@ export type ClearCreaturesResult =
   | { ok: true }
   | { ok: false; reason: StorageFailureReason; error?: unknown };
 
+function hasLegacyImmunityShape(c: Creature): boolean {
+  if (!Array.isArray(c.immunities)) return true;
+  return c.immunities.some((im) => typeof im === 'string' || im == null);
+}
+
 export async function loadCreatures(): Promise<LoadCreaturesResult> {
   const promise = getDb();
   if (!promise) return { ok: false, reason: 'unavailable' };
   try {
     const db = await promise;
     const stored = (await db.getAll(CREATURE_LIBRARY_STORE)) as Creature[];
-    return { ok: true, creatures: stored };
+    // Drop entries whose immunities use the pre-migration string[] shape.
+    // Schema migrated to { type; exceptions? }[]; legacy rows are filtered
+    // here and the caller surfaces the drop count so the user can re-import.
+    const creatures = stored.filter((c) => !hasLegacyImmunityShape(c));
+    return { ok: true, creatures, droppedLegacy: stored.length - creatures.length };
   } catch (error) {
     return { ok: false, reason: 'failed', error };
   }

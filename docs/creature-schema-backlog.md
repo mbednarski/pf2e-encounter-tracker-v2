@@ -9,34 +9,27 @@ Closing a section means: add the field to the schema spec and validator,
 update the `Creature` type and sample creatures, then migrate affected files
 out of `notes` into the new structured field.
 
-## Senses
+## Senses — closed
 
-PF2e creatures often have senses like `darkvision`, `low-light vision`,
-`scent (imprecise) 30 feet`, `tremorsense (precise) 60 feet`. Currently dumped
-into `notes:`.
+Added in the Foundry JSON importer pass. The `Creature.senses?: Sense[]` field
+is now structured as `{ type: string; acuity?: 'precise' | 'imprecise' | 'vague'; range?: number }`,
+matching the Foundry pf2e source schema. Mapper populates it from
+`system.perception.senses[]`.
 
-Suggested encoding: top-level `senses: string[]` for the simple case, or
-`senses: { name: string; range?: number; precision?: 'precise' | 'imprecise' }[]`
-if range and precision matter for the runtime (e.g. for concealment / hidden
-checks).
+## Ability score modifiers — closed
 
-Triggered by:
-- basilisk
-
-## Ability score modifiers
-
-Statblocks list `Str +X, Dex +Y, Con +Z, Int +W, Wis +V, Cha +U`. Currently
-dumped into `notes:`. Useful for skill-check resolution and any ability-score-
-based DC the runtime might compute.
-
-Suggested encoding: top-level `abilityModifiers: { str, dex, con, int, wis, cha: number }`.
-
-Triggered by:
-- basilisk
+Added in the Foundry JSON importer pass. The `Creature.abilities?: AbilityScores`
+field is now structured as `{ str, dex, con, int, wis, cha: number }`. Mapper
+populates it from `system.abilities.<key>.mod`.
 
 ## Immunity classification
 
-Current `immunities: string[]` collapses three semantically distinct
+Note: the Foundry JSON importer pass migrated the wire shape to
+`immunities: { type: string; exceptions?: string[] }[]` — symmetric with
+`resistances` and `weaknesses`. The semantic classification below is still
+open: a single `type` string still collapses three distinct categories.
+
+Current `immunities: CreatureImmunity[]` collapses three semantically distinct
 categories:
 
 - **Condition immunities** (e.g. `petrified`, `paralyzed`, `unconscious`) —
@@ -49,11 +42,34 @@ categories:
 The runtime will need to tell these apart once it starts enforcing immunity
 checks (today the field is informational only).
 
-Suggested encoding: either three arrays
-(`conditionImmunities`, `traitImmunities`, `damageImmunities`) or tagged
-objects
-(`immunities: { kind: 'condition' | 'trait' | 'damage'; name: string }[]`).
-The three-array form is friendlier for hand-editing.
+Suggested encoding: add a `kind: 'condition' | 'trait' | 'damage'` field to
+`CreatureImmunity`, or derive it from a curated list at validation time
+since Foundry already publishes well-formed type strings.
 
 Triggered by:
 - basilisk
+
+## Languages — closed
+
+Added in the Foundry JSON importer pass. The `Creature.languages?: Languages`
+field is now structured as `{ value: string[]; details?: string }`, matching
+the Foundry pf2e source schema. The `details` string carries special
+communication notes like `telepathy 100 feet`.
+
+## Items
+
+Statblocks list an `Items` line (e.g. `religious symbol of Zevgavizeb,
++1 striking spiked gauntlet`, `breastplate, longsword, key`). Currently
+dumped into `notes:`. Mostly flavor and loot tracking; mechanical effects
+(weapon enhancement, armor) are already baked into the published AC,
+attack modifiers, and damage, so this is primarily display data.
+
+Suggested encoding: top-level `items: string[]` (free-form names) for V1.
+A future enhancement could model linkage to a treasure/item index, but
+that is well beyond the encounter-tracker scope.
+
+Triggered by:
+- yaashka
+- xulgath-leader
+- xulgath-spinesnapper
+- gluttondark-babau

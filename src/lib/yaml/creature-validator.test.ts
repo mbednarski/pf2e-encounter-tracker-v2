@@ -393,4 +393,201 @@ describe('validateCreature - spellcasting', () => {
     expect(result.ok).toBe(false);
     expect(result.issues.some((i) => i.path === 'spellcasting[0].entries[0].frequency.uses')).toBe(true);
   });
+
+  describe('immunities (object shape)', () => {
+    it('accepts the new { type } object form', () => {
+      const data = { ...minimalCreature, immunities: [{ type: 'fire' }, { type: 'sleep' }] };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.immunities).toEqual([{ type: 'fire' }, { type: 'sleep' }]);
+      }
+    });
+
+    it('accepts exceptions on an immunity', () => {
+      const data = {
+        ...minimalCreature,
+        immunities: [{ type: 'physical', exceptions: ['vorpal-adamantine'] }]
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.immunities[0]).toEqual({ type: 'physical', exceptions: ['vorpal-adamantine'] });
+      }
+    });
+
+    it('rejects the legacy string-array shape', () => {
+      const data = { ...minimalCreature, immunities: ['fire', 'sleep'] };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => /immunities\[\d+\]/.test(i.path))).toBe(true);
+    });
+
+    it('rejects an immunity object missing type', () => {
+      const data = { ...minimalCreature, immunities: [{ exceptions: ['adamantine'] }] };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'immunities[0].type')).toBe(true);
+    });
+
+    it('rejects immunities entirely when not an array', () => {
+      const data = { ...minimalCreature, immunities: 'fire' };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'immunities' && /array/i.test(i.message))).toBe(true);
+    });
+
+    it('rejects non-string exceptions on an immunity', () => {
+      const data = {
+        ...minimalCreature,
+        immunities: [{ type: 'physical', exceptions: [123] }]
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'immunities[0].exceptions')).toBe(true);
+    });
+  });
+
+  describe('senses', () => {
+    it('accepts senses with optional acuity and range', () => {
+      const data = {
+        ...minimalCreature,
+        senses: [
+          { type: 'darkvision' },
+          { type: 'scent', acuity: 'imprecise', range: 30 }
+        ]
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.senses).toEqual([
+          { type: 'darkvision' },
+          { type: 'scent', acuity: 'imprecise', range: 30 }
+        ]);
+      }
+    });
+
+    it('omits senses entirely when the field is absent', () => {
+      const result = validateCreature(minimalCreature, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.senses).toBeUndefined();
+    });
+
+    it('rejects an unknown acuity value', () => {
+      const data = {
+        ...minimalCreature,
+        senses: [{ type: 'tremorsense', acuity: 'cosmic' }]
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'senses[0].acuity')).toBe(true);
+    });
+
+    it('rejects a non-number range', () => {
+      const data = {
+        ...minimalCreature,
+        senses: [{ type: 'scent', range: '30 feet' }]
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'senses[0].range')).toBe(true);
+    });
+
+    it('rejects a sense entry missing type', () => {
+      const data = { ...minimalCreature, senses: [{ range: 30 }] };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'senses[0].type')).toBe(true);
+    });
+  });
+
+  describe('abilities (ability score modifiers)', () => {
+    it('accepts a full ability score block', () => {
+      const data = {
+        ...minimalCreature,
+        abilities: { str: 1, dex: 4, con: 0, int: -1, wis: 2, cha: 0 }
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.abilities).toEqual({ str: 1, dex: 4, con: 0, int: -1, wis: 2, cha: 0 });
+      }
+    });
+
+    it('omits abilities entirely when the field is absent', () => {
+      const result = validateCreature(minimalCreature, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.abilities).toBeUndefined();
+    });
+
+    it('rejects when any of the six keys is missing', () => {
+      const data = { ...minimalCreature, abilities: { str: 1, dex: 4, con: 0, int: -1, wis: 2 } };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'abilities.cha')).toBe(true);
+    });
+
+    it('rejects a non-number ability mod', () => {
+      const data = {
+        ...minimalCreature,
+        abilities: { str: 1, dex: 4, con: 0, int: -1, wis: 2, cha: '+0' }
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'abilities.cha')).toBe(true);
+    });
+  });
+
+  describe('languages', () => {
+    it('accepts a languages block with details', () => {
+      const data = {
+        ...minimalCreature,
+        languages: { value: ['common', 'goblin'], details: 'telepathy 100 feet' }
+      };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.languages).toEqual({
+          value: ['common', 'goblin'],
+          details: 'telepathy 100 feet'
+        });
+      }
+    });
+
+    it('accepts a languages block without details', () => {
+      const data = { ...minimalCreature, languages: { value: ['draconic'] } };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.languages).toEqual({ value: ['draconic'] });
+      }
+    });
+
+    it('omits languages when the field is absent', () => {
+      const result = validateCreature(minimalCreature, 0);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.languages).toBeUndefined();
+    });
+
+    it('rejects a languages block missing value', () => {
+      const data = { ...minimalCreature, languages: { details: 'telepathy' } };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'languages.value')).toBe(true);
+    });
+
+    it('rejects a non-string value entry', () => {
+      const data = { ...minimalCreature, languages: { value: ['common', 7] } };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'languages.value')).toBe(true);
+    });
+
+    it('rejects non-string details', () => {
+      const data = { ...minimalCreature, languages: { value: ['common'], details: 42 } };
+      const result = validateCreature(data, 0);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.path === 'languages.details')).toBe(true);
+    });
+  });
 });

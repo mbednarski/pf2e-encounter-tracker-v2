@@ -6,6 +6,20 @@ import {
   loadCreatures,
   removeCreature
 } from './creature-library';
+import { CREATURE_LIBRARY_STORE, getDb } from './db';
+
+/**
+ * Plants a raw object directly into the creature-library store, bypassing the
+ * typed `addCreatures` path.
+ */
+async function plantRaw(id: string, value: unknown): Promise<void> {
+  const promise = getDb();
+  if (!promise) throw new Error('IndexedDB unavailable');
+  const db = await promise;
+  const tx = db.transaction(CREATURE_LIBRARY_STORE, 'readwrite');
+  await tx.store.put(value, id);
+  await tx.done;
+}
 
 function makeCreature(overrides: Partial<Creature> = {}): Creature {
   return {
@@ -122,6 +136,107 @@ describe('creature library storage', () => {
     await addCreatures([makeCreature({ id: 'a' }), makeCreature({ id: 'b' })]);
     expect(await clearCreatures()).toEqual({ ok: true });
     expect(await loadOrThrow()).toEqual([]);
+  });
+
+  describe('legacy-immunity filter', () => {
+    it('drops a stored creature whose immunities use the pre-migration string[] shape', async () => {
+      const legacy = {
+        ...makeCreature({ id: 'legacy-goblin', name: 'Legacy Goblin' }),
+        immunities: ['fire', 'sleep'] // pre-migration shape
+      };
+      await plantRaw('legacy-goblin', legacy);
+
+      const stored = await loadOrThrow();
+      expect(stored.find((c) => c.id === 'legacy-goblin')).toBeUndefined();
+    });
+
+    it('keeps a stored creature whose immunities use the new object shape', async () => {
+      const modern = makeCreature({
+        id: 'modern-goblin',
+        immunities: [{ type: 'fire' }, { type: 'sleep' }]
+      });
+      await plantRaw('modern-goblin', modern);
+
+      const stored = await loadOrThrow();
+      expect(stored.find((c) => c.id === 'modern-goblin')).toBeDefined();
+    });
+
+    it('drops entries with a mixed-shape immunities array', async () => {
+      const mixed = {
+        ...makeCreature({ id: 'mixed' }),
+        immunities: [{ type: 'fire' }, 'sleep']
+      };
+      await plantRaw('mixed', mixed);
+
+      const stored = await loadOrThrow();
+      expect(stored.find((c) => c.id === 'mixed')).toBeUndefined();
+    });
+
+    it('drops entries whose immunities field is missing or non-array', async () => {
+      const broken = { ...makeCreature({ id: 'broken' }) } as Partial<Creature>;
+      delete broken.immunities;
+      await plantRaw('broken', broken);
+
+      const stored = await loadOrThrow();
+      expect(stored.find((c) => c.id === 'broken')).toBeUndefined();
+    });
+
+    it('preserves modern entries while filtering out legacy entries in the same store', async () => {
+      const legacy = {
+        ...makeCreature({ id: 'legacy', name: 'Legacy' }),
+        immunities: ['fire']
+      };
+      const modern = makeCreature({
+        id: 'modern',
+        name: 'Modern',
+        immunities: [{ type: 'fire' }]
+      });
+      await plantRaw('legacy', legacy);
+      await plantRaw('modern', modern);
+
+      const stored = await loadOrThrow();
+      expect(stored.map((c) => c.id).sort()).toEqual(['modern']);
+    });
+
+    it('treats an empty immunities array as the modern shape (passes through)', async () => {
+      const empty = makeCreature({ id: 'empty', immunities: [] });
+      await plantRaw('empty', empty);
+
+      const stored = await loadOrThrow();
+      expect(stored.find((c) => c.id === 'empty')).toBeDefined();
+    });
+
+    it('returns droppedLegacy count so callers can surface a recovery prompt', async () => {
+      const legacyA = {
+        ...makeCreature({ id: 'a', name: 'A' }),
+        immunities: ['fire']
+      };
+      const legacyB = {
+        ...makeCreature({ id: 'b', name: 'B' }),
+        immunities: ['cold']
+      };
+      const modern = makeCreature({
+        id: 'c',
+        immunities: [{ type: 'sleep' }]
+      });
+      await plantRaw('a', legacyA);
+      await plantRaw('b', legacyB);
+      await plantRaw('c', modern);
+
+      const result = await loadCreatures();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.droppedLegacy).toBe(2);
+        expect(result.creatures.map((c) => c.id)).toEqual(['c']);
+      }
+    });
+
+    it('returns droppedLegacy: 0 when nothing legacy is present', async () => {
+      await addCreatures([makeCreature({ id: 'x', immunities: [{ type: 'sleep' }] })]);
+      const result = await loadCreatures();
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.droppedLegacy).toBe(0);
+    });
   });
 
   it('persists creatures across a simulated page reload', async () => {
