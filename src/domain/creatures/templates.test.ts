@@ -35,10 +35,11 @@ describe('applyEliteWeak', () => {
         damage: [{ dice: 1, dieSize: 10, bonus: 2, type: 'piercing' }]
       })
     ]);
-    expect(adjusted.spellcasting).toEqual([
-      expect.objectContaining({ dc: 22, attackModifier: 14 }),
-      expect.objectContaining({ dc: 21, attackModifier: undefined })
-    ]);
+    expect(adjusted.spellcasting?.[0]).toEqual(
+      expect.objectContaining({ dc: 22, attackModifier: 14 })
+    );
+    expect(adjusted.spellcasting?.[1]).toEqual(expect.objectContaining({ dc: 21 }));
+    expect(adjusted.spellcasting?.[1].attackModifier).toBeUndefined();
     expect(creature).toEqual(creatureTemplate());
     expectSerializable(adjusted);
   });
