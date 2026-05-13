@@ -39,14 +39,12 @@
   <header class="block__head">
     <div class="block__title">{view.header.name}</div>
     <div class="block__meta">
-      <span>{view.header.tradition}</span>
-      <span>·</span>
-      <span>{view.header.type}</span>
-      <span>·</span>
-      <span class:modified={dcBonus !== 0} title={dcTooltip}>DC {view.header.dc + dcBonus}</span>
+      <span class="block__tag">{view.header.tradition}</span>
+      <span class="block__sep">·</span>
+      <span class="block__tag">{view.header.type}</span>
+      <span class="block__stat" class:modified={dcBonus !== 0} title={dcTooltip}>DC {view.header.dc + dcBonus}</span>
       {#if view.header.attackModifier !== undefined}
-        <span>·</span>
-        <span class:modified={attackBonus !== 0} title={attackTooltip}>attack {formatModifier(view.header.attackModifier + attackBonus)}</span>
+        <span class="block__stat" class:modified={attackBonus !== 0} title={attackTooltip}>atk {formatModifier(view.header.attackModifier + attackBonus)}</span>
       {/if}
     </div>
   </header>
@@ -246,11 +244,30 @@
 
   .block__meta {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
+    align-items: baseline;
     color: var(--color-ink-soft);
     font-family: var(--font-sans);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
+  }
+
+  .block__tag {
     text-transform: lowercase;
+  }
+
+  .block__sep {
+    color: var(--color-ink-mute);
+  }
+
+  .block__stat {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-ink);
+    background: var(--color-panel-2);
+    border: var(--border-thin);
+    border-radius: 4px;
+    padding: 1px 6px;
   }
 
   .ranks {
@@ -271,10 +288,10 @@
   }
 
   .rank__label {
-    min-width: 36px;
+    min-width: 40px;
     color: var(--color-ink-soft);
     font-family: var(--font-sans);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -287,9 +304,9 @@
   }
 
   .rank__count {
-    color: var(--color-ink-mute);
+    color: var(--color-ink-soft);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .pip {
@@ -354,7 +371,7 @@
   .innate-marker {
     color: var(--color-ink-soft);
     font-family: var(--font-sans);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     text-transform: uppercase;
     letter-spacing: var(--tracking-wide);
   }
@@ -367,7 +384,7 @@
   .cantrips__label {
     color: var(--color-ink-soft);
     font-family: var(--font-sans);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
@@ -376,13 +393,12 @@
   .muted {
     color: var(--color-ink-mute);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
-  .block__meta .modified {
+  .block__stat.modified {
     color: var(--effect-cond);
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-underline-offset: 2px;
+    border-color: var(--effect-cond);
+    background: var(--effect-cond-soft);
   }
 </style>
