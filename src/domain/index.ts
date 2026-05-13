@@ -19,6 +19,7 @@ export type {
 } from './encounter-xp';
 export type {
   Ability,
+  AbilitySave,
   AbilityScores,
   AppliedModifier,
   AppliedEffect,
@@ -41,6 +42,7 @@ export type {
   CreatureImmunity,
   CreatureRarity,
   CreatureSize,
+  CreatureSnapshot,
   DamageComponent,
   DomainEvent,
   Duration,
@@ -68,10 +70,12 @@ export type {
   SourceType,
   SpellcastingBlock,
   SpellcastingType,
+  SpellEntrySave,
   SpellFrequency,
   SpellListEntry,
   SpellTradition,
   StatTarget,
+  TemplateAdjustment,
   TurnBoundarySuggestion,
   TurnResolutionContinuation
 } from './types';

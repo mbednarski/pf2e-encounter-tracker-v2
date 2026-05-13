@@ -59,7 +59,8 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   RESET_REACTION: ['ACTIVE', 'RESOLVING'],
   SET_NOTE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   MARK_DEAD: ['PREPARING', 'ACTIVE', 'RESOLVING'],
-  REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING']
+  REVIVE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
+  SET_TEMPLATE_ADJUSTMENT: ['PREPARING', 'ACTIVE', 'RESOLVING']
 };
 
 export function applyCommand(state: EncounterState, command: Command, effectLibrary: EffectLibrary): CommandResult {

@@ -44,6 +44,7 @@ export interface Attack {
   traits: string[];
   damage: DamageComponent[];
   effects?: string[];
+  primaryDamageIndex?: number;
 }
 
 export type ActionCost = 1 | 2 | 3 | 'free' | 'reaction';
@@ -56,6 +57,9 @@ export interface Ability {
   frequency?: string;
   requirements?: string;
   description: string;
+  save?: AbilitySave;
+  damage?: DamageComponent[];
+  isLimitedUse?: boolean;
 }
 
 export type SpellTradition = 'arcane' | 'divine' | 'occult' | 'primal';
@@ -71,6 +75,8 @@ export interface SpellListEntry {
   isCantrip?: boolean;
   frequency?: SpellFrequency;
   count?: number;
+  save?: SpellEntrySave;
+  damage?: DamageComponent[];
 }
 
 export interface SpellcastingBlock {
@@ -201,6 +207,31 @@ export interface AppliedEffect {
   note?: string;
 }
 
+export type TemplateAdjustment = 'normal' | 'elite' | 'weak';
+
+export interface CreatureSnapshot {
+  level: number;
+  ac: number;
+  fortitude: number;
+  reflex: number;
+  will: number;
+  perception: number;
+  hp: number;
+  speed: number;
+  skills: Record<string, number>;
+}
+
+export interface AbilitySave {
+  defense: 'fortitude' | 'reflex' | 'will';
+  dc: number;
+  basic?: boolean;
+}
+
+export interface SpellEntrySave {
+  defense: 'fortitude' | 'reflex' | 'will';
+  basic?: boolean;
+}
+
 export interface CombatantState {
   id: CombatantId;
   sourceId: string;
@@ -222,7 +253,7 @@ export interface CombatantState {
   traits?: string[];
   size?: CreatureSize;
   level?: number;
-  templateAdjustment?: 'elite' | 'weak';
+  templateAdjustment?: TemplateAdjustment;
 }
 
 export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; ownerId: CombatantId };
@@ -382,7 +413,11 @@ export type Command =
   | BaseCommand<'RESET_REACTION', { combatantId: CombatantId }>
   | BaseCommand<'SET_NOTE', { combatantId: CombatantId; note: string | null }>
   | BaseCommand<'MARK_DEAD', { combatantId: CombatantId }>
-  | BaseCommand<'REVIVE', { combatantId: CombatantId }>;
+  | BaseCommand<'REVIVE', { combatantId: CombatantId }>
+  | BaseCommand<
+      'SET_TEMPLATE_ADJUSTMENT',
+      { combatantId: CombatantId; adjustment: TemplateAdjustment }
+    >;
 
 export type CommandType =
   | 'START_ENCOUNTER'
@@ -421,7 +456,8 @@ export type CommandType =
   | 'RESET_REACTION'
   | 'SET_NOTE'
   | 'MARK_DEAD'
-  | 'REVIVE';
+  | 'REVIVE'
+  | 'SET_TEMPLATE_ADJUSTMENT';
 
 export type DomainEvent =
   | { type: 'encounter-started' }
@@ -512,7 +548,17 @@ export type DomainEvent =
       spellSlug?: string;
       spellName?: string;
     }
-  | { type: 'command-rejected'; commandType: CommandType; reason: string };
+  | { type: 'command-rejected'; commandType: CommandType; reason: string }
+  | {
+      type: 'template-adjustment-changed';
+      combatantId: CombatantId;
+      from: TemplateAdjustment;
+      to: TemplateAdjustment;
+      hpMaxFrom: number;
+      hpMaxTo: number;
+      currentHpFrom: number;
+      currentHpTo: number;
+    };
 
 export type EffectCategory = 'condition' | 'spell' | 'affliction' | 'persistent-damage' | 'custom';
 

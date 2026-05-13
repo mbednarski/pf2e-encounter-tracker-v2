@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Ability, Attack, CombatantState, ComputedStats } from '../domain';
+  import type { Ability, Attack, CombatantState, ComputedStats, TemplateAdjustment } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
   import {
@@ -43,7 +43,7 @@
   export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
 
-  function templateChipVariant(adjustment: 'elite' | 'weak' | undefined) {
+  function templateChipVariant(adjustment: TemplateAdjustment | undefined) {
     if (adjustment === 'elite') return 'warning';
     if (adjustment === 'weak') return 'pc';
     return 'default';

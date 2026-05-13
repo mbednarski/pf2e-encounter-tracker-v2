@@ -142,6 +142,10 @@ export function formatEvent(event: DomainEvent, options: FormatOptions): LogEntr
       return entry(id, formatSpellUsage(state, event), 'info');
     case 'command-rejected':
       return entry(id, `${event.commandType} rejected: ${event.reason}.`, 'danger');
+    case 'template-adjustment-changed': {
+      const target = nameOf(state, event.combatantId);
+      return entry(id, `${target} adjustment: ${event.from} → ${event.to}.`, 'info');
+    }
   }
 }
 
