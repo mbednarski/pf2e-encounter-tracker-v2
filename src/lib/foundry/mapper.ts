@@ -1,5 +1,6 @@
 import type {
   Ability,
+  AbilitySave,
   AbilityScores,
   ActionCost,
   Attack,
@@ -12,6 +13,7 @@ import type {
   Languages,
   Sense,
   SenseAcuity,
+  SpellEntrySave,
   SpellListEntry,
   SpellTradition,
   SpellcastingBlock,
@@ -60,6 +62,7 @@ const SPELLCASTING_TYPES: ReadonlySet<SpellcastingType> = new Set([
 ]);
 const SENSE_ACUITIES: ReadonlySet<SenseAcuity> = new Set(['precise', 'imprecise', 'vague']);
 const THROWN_TRAIT = /^thrown(-\d+)?$/;
+const PHYSICAL_DAMAGE: ReadonlySet<string> = new Set(['slashing', 'piercing', 'bludgeoning']);
 
 export function slugifyName(name: string): string {
   return name
@@ -229,6 +232,8 @@ function mapAttack(item: FoundryMeleeItem): Attack | null {
     damage
   };
   if (effects.length > 0) out.effects = effects;
+  const physicalIndex = damage.findIndex((d) => PHYSICAL_DAMAGE.has(d.type));
+  if (physicalIndex > 0) out.primaryDamageIndex = physicalIndex;
   return out;
 }
 
@@ -253,11 +258,35 @@ function mapAbility(item: FoundryActionItem): Ability | null {
   if (sys.frequency && typeof sys.frequency.max === 'number' && typeof sys.frequency.per === 'string') {
     frequency = `${sys.frequency.max} per ${sys.frequency.per}`;
   }
+  const isLimitedUse = frequency !== undefined ? true : undefined;
+
+  const damage: DamageComponent[] = [];
+  for (const roll of Object.values(sys.damageRolls ?? {})) {
+    if (!roll) continue;
+    const parsed = typeof roll.damage === 'string' ? parseDamageString(roll.damage) : null;
+    if (!parsed) continue;
+    parsed.type = typeof roll.damageType === 'string' && roll.damageType !== '' ? roll.damageType : 'untyped';
+    if (roll.category === 'persistent') parsed.persistent = true;
+    damage.push(parsed);
+  }
+
+  let save: AbilitySave | undefined;
+  if (
+    sys.savingThrow &&
+    typeof sys.savingThrow.statistic === 'string' &&
+    typeof sys.savingThrow.dc === 'number'
+  ) {
+    save = { defense: sys.savingThrow.statistic, dc: sys.savingThrow.dc };
+    if (sys.savingThrow.basic === true) save.basic = true;
+  }
 
   const ability: Ability = { name: item.name, description };
   if (actions !== undefined) ability.actions = actions;
   if (traits !== undefined && traits.length > 0) ability.traits = traits;
   if (frequency !== undefined) ability.frequency = frequency;
+  if (damage.length > 0) ability.damage = damage;
+  if (save !== undefined) ability.save = save;
+  if (isLimitedUse !== undefined) ability.isLimitedUse = isLimitedUse;
   return ability;
 }
 
@@ -312,6 +341,24 @@ function mapSpellListEntry(
       entry.frequency = { type: 'atWill' };
     }
   }
+
+  const damage: DamageComponent[] = [];
+  for (const roll of Object.values(sys.damage ?? {})) {
+    if (!roll) continue;
+    const parsed = typeof roll.damage === 'string' ? parseDamageString(roll.damage) : null;
+    if (!parsed) continue;
+    parsed.type = typeof roll.damageType === 'string' && roll.damageType !== '' ? roll.damageType : 'untyped';
+    damage.push(parsed);
+  }
+  if (damage.length > 0) entry.damage = damage;
+
+  const saveStat = sys.defense?.save?.statistic;
+  if (saveStat) {
+    const save: SpellEntrySave = { defense: saveStat };
+    if (sys.defense?.save?.basic === true) save.basic = true;
+    entry.save = save;
+  }
+
   return entry;
 }
 

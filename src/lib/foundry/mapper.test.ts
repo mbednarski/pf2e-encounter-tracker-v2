@@ -862,3 +862,110 @@ describe('mapFoundryNpcToCreature', () => {
     });
   });
 });
+
+describe('adjustment-aware field extraction', () => {
+  function npcWithBreathAction(): FoundryNpc {
+    return {
+      name: 'Test Dragon',
+      type: 'npc',
+      system: {
+        attributes: { ac: { value: 25 }, hp: { max: 100 } },
+        saves: { fortitude: { value: 14 }, reflex: { value: 12 }, will: { value: 10 } },
+        perception: { mod: 11 },
+        details: { level: { value: 7 } },
+        skills: {}
+      },
+      items: [
+        {
+          type: 'action',
+          name: 'Breath Weapon',
+          system: {
+            actionType: { value: 'action' },
+            actions: { value: 2 },
+            description: { value: '<p>6d6 fire, basic Reflex.</p>' },
+            traits: { value: ['fire'] },
+            frequency: { max: 1, per: 'PT1M' },
+            damageRolls: {
+              '0': { damage: '6d6', damageType: 'fire', category: null }
+            },
+            savingThrow: { statistic: 'reflex', dc: 22, basic: true }
+          }
+        }
+      ]
+    };
+  }
+
+  test('maps action damageRolls + savingThrow + frequency into ability fields', () => {
+    const result = mapFoundryNpcToCreature(npcWithBreathAction());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const breath = result.value.activeAbilities.find((a) => a.name === 'Breath Weapon');
+    expect(breath).toBeDefined();
+    expect(breath?.damage?.[0]).toEqual({ dice: 6, dieSize: 6, type: 'fire' });
+    expect(breath?.save).toEqual({ defense: 'reflex', dc: 22, basic: true });
+    expect(breath?.isLimitedUse).toBe(true);
+  });
+
+  test('detects primaryDamageIndex when the physical damage line is not first', () => {
+    const doc: FoundryNpc = {
+      name: 'Test',
+      type: 'npc',
+      system: {
+        attributes: { ac: { value: 20 }, hp: { max: 50 } },
+        saves: { fortitude: { value: 10 }, reflex: { value: 10 }, will: { value: 10 } },
+        perception: { mod: 8 },
+        details: { level: { value: 5 } },
+        skills: {}
+      },
+      items: [
+        {
+          type: 'melee',
+          name: 'flaming claw',
+          system: {
+            bonus: { value: 12 },
+            traits: { value: [] },
+            damageRolls: {
+              '0': { damage: '1d6', damageType: 'fire', category: null },
+              '1': { damage: '2d8+5', damageType: 'slashing', category: null }
+            }
+          }
+        }
+      ]
+    };
+    const result = mapFoundryNpcToCreature(doc);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.attacks[0].primaryDamageIndex).toBe(1);
+  });
+
+  test('leaves primaryDamageIndex unset when physical damage is first', () => {
+    const doc: FoundryNpc = {
+      name: 'Test',
+      type: 'npc',
+      system: {
+        attributes: { ac: { value: 20 }, hp: { max: 50 } },
+        saves: { fortitude: { value: 10 }, reflex: { value: 10 }, will: { value: 10 } },
+        perception: { mod: 8 },
+        details: { level: { value: 5 } },
+        skills: {}
+      },
+      items: [
+        {
+          type: 'melee',
+          name: 'claw',
+          system: {
+            bonus: { value: 12 },
+            traits: { value: [] },
+            damageRolls: {
+              '0': { damage: '2d8+5', damageType: 'slashing', category: null }
+            }
+          }
+        }
+      ]
+    };
+    const result = mapFoundryNpcToCreature(doc);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.attacks[0].primaryDamageIndex).toBeUndefined();
+  });
+});
