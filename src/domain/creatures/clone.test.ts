@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { expectSerializable } from '../test-support';
 import type { Creature } from '../types';
 import { createCombatantFromCreature } from './clone';
+import { getAdjustedView } from './adjusted-view';
 
 describe('createCombatantFromCreature', () => {
   test('creates mutable encounter state from a creature template', () => {
@@ -18,7 +19,8 @@ describe('createCombatantFromCreature', () => {
       sourceId: 'goblin-warrior',
       name: 'Goblin Warrior 1',
       sourceType: 'creature',
-      baseStats: {
+      baseSnapshot: {
+        level: 1,
         hp: 18,
         ac: 16,
         fortitude: 6,
@@ -28,14 +30,14 @@ describe('createCombatantFromCreature', () => {
         speed: 25,
         skills: { acrobatics: 8, stealth: 10 }
       },
+      templateAdjustment: 'normal',
       currentHp: 18,
       tempHp: 0,
       appliedEffects: [],
       reactionUsedThisRound: false,
       isAlive: true,
       traits: ['goblin', 'humanoid'],
-      size: 'small',
-      level: 1
+      size: 'small'
     });
     expect(combatant.attacks).toHaveLength(1);
     expect(combatant.passiveAbilities).toHaveLength(1);
@@ -61,7 +63,7 @@ describe('createCombatantFromCreature', () => {
       combatantId: 'goblin-1'
     });
 
-    combatant.baseStats.skills.stealth = 99;
+    combatant.baseSnapshot.skills.stealth = 99;
     combatant.traits?.push('elite');
     combatant.attacks[0].traits.push('backswing');
     combatant.attacks[0].damage[0].bonus = 99;
@@ -152,32 +154,46 @@ describe('createCombatantFromCreature', () => {
       id: 'elite-goblin-1',
       sourceId: 'goblin-warrior',
       name: 'Goblin Warrior',
-      baseStats: {
-        hp: 28,
-        ac: 18,
-        fortitude: 8,
-        reflex: 10,
-        will: 7,
-        perception: 9,
+      baseSnapshot: {
+        level: 1,
+        hp: 18,
+        ac: 16,
+        fortitude: 6,
+        reflex: 8,
+        will: 5,
+        perception: 7,
         speed: 25,
-        skills: { acrobatics: 10, stealth: 12 }
+        skills: { acrobatics: 8, stealth: 10 }
       },
       currentHp: 28,
-      level: 2,
       templateAdjustment: 'elite'
     });
-    expect(combatant.attacks[0]).toMatchObject({
-      modifier: 10,
-      damage: [{ dice: 1, dieSize: 6, bonus: 4, type: 'slashing' }]
+    const view = getAdjustedView(combatant);
+    expect(view).toMatchObject({
+      level: 2,
+      hp: 28,
+      ac: 18,
+      fortitude: 8,
+      reflex: 10,
+      will: 7,
+      perception: 9,
+      speed: 25,
+      skills: { acrobatics: 10, stealth: 12 }
     });
-    expect(combatant.spellcasting?.[0]).toMatchObject({ dc: 20, attackModifier: 12, usedSlots: {} });
+    // Combatant carries pre-adjustment attacks/abilities/spellcasting; the
+    // adjusted-view helpers derive elite/weak values at render time.
+    expect(combatant.attacks[0]).toMatchObject({
+      modifier: 8,
+      damage: [{ dice: 1, dieSize: 6, bonus: 2, type: 'slashing' }]
+    });
+    expect(combatant.spellcasting?.[0]).toMatchObject({ dc: 18, attackModifier: 10, usedSlots: {} });
     expect(creature.hp).toBe(18);
     expect(creature.attacks[0].damage[0].bonus).toBe(2);
     expect(creature.spellcasting?.[0].dc).toBe(18);
     expectSerializable(combatant);
   });
 
-  test('creates a weak combatant with adjusted current HP, display data, and template marker', () => {
+  test('creates a weak combatant with adjusted current HP, snapshot, and template marker', () => {
     const combatant = createCombatantFromCreature({
       creature: creatureTemplate({ level: 3, hp: 30 }),
       combatantId: 'weak-goblin-1',
@@ -185,23 +201,27 @@ describe('createCombatantFromCreature', () => {
     });
 
     expect(combatant).toMatchObject({
-      baseStats: {
-        hp: 15,
-        ac: 14,
-        fortitude: 4,
-        reflex: 6,
-        will: 3,
-        perception: 5,
-        speed: 25,
-        skills: { acrobatics: 6, stealth: 8 }
+      baseSnapshot: {
+        level: 3,
+        hp: 30
       },
       currentHp: 15,
-      level: 2,
       templateAdjustment: 'weak'
     });
+    const view = getAdjustedView(combatant);
+    expect(view).toMatchObject({
+      level: 2,
+      hp: 15,
+      ac: 14,
+      fortitude: 4,
+      reflex: 6,
+      will: 3,
+      perception: 5,
+      skills: { acrobatics: 6, stealth: 8 }
+    });
     expect(combatant.attacks[0]).toMatchObject({
-      modifier: 6,
-      damage: [{ dice: 1, dieSize: 6, bonus: 0, type: 'slashing' }]
+      modifier: 8,
+      damage: [{ dice: 1, dieSize: 6, bonus: 2, type: 'slashing' }]
     });
   });
 
@@ -211,7 +231,7 @@ describe('createCombatantFromCreature', () => {
       combatantId: 'sprite-1'
     });
 
-    expect(combatant.baseStats.speed).toBe(40);
+    expect(combatant.baseSnapshot.speed).toBe(40);
   });
 });
 

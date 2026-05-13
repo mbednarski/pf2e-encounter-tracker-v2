@@ -38,31 +38,20 @@ export function createCombatantFromCreature({
     sourceId: creature.id,
     name: name ?? combatantCreature.name,
     sourceType: 'creature',
-    baseStats: {
-      hp: combatantCreature.hp,
-      ac: combatantCreature.ac,
-      fortitude: combatantCreature.fortitude,
-      reflex: combatantCreature.reflex,
-      will: combatantCreature.will,
-      perception: combatantCreature.perception,
-      speed: primarySpeed(combatantCreature.speed),
-      skills: cloneValue(combatantCreature.skills)
-    },
     baseSnapshot,
+    templateAdjustment: adjustment ?? 'normal',
     currentHp: combatantCreature.hp,
     tempHp: 0,
     appliedEffects: [],
     reactionUsedThisRound: false,
     isAlive: true,
-    attacks: cloneValue(combatantCreature.attacks),
-    passiveAbilities: cloneValue(combatantCreature.passiveAbilities),
-    reactiveAbilities: cloneValue(combatantCreature.reactiveAbilities),
-    activeAbilities: cloneValue(combatantCreature.activeAbilities),
-    spellcasting: combatantCreature.spellcasting ? hydrateSpellcasting(combatantCreature.spellcasting) : undefined,
-    traits: cloneValue(combatantCreature.traits),
-    size: combatantCreature.size,
-    level: combatantCreature.level,
-    templateAdjustment: adjustment
+    attacks: cloneValue(creature.attacks),
+    passiveAbilities: cloneValue(creature.passiveAbilities),
+    reactiveAbilities: cloneValue(creature.reactiveAbilities),
+    activeAbilities: cloneValue(creature.activeAbilities),
+    spellcasting: creature.spellcasting ? hydrateSpellcasting(creature.spellcasting) : undefined,
+    traits: cloneValue(creature.traits),
+    size: creature.size
   };
 }
 

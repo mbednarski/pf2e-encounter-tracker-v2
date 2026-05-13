@@ -36,7 +36,8 @@ describe('CombatantDetailsPanel', () => {
       combatant('goblin-1', {
         currentHp: 12,
         tempHp: 0,
-        baseStats: {
+        baseSnapshot: {
+          level: 1,
           hp: 18,
           ac: 17,
           fortitude: 5,

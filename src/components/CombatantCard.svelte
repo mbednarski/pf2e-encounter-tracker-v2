@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getAdjustedView } from '../domain';
   import type { CombatantState, EncounterState, Prompt, PromptResolution } from '../domain';
   import {
     clampValue,
@@ -236,9 +237,10 @@
     }
   }
 
+  $: adjustedView = getAdjustedView(combatant);
   $: hpPercent = Math.max(
     0,
-    Math.min(100, (combatant.currentHp / combatant.baseStats.hp) * 100)
+    Math.min(100, (combatant.currentHp / adjustedView.hp) * 100)
   );
 
   $: hpTone =
@@ -422,12 +424,12 @@
           <InlineNumberEdit
             value={combatant.currentHp}
             ariaLabel="Edit HP. Type 42 to set, +3 to heal, minus 5 to damage."
-            displayAriaLabel={`HP ${combatant.currentHp} of ${combatant.baseStats.hp}, click to edit`}
+            displayAriaLabel={`HP ${combatant.currentHp} of ${adjustedView.hp}, click to edit`}
             placeholder="−5, +3, 42"
             displayClass="hp-value"
             onCommit={(parsed) => onHpEdit(combatant.id, 'hp', parsed)}
           />
-          <span class="hp-max">/ {combatant.baseStats.hp}</span>
+          <span class="hp-max">/ {adjustedView.hp}</span>
         </div>
         <div class="hp-cell hp-cell--temp">
           <InlineNumberEdit

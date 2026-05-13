@@ -7,9 +7,18 @@ import {
   adjustedHp,
   adjustedSpellBlock,
   adjustedSpellEntry,
+  getAdjustedView,
   getEffectiveLevel
 } from './adjusted-view';
-import type { Ability, Attack, DamageComponent, SpellcastingBlock } from '../types';
+import type {
+  Ability,
+  Attack,
+  CombatantState,
+  CreatureSnapshot,
+  DamageComponent,
+  SpellcastingBlock,
+  TemplateAdjustment
+} from '../types';
 
 describe('getEffectiveLevel', () => {
   test('elite adds +1, or +2 when starting at level <= 0', () => {
@@ -272,3 +281,77 @@ describe('adjustedSpellBlock and adjustedSpellEntry', () => {
     expect(out).toEqual(entry);
   });
 });
+
+describe('getAdjustedView', () => {
+  test('returns snapshot values for normal adjustment', () => {
+    const view = getAdjustedView(combatantFixture('normal'));
+    expect(view).toMatchObject({
+      adjustment: 'normal',
+      level: 5,
+      ac: 20,
+      hp: 42,
+      fortitude: 14,
+      reflex: 12,
+      will: 10,
+      perception: 13,
+      speed: 30,
+      skills: { athletics: 15, stealth: 11 }
+    });
+  });
+
+  test('shifts numeric stats and recomputes HP for elite', () => {
+    const view = getAdjustedView(combatantFixture('elite'));
+    expect(view).toMatchObject({
+      adjustment: 'elite',
+      level: 6,
+      ac: 22,
+      hp: 62,
+      fortitude: 16,
+      reflex: 14,
+      will: 12,
+      perception: 15,
+      skills: { athletics: 17, stealth: 13 }
+    });
+  });
+
+  test('shifts numeric stats and recomputes HP for weak with floor', () => {
+    const view = getAdjustedView(combatantFixture('weak', { hp: 6, level: 2 }));
+    expect(view.hp).toBe(1);
+    expect(view.ac).toBe(18);
+  });
+});
+
+function combatantFixture(
+  adjustment: TemplateAdjustment,
+  overrides: Partial<CreatureSnapshot> = {}
+): CombatantState {
+  const snap: CreatureSnapshot = {
+    level: 5,
+    ac: 20,
+    fortitude: 14,
+    reflex: 12,
+    will: 10,
+    perception: 13,
+    hp: 42,
+    speed: 30,
+    skills: { athletics: 15, stealth: 11 },
+    ...overrides
+  };
+  return {
+    id: 'c1',
+    sourceId: 's',
+    name: 'Test',
+    sourceType: 'creature',
+    baseSnapshot: snap,
+    currentHp: snap.hp,
+    tempHp: 0,
+    appliedEffects: [],
+    reactionUsedThisRound: false,
+    isAlive: true,
+    attacks: [],
+    passiveAbilities: [],
+    reactiveAbilities: [],
+    activeAbilities: [],
+    templateAdjustment: adjustment
+  };
+}

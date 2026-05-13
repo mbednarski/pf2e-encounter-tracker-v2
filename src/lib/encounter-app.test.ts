@@ -41,7 +41,8 @@ describe('encounter app boundary', () => {
       sourceId: 'goblin-warrior',
       name: 'Goblin Scout',
       currentHp: 18,
-      baseStats: {
+      baseSnapshot: {
+        level: 1,
         hp: 18,
         ac: 16,
         fortitude: 6,
@@ -50,11 +51,11 @@ describe('encounter app boundary', () => {
         perception: 7,
         speed: 25
       },
-      templateAdjustment: undefined
+      templateAdjustment: 'normal'
     });
   });
 
-  test('creates weak and elite creature combatants with adjusted stats and template markers', () => {
+  test('creates weak and elite creature combatants with snapshot + template markers', () => {
     const creature = creatureTemplate();
 
     const elite = makeCreatureCombatant({
@@ -68,33 +69,31 @@ describe('encounter app boundary', () => {
       adjustment: 'weak'
     });
 
+    // Snapshot keeps the pre-adjustment values; getAdjustedView (called by
+    // computeCombatantStats and the UI) derives the elite/weak numbers.
     expect(elite).toMatchObject({
       id: 'elite-goblin-1',
       name: 'Goblin Warrior',
       currentHp: 28,
-      baseStats: {
-        hp: 28,
-        ac: 18,
-        fortitude: 8,
-        reflex: 10,
-        will: 7,
-        perception: 9
+      baseSnapshot: {
+        level: 1,
+        hp: 18,
+        ac: 16,
+        fortitude: 6,
+        reflex: 8,
+        will: 5,
+        perception: 7
       },
-      level: 2,
       templateAdjustment: 'elite'
     });
     expect(weak).toMatchObject({
       id: 'weak-goblin-1',
       currentHp: 8,
-      baseStats: {
-        hp: 8,
-        ac: 14,
-        fortitude: 4,
-        reflex: 6,
-        will: 3,
-        perception: 5
+      baseSnapshot: {
+        level: 1,
+        hp: 18,
+        ac: 16
       },
-      level: -1,
       templateAdjustment: 'weak'
     });
   });

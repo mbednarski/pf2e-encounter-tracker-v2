@@ -18,9 +18,11 @@ import type {
   PromptBoundary,
   PromptResolution,
   RestoreSpellSlotPayload,
+  TemplateAdjustment,
   TurnBoundarySuggestion,
   UseSpellSlotPayload
 } from './types';
+import { getAdjustedView } from './creatures/adjusted-view';
 
 const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   START_ENCOUNTER: ['PREPARING'],
@@ -819,7 +821,7 @@ function resetEncounter(state: EncounterState): CommandResult {
       combatantId,
       {
         ...combatant,
-        currentHp: combatant.baseStats.hp,
+        currentHp: getAdjustedView(combatant).hp,
         tempHp: 0,
         appliedEffects: [],
         reactionUsedThisRound: false,
@@ -882,7 +884,7 @@ function applyHealing(state: EncounterState, combatantId: CombatantId, amount: n
     return reject(state, 'APPLY_HEALING', `Combatant ${combatantId} not found`);
   }
 
-  const nextHp = Math.min(combatant.currentHp + amount, combatant.baseStats.hp);
+  const nextHp = Math.min(combatant.currentHp + amount, getAdjustedView(combatant).hp);
 
   return updateHp(state, combatant, nextHp, combatant.tempHp, {
     type: 'hp-changed',

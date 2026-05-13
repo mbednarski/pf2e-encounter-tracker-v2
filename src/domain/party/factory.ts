@@ -27,17 +27,8 @@ export function createCombatantFromPartyMember({
     sourceId: partyMember.id,
     name: name ?? partyMember.name,
     sourceType: 'partyMember',
-    baseStats: {
-      hp: partyMember.hp,
-      ac: partyMember.ac,
-      fortitude: partyMember.fortitude,
-      reflex: partyMember.reflex,
-      will: partyMember.will,
-      perception: partyMember.perception,
-      speed: primarySpeed(partyMember.speed),
-      skills: structuredClone(partyMember.skills ?? {})
-    },
     baseSnapshot,
+    templateAdjustment: 'normal',
     currentHp: partyMember.hp,
     tempHp: 0,
     appliedEffects: expandPersistentEffects(partyMember.persistentEffects, combatantId),
@@ -46,8 +37,7 @@ export function createCombatantFromPartyMember({
     attacks: [],
     passiveAbilities: [],
     reactiveAbilities: [],
-    activeAbilities: [],
-    level: partyMember.level
+    activeAbilities: []
   };
 }
 

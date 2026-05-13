@@ -238,8 +238,8 @@ export interface CombatantState {
   name: string;
   sourceType: SourceType;
   masterId?: CombatantId;
-  baseStats: CreatureBaseStats;
   baseSnapshot: CreatureSnapshot;
+  templateAdjustment?: TemplateAdjustment;
   currentHp: number;
   tempHp: number;
   appliedEffects: AppliedEffect[];
@@ -253,8 +253,6 @@ export interface CombatantState {
   spellcasting?: CombatantSpellcasting[];
   traits?: string[];
   size?: CreatureSize;
-  level?: number;
-  templateAdjustment?: TemplateAdjustment;
 }
 
 export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; ownerId: CombatantId };

@@ -3,7 +3,8 @@ import {
   createCombatantFromCreature,
   createCombatantFromPartyMember,
   deriveStats,
-  effectLibrary
+  effectLibrary,
+  getAdjustedView
 } from '../domain';
 import type {
   AppliedEffect,
@@ -84,16 +85,6 @@ export function makeCombatant(input: ManualCombatantInput): CombatantState {
     sourceId: `${input.id}-manual`,
     name: input.name,
     sourceType: 'creature',
-    baseStats: {
-      hp: input.maxHp,
-      ac: input.ac,
-      fortitude: input.fortitude,
-      reflex: input.reflex,
-      will: input.will,
-      perception: input.perception,
-      speed: input.speed,
-      skills: {}
-    },
     baseSnapshot: {
       level: 0,
       hp: input.maxHp,
@@ -105,6 +96,7 @@ export function makeCombatant(input: ManualCombatantInput): CombatantState {
       speed: input.speed,
       skills: {}
     },
+    templateAdjustment: 'normal',
     currentHp: input.maxHp,
     tempHp: 0,
     appliedEffects: [],
@@ -562,7 +554,7 @@ export function listRemovableEffects(
 }
 
 export function computeCombatantStats(combatant: CombatantState): ComputedStats {
-  return deriveStats(combatant.baseStats, combatant.appliedEffects, effectLibrary);
+  return deriveStats(getAdjustedView(combatant), combatant.appliedEffects, effectLibrary);
 }
 
 function signed(value: number): string {

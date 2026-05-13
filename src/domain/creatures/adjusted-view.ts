@@ -136,7 +136,19 @@ export interface AdjustedView extends CreatureBaseStats {
   adjustment: TemplateAdjustment;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function getAdjustedView(_combatant: CombatantState): AdjustedView {
-  throw new Error('getAdjustedView is wired in Task 5');
+export function getAdjustedView(combatant: CombatantState): AdjustedView {
+  const adj: TemplateAdjustment = combatant.templateAdjustment ?? 'normal';
+  const snap = combatant.baseSnapshot;
+  return {
+    adjustment: adj,
+    level: getEffectiveLevel(snap.level, adj),
+    hp: adjustedHp(snap.hp, snap.level, adj),
+    ac: adjustedDC(snap.ac, adj),
+    fortitude: adjustedDC(snap.fortitude, adj),
+    reflex: adjustedDC(snap.reflex, adj),
+    will: adjustedDC(snap.will, adj),
+    perception: adjustedDC(snap.perception, adj),
+    speed: snap.speed,
+    skills: Object.fromEntries(Object.entries(snap.skills).map(([k, v]) => [k, adjustedDC(v, adj)]))
+  };
 }

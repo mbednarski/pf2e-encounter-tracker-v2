@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Ability, Attack, CombatantState, ComputedStats, TemplateAdjustment } from '../domain';
+  import { getAdjustedView } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
   import {
@@ -50,9 +51,10 @@
   }
 
   $: badgeLabel = combatant ? templateLabel(combatant.templateAdjustment) : '';
+  $: adjustedView = combatant ? getAdjustedView(combatant) : null;
   $: subtitle = combatant
     ? [
-        combatant.level !== undefined ? `Level ${combatant.level}` : null,
+        adjustedView ? `Level ${adjustedView.level}` : null,
         ...(combatant.traits ?? [])
       ]
         .filter(Boolean)
@@ -97,12 +99,12 @@
           <dd
             title={computed ? statTooltip(computed.ac) : ''}
             class:modified={computed && computed.ac.final !== computed.ac.base}
-          >{computed ? computed.ac.final : combatant.baseStats.ac}</dd>
+          >{computed ? computed.ac.final : adjustedView!.ac}</dd>
         </div>
         <div class="stat">
           <SectionLabel>HP</SectionLabel>
           <dd>
-            {combatant.currentHp}<span class="muted">/{combatant.baseStats.hp}</span>
+            {combatant.currentHp}<span class="muted">/{adjustedView!.hp}</span>
             {#if combatant.tempHp > 0}<span class="temp">+{combatant.tempHp} temp</span>{/if}
           </dd>
         </div>
@@ -111,37 +113,37 @@
           <dd
             title={computed ? statTooltip(computed.perception) : ''}
             class:modified={computed && computed.perception.final !== computed.perception.base}
-          >{formatModifier(computed ? computed.perception.final : combatant.baseStats.perception)}</dd>
+          >{formatModifier(computed ? computed.perception.final : adjustedView!.perception)}</dd>
         </div>
         <div class="stat">
           <SectionLabel>Speed</SectionLabel>
-          <dd>{combatant.baseStats.speed} ft</dd>
+          <dd>{adjustedView!.speed} ft</dd>
         </div>
       </dl>
       <div class="saves-grid">
         <StatRollButton
           label="Fort"
-          modifier={computed ? computed.fortitude.final : combatant.baseStats.fortitude}
+          modifier={computed ? computed.fortitude.final : adjustedView!.fortitude}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed ? computed.fortitude.final : combatant.baseStats.fortitude)})`}
+          ariaLabel={`Roll ${combatant.name} Fortitude save (${formatModifier(computed ? computed.fortitude.final : adjustedView!.fortitude)})`}
           breakdownTitle={computed ? statTooltip(computed.fortitude) : undefined}
           modified={!!computed && computed.fortitude.final !== computed.fortitude.base}
           onRoll={(origin) => onRollSave(combatant.id, 'fortitude', origin)}
         />
         <StatRollButton
           label="Ref"
-          modifier={computed ? computed.reflex.final : combatant.baseStats.reflex}
+          modifier={computed ? computed.reflex.final : adjustedView!.reflex}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed ? computed.reflex.final : combatant.baseStats.reflex)})`}
+          ariaLabel={`Roll ${combatant.name} Reflex save (${formatModifier(computed ? computed.reflex.final : adjustedView!.reflex)})`}
           breakdownTitle={computed ? statTooltip(computed.reflex) : undefined}
           modified={!!computed && computed.reflex.final !== computed.reflex.base}
           onRoll={(origin) => onRollSave(combatant.id, 'reflex', origin)}
         />
         <StatRollButton
           label="Will"
-          modifier={computed ? computed.will.final : combatant.baseStats.will}
+          modifier={computed ? computed.will.final : adjustedView!.will}
           tone="save"
-          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed ? computed.will.final : combatant.baseStats.will)})`}
+          ariaLabel={`Roll ${combatant.name} Will save (${formatModifier(computed ? computed.will.final : adjustedView!.will)})`}
           breakdownTitle={computed ? statTooltip(computed.will) : undefined}
           modified={!!computed && computed.will.final !== computed.will.base}
           onRoll={(origin) => onRollSave(combatant.id, 'will', origin)}

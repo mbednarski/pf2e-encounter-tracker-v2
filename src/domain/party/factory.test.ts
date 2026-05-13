@@ -34,7 +34,7 @@ describe('createCombatantFromPartyMember', () => {
       sourceId: 'lyra',
       name: 'Lyra Sunwhisper',
       sourceType: 'partyMember',
-      level: 5,
+      baseSnapshot: expect.objectContaining({ level: 5 }),
       isAlive: true,
       currentHp: 56,
       tempHp: 0,
@@ -42,8 +42,9 @@ describe('createCombatantFromPartyMember', () => {
     });
   });
 
-  test('builds defensive baseStats from the party member fields', () => {
+  test('builds defensive baseSnapshot from the party member fields', () => {
     const member = partyMember({
+      level: 4,
       ac: 21,
       fortitude: 12,
       reflex: 14,
@@ -55,7 +56,8 @@ describe('createCombatantFromPartyMember', () => {
 
     const combatant = createCombatantFromPartyMember({ partyMember: member, combatantId: 'lyra-1' });
 
-    expect(combatant.baseStats).toEqual({
+    expect(combatant.baseSnapshot).toEqual({
+      level: 4,
       hp: 72,
       ac: 21,
       fortitude: 12,
@@ -80,7 +82,7 @@ describe('createCombatantFromPartyMember', () => {
     expect(combatant.spellcasting).toBeUndefined();
     expect(combatant.traits).toBeUndefined();
     expect(combatant.size).toBeUndefined();
-    expect(combatant.templateAdjustment).toBeUndefined();
+    expect(combatant.templateAdjustment).toBe('normal');
   });
 
   test('uses the optional name override', () => {
@@ -97,7 +99,7 @@ describe('createCombatantFromPartyMember', () => {
       partyMember: partyMember({ speed: { land: 30, swim: 15 } }),
       combatantId: 'lyra-1'
     });
-    expect(combatant.baseStats.speed).toBe(30);
+    expect(combatant.baseSnapshot.speed).toBe(30);
   });
 
   test('falls back to the first speed entry when land is missing', () => {
@@ -105,7 +107,7 @@ describe('createCombatantFromPartyMember', () => {
       partyMember: partyMember({ speed: { fly: 40 } }),
       combatantId: 'lyra-1'
     });
-    expect(combatant.baseStats.speed).toBe(40);
+    expect(combatant.baseSnapshot.speed).toBe(40);
   });
 
   test('defaults speed to 0 when undefined', () => {
@@ -113,7 +115,7 @@ describe('createCombatantFromPartyMember', () => {
       partyMember: partyMember(),
       combatantId: 'lyra-1'
     });
-    expect(combatant.baseStats.speed).toBe(0);
+    expect(combatant.baseSnapshot.speed).toBe(0);
   });
 
   test('expands persistentEffects into appliedEffects with sourceId set to the combatant id and duration unlimited', () => {
@@ -165,7 +167,7 @@ describe('createCombatantFromPartyMember', () => {
   test('deep-clones skills so mutating combatant baseStats does not affect the source', () => {
     const member = partyMember({ skills: { arcana: 14 } });
     const combatant = createCombatantFromPartyMember({ partyMember: member, combatantId: 'lyra-1' });
-    combatant.baseStats.skills.arcana = 99;
+    combatant.baseSnapshot.skills.arcana = 99;
     expect(member.skills?.arcana).toBe(14);
   });
 
