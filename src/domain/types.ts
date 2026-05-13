@@ -239,6 +239,7 @@ export interface CombatantState {
   sourceType: SourceType;
   masterId?: CombatantId;
   baseStats: CreatureBaseStats;
+  baseSnapshot: CreatureSnapshot;
   currentHp: number;
   tempHp: number;
   appliedEffects: AppliedEffect[];

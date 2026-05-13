@@ -1,4 +1,10 @@
-import type { CombatantState, CombatantSpellcasting, Creature, SpellcastingBlock } from '../types';
+import type {
+  CombatantState,
+  CombatantSpellcasting,
+  Creature,
+  CreatureSnapshot,
+  SpellcastingBlock
+} from '../types';
 import { applyEliteWeak, type CreatureTemplateAdjustment } from './templates';
 
 export interface CreateCombatantFromCreatureInput {
@@ -15,6 +21,17 @@ export function createCombatantFromCreature({
   adjustment
 }: CreateCombatantFromCreatureInput): CombatantState {
   const combatantCreature = adjustment ? applyEliteWeak(creature, adjustment) : creature;
+  const baseSnapshot: CreatureSnapshot = {
+    level: creature.level,
+    ac: creature.ac,
+    fortitude: creature.fortitude,
+    reflex: creature.reflex,
+    will: creature.will,
+    perception: creature.perception,
+    hp: creature.hp,
+    speed: primarySpeed(creature.speed),
+    skills: cloneValue(creature.skills)
+  };
 
   return {
     id: combatantId,
@@ -31,6 +48,7 @@ export function createCombatantFromCreature({
       speed: primarySpeed(combatantCreature.speed),
       skills: cloneValue(combatantCreature.skills)
     },
+    baseSnapshot,
     currentHp: combatantCreature.hp,
     tempHp: 0,
     appliedEffects: [],

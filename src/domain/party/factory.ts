@@ -1,4 +1,4 @@
-import type { AppliedEffect, CombatantState, PartyMember } from '../types';
+import type { AppliedEffect, CombatantState, CreatureSnapshot, PartyMember } from '../types';
 
 export interface CreateCombatantFromPartyMemberInput {
   partyMember: PartyMember;
@@ -11,6 +11,17 @@ export function createCombatantFromPartyMember({
   combatantId,
   name
 }: CreateCombatantFromPartyMemberInput): CombatantState {
+  const baseSnapshot: CreatureSnapshot = {
+    level: partyMember.level,
+    ac: partyMember.ac,
+    fortitude: partyMember.fortitude,
+    reflex: partyMember.reflex,
+    will: partyMember.will,
+    perception: partyMember.perception,
+    hp: partyMember.hp,
+    speed: primarySpeed(partyMember.speed),
+    skills: structuredClone(partyMember.skills ?? {})
+  };
   return {
     id: combatantId,
     sourceId: partyMember.id,
@@ -26,6 +37,7 @@ export function createCombatantFromPartyMember({
       speed: primarySpeed(partyMember.speed),
       skills: structuredClone(partyMember.skills ?? {})
     },
+    baseSnapshot,
     currentHp: partyMember.hp,
     tempHp: 0,
     appliedEffects: expandPersistentEffects(partyMember.persistentEffects, combatantId),

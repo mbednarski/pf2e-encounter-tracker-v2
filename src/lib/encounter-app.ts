@@ -94,6 +94,17 @@ export function makeCombatant(input: ManualCombatantInput): CombatantState {
       speed: input.speed,
       skills: {}
     },
+    baseSnapshot: {
+      level: 0,
+      hp: input.maxHp,
+      ac: input.ac,
+      fortitude: input.fortitude,
+      reflex: input.reflex,
+      will: input.will,
+      perception: input.perception,
+      speed: input.speed,
+      skills: {}
+    },
     currentHp: input.maxHp,
     tempHp: 0,
     appliedEffects: [],
