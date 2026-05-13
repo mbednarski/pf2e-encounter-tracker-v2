@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Ability, Attack, CombatantState, ComputedStats, TemplateAdjustment } from '../domain';
-  import { getAdjustedView } from '../domain';
+  import { adjustedAbility, adjustedAttack, adjustedSpellBlock, getAdjustedView } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
   import {
@@ -62,6 +62,28 @@
     : '';
 
   $: computed = combatant ? computeCombatantStats(combatant) : null;
+  $: adjustment = combatant?.templateAdjustment ?? 'normal';
+  $: adjustedAttacks = combatant ? combatant.attacks.map((a) => adjustedAttack(a, adjustment)) : [];
+  $: adjustedPassive = combatant
+    ? combatant.passiveAbilities.map((a) => adjustedAbility(a, adjustment))
+    : [];
+  $: adjustedReactive = combatant
+    ? combatant.reactiveAbilities.map((a) => adjustedAbility(a, adjustment))
+    : [];
+  $: adjustedActive = combatant
+    ? combatant.activeAbilities.map((a) => adjustedAbility(a, adjustment))
+    : [];
+  $: adjustedSpellcasting = combatant?.spellcasting
+    ? combatant.spellcasting.map((block) => {
+        const view = adjustedSpellBlock(block, adjustment);
+        return {
+          ...view,
+          usedSlots: block.usedSlots,
+          usedFocusPoints: block.usedFocusPoints,
+          usedEntries: block.usedEntries
+        };
+      })
+    : undefined;
 
   function statTooltip(stat: ComputedStats['ac']): string {
     return formatStatTooltip(stat.base, stat.final, stat.modifiers);
@@ -151,33 +173,33 @@
       </div>
     </section>
 
-    {#if combatant.passiveAbilities.length > 0}
+    {#if adjustedPassive.length > 0}
       <section class="details__section" aria-label="Passive Abilities">
         <SectionLabel as="h3">Passive Abilities</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.passiveAbilities as ability, i (i)}
+          {#each adjustedPassive as ability, i (i)}
             <li><AbilityCard ability={ability as Ability} /></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#if combatant.reactiveAbilities.length > 0}
+    {#if adjustedReactive.length > 0}
       <section class="details__section" aria-label="Reactive Abilities">
         <SectionLabel as="h3">Reactive Abilities</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.reactiveAbilities as ability, i (i)}
+          {#each adjustedReactive as ability, i (i)}
             <li><AbilityCard ability={ability as Ability} /></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#if combatant.attacks.length > 0}
+    {#if adjustedAttacks.length > 0}
       <section class="details__section" aria-label="Attacks">
         <SectionLabel as="h3">Attacks</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.attacks as attack, i (i)}
+          {#each adjustedAttacks as attack, i (i)}
             <li>
               <AttackRow
                 attack={attack as Attack}
@@ -198,22 +220,22 @@
       </section>
     {/if}
 
-    {#if combatant.activeAbilities.length > 0}
+    {#if adjustedActive.length > 0}
       <section class="details__section" aria-label="Active Abilities">
         <SectionLabel as="h3">Active Abilities</SectionLabel>
         <ul class="entry-list">
-          {#each combatant.activeAbilities as ability, i (i)}
+          {#each adjustedActive as ability, i (i)}
             <li><AbilityCard ability={ability as Ability} /></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    {#if combatant.spellcasting && combatant.spellcasting.length > 0}
+    {#if adjustedSpellcasting && adjustedSpellcasting.length > 0}
       <section class="details__section" aria-label="Spellcasting">
         <SectionLabel as="h3">Spellcasting</SectionLabel>
         <div class="spellcasting-stack">
-          {#each combatant.spellcasting as block, i (i)}
+          {#each adjustedSpellcasting as block, i (i)}
             <SpellcastingBlockView
               {block}
               dcBonus={computed ? computed.spellDcs.total : 0}

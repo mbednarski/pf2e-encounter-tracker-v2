@@ -31,6 +31,63 @@ describe('CombatantDetailsPanel', () => {
     expect(screen.getByText('Elite')).toBeInTheDocument();
   });
 
+  test('renders adjusted attack modifier and damage for an elite combatant', () => {
+    renderPanel(
+      combatant('goblin-1', {
+        templateAdjustment: 'elite',
+        attacks: [
+          {
+            name: 'Claw',
+            type: 'melee',
+            modifier: 10,
+            traits: [],
+            damage: [{ dice: 1, dieSize: 6, bonus: 3, type: 'slashing' }]
+          }
+        ]
+      })
+    );
+    // base +10 → elite +12, damage 1d6+3 → 1d6+5
+    expect(screen.getByRole('button', { name: 'Roll Claw 1st attack (+12)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll Claw damage (1d6+5 slashing)' })).toBeInTheDocument();
+  });
+
+  test('renders adjusted structured save DC on an elite ability', () => {
+    renderPanel(
+      combatant('basilisk-1', {
+        templateAdjustment: 'elite',
+        activeAbilities: [
+          {
+            name: 'Petrifying Gaze',
+            actions: 2,
+            description: 'Targets within 30 feet must save.',
+            save: { defense: 'fortitude', dc: 22 }
+          }
+        ]
+      })
+    );
+    // DC 22 → 24 (elite)
+    expect(screen.getByText(/DC 24 Fort/)).toBeInTheDocument();
+  });
+
+  test('renders ±4 damage on a limited-use elite ability', () => {
+    renderPanel(
+      combatant('dragon-1', {
+        templateAdjustment: 'elite',
+        activeAbilities: [
+          {
+            name: 'Breath Weapon',
+            actions: 2,
+            description: '6d6 fire.',
+            damage: [{ dice: 6, dieSize: 6, type: 'fire' }],
+            isLimitedUse: true
+          }
+        ]
+      })
+    );
+    // 6d6 → 6d6+4 (limited-use elite)
+    expect(screen.getByText(/6d6\+4 fire/)).toBeInTheDocument();
+  });
+
   test('renders defenses block with HP, AC, saves, perception, speed', () => {
     renderPanel(
       combatant('goblin-1', {

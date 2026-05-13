@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Ability } from '../../domain';
   import { parseDegrees, type Degree } from '$lib/abilities/parse-degrees';
+  import { formatDamage } from '$lib/abilities/format-damage';
   import ActionGlyph from './ActionGlyph.svelte';
 
   export let ability: Ability;
@@ -12,6 +13,12 @@
     success: 'Success',
     failure: 'Failure',
     critFailure: 'Critical Failure'
+  };
+
+  const defenseLabel: Record<'fortitude' | 'reflex' | 'will', string> = {
+    fortitude: 'Fort',
+    reflex: 'Ref',
+    will: 'Will'
   };
 </script>
 
@@ -32,6 +39,18 @@
     <div class="ability__meta"><strong>Requirements:</strong> {ability.requirements}</div>
   {/if}
 
+  {#if ability.save || (ability.damage && ability.damage.length > 0)}
+    <div class="ability__structured">
+      {#if ability.save}
+        <span class="ability__save">
+          DC {ability.save.dc} {defenseLabel[ability.save.defense]}{ability.save.basic ? ' (basic)' : ''}
+        </span>
+      {/if}
+      {#if ability.damage && ability.damage.length > 0}
+        <span class="ability__damage">{formatDamage(ability.damage)}</span>
+      {/if}
+    </div>
+  {/if}
   {#if parsed.preface}
     <p class="ability__desc">{parsed.preface}</p>
   {/if}
@@ -69,6 +88,28 @@
     margin-top: 2px;
     color: var(--color-ink-soft);
     font-size: var(--text-base);
+  }
+
+  .ability__structured {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-ink);
+  }
+
+  .ability__save {
+    background: var(--color-panel-2);
+    border: var(--border-thin);
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+
+  .ability__damage {
+    color: var(--color-red);
+    font-weight: 600;
   }
 
   .ability__desc {
