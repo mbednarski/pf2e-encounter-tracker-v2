@@ -86,6 +86,88 @@ describe('active encounter storage', () => {
     }
   });
 
+  it('migrates legacy baseStats+level combatants to baseSnapshot on load', async () => {
+    // Regression: pre-#117 encounters stored combatants as
+    // { baseStats: { hp, ac, ... }, level: number, templateAdjustment? }.
+    // The new shape is { baseSnapshot: { level, hp, ac, ... },
+    // templateAdjustment }. Without a migration, computeEncounterXP reads
+    // c.baseSnapshot.level on these legacy combatants and throws
+    // "Cannot read properties of undefined (reading 'level')", which broke
+    // the bestiary list while the lazily-rendered Manage modal still worked.
+    const state = activeEncounter();
+    await saveActiveEncounter(state);
+
+    const { getDb, ACTIVE_ENCOUNTER_STORE } = await import('./db');
+    const db = await (getDb() as Promise<import('idb').IDBPDatabase>);
+    const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, 'current')) as Record<string, unknown>;
+    const combatants = stored.combatants as Record<string, Record<string, unknown>>;
+    for (const c of Object.values(combatants)) {
+      const snap = c.baseSnapshot as Record<string, unknown>;
+      c.baseStats = {
+        hp: snap.hp,
+        ac: snap.ac,
+        fortitude: snap.fortitude,
+        reflex: snap.reflex,
+        will: snap.will,
+        perception: snap.perception,
+        speed: snap.speed,
+        skills: snap.skills
+      };
+      c.level = snap.level;
+      delete c.baseSnapshot;
+    }
+    await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
+
+    const restored = await loadActiveEncounter();
+    expect(restored).not.toBeNull();
+    for (const c of Object.values(restored!.combatants)) {
+      expect(c.baseSnapshot).toBeDefined();
+      expect(c.baseSnapshot.level).toBe(1);
+      expect(c.baseSnapshot.hp).toBe(20);
+      expect(c.baseSnapshot.ac).toBe(16);
+      expect(c.baseSnapshot.fortitude).toBe(7);
+      expect(c.baseSnapshot.reflex).toBe(8);
+      expect(c.baseSnapshot.will).toBe(5);
+      expect(c.baseSnapshot.perception).toBe(6);
+      expect(c.baseSnapshot.speed).toBe(25);
+    }
+
+    // The original symptom: computeEncounterXP threw on legacy combatants.
+    // Importing here (rather than top-of-file) keeps the dependency local
+    // to the regression test.
+    const { computeEncounterXP } = await import('../../domain');
+    expect(() => computeEncounterXP(restored!)).not.toThrow();
+  });
+
+  it('resets templateAdjustment to normal when migrating legacy combatants', async () => {
+    // Old baseStats values were already post-adjustment (applyEliteWeak ran
+    // before the snapshot was taken). Preserving templateAdjustment="elite"
+    // would make getAdjustedView add +2 a second time. Force adjustment to
+    // 'normal' on migrate so what the user saw before still matches.
+    const state = activeEncounter();
+    await saveActiveEncounter(state);
+
+    const { getDb, ACTIVE_ENCOUNTER_STORE } = await import('./db');
+    const db = await (getDb() as Promise<import('idb').IDBPDatabase>);
+    const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, 'current')) as Record<string, unknown>;
+    const combatants = stored.combatants as Record<string, Record<string, unknown>>;
+    for (const c of Object.values(combatants)) {
+      const snap = c.baseSnapshot as Record<string, unknown>;
+      c.baseStats = { ...snap };
+      delete (c.baseStats as Record<string, unknown>).level;
+      c.level = snap.level;
+      c.templateAdjustment = 'elite';
+      delete c.baseSnapshot;
+    }
+    await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
+
+    const restored = await loadActiveEncounter();
+    expect(restored).not.toBeNull();
+    for (const c of Object.values(restored!.combatants)) {
+      expect(c.templateAdjustment).toBe('normal');
+    }
+  });
+
 });
 
 describe('active encounter storage when indexedDB is unavailable', () => {
