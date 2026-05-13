@@ -7,6 +7,18 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'jsdom',
-    setupFiles: ['src/test-setup.ts']
+    setupFiles: ['src/test-setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**/*.{ts,svelte}'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/**/*.test.svelte',
+        'src/test-setup.ts',
+        'src/app.d.ts',
+        'src/domain/test-support.ts'
+      ]
+    }
   }
 });
