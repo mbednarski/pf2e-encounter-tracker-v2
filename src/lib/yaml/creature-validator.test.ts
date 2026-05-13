@@ -591,3 +591,101 @@ describe('validateCreature - spellcasting', () => {
     });
   });
 });
+
+describe('validateCreature — schema v2 optional fields', () => {
+  it('accepts structured ability save / damage / isLimitedUse', () => {
+    const data = {
+      ...minimalCreature,
+      activeAbilities: [
+        {
+          name: 'Breath Weapon',
+          actions: 2,
+          description: '6d6 fire, basic Reflex DC 22.',
+          save: { defense: 'reflex', dc: 22, basic: true },
+          damage: [{ dice: 6, dieSize: 6, type: 'fire' }],
+          isLimitedUse: true
+        }
+      ]
+    };
+    const result = validateCreature(data, 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const ability = result.value.activeAbilities[0];
+      expect(ability.save).toEqual({ defense: 'reflex', dc: 22, basic: true });
+      expect(ability.damage).toEqual([{ dice: 6, dieSize: 6, type: 'fire' }]);
+      expect(ability.isLimitedUse).toBe(true);
+    }
+  });
+
+  it('accepts attack primaryDamageIndex', () => {
+    const data = {
+      ...minimalCreature,
+      attacks: [
+        {
+          name: 'flaming claw',
+          type: 'melee',
+          modifier: 12,
+          traits: [],
+          damage: [
+            { dice: 1, dieSize: 6, type: 'fire' },
+            { dice: 2, dieSize: 8, bonus: 5, type: 'slashing' }
+          ],
+          primaryDamageIndex: 1
+        }
+      ]
+    };
+    const result = validateCreature(data, 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.attacks[0].primaryDamageIndex).toBe(1);
+    }
+  });
+
+  it('accepts spell entry save and damage', () => {
+    const data = {
+      ...minimalCreature,
+      spellcasting: [
+        {
+          blockId: 'arcane',
+          name: 'Arcane Prepared',
+          tradition: 'arcane',
+          type: 'prepared',
+          dc: 20,
+          slots: { 3: 1 },
+          entries: [
+            {
+              spellSlug: 'fireball',
+              name: 'Fireball',
+              level: 3,
+              save: { defense: 'reflex', basic: true },
+              damage: [{ dice: 6, dieSize: 6, type: 'fire' }]
+            }
+          ]
+        }
+      ]
+    };
+    const result = validateCreature(data, 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const entry = result.value.spellcasting?.[0].entries[0];
+      expect(entry?.save).toEqual({ defense: 'reflex', basic: true });
+      expect(entry?.damage).toEqual([{ dice: 6, dieSize: 6, type: 'fire' }]);
+    }
+  });
+
+  it('rejects ability save with invalid defense', () => {
+    const data = {
+      ...minimalCreature,
+      activeAbilities: [
+        {
+          name: 'x',
+          description: 'y',
+          save: { defense: 'cha', dc: 20 }
+        }
+      ]
+    };
+    const result = validateCreature(data, 0);
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((i) => i.path.endsWith('save.defense'))).toBe(true);
+  });
+});

@@ -1,5 +1,6 @@
 import type {
   Ability,
+  AbilitySave,
   AbilityScores,
   ActionCost,
   Attack,
@@ -12,6 +13,7 @@ import type {
   Languages,
   Sense,
   SenseAcuity,
+  SpellEntrySave,
   SpellcastingBlock,
   SpellcastingType,
   SpellFrequency,
@@ -28,6 +30,11 @@ const TRADITIONS: ReadonlySet<SpellTradition> = new Set(['arcane', 'divine', 'oc
 const SPELLCASTING_TYPES: ReadonlySet<SpellcastingType> = new Set(['prepared', 'spontaneous', 'innate', 'focus']);
 const SENSE_ACUITIES: ReadonlySet<SenseAcuity> = new Set(['precise', 'imprecise', 'vague']);
 const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+const SAVE_DEFENSES: ReadonlySet<'fortitude' | 'reflex' | 'will'> = new Set([
+  'fortitude',
+  'reflex',
+  'will'
+]);
 
 export type ParseOutcome<T> =
   | { ok: true; value: T; issues: ValidationIssue[] }
@@ -170,6 +177,56 @@ function validateDamageComponent(bag: IssueBag, path: string, raw: unknown): Dam
   return out;
 }
 
+function validateAbilitySave(bag: IssueBag, path: string, raw: unknown): AbilitySave | null {
+  const obj = requireObject(bag, path, raw);
+  if (!obj) return null;
+  let ok = true;
+  let defense: AbilitySave['defense'] | null = null;
+  if (typeof obj.defense !== 'string' || !SAVE_DEFENSES.has(obj.defense as AbilitySave['defense'])) {
+    bag.add(`${path}.defense`, 'must be one of: fortitude, reflex, will');
+    ok = false;
+  } else {
+    defense = obj.defense as AbilitySave['defense'];
+  }
+  const dc = requireNumber(bag, `${path}.dc`, obj.dc);
+  if (dc === null) ok = false;
+  let basic: boolean | undefined;
+  if (obj.basic !== undefined) {
+    if (typeof obj.basic !== 'boolean') {
+      bag.add(`${path}.basic`, 'must be a boolean');
+      ok = false;
+    } else basic = obj.basic;
+  }
+  if (!ok || defense === null || dc === null) return null;
+  const out: AbilitySave = { defense, dc };
+  if (basic !== undefined) out.basic = basic;
+  return out;
+}
+
+function validateSpellEntrySave(bag: IssueBag, path: string, raw: unknown): SpellEntrySave | null {
+  const obj = requireObject(bag, path, raw);
+  if (!obj) return null;
+  let ok = true;
+  let defense: SpellEntrySave['defense'] | null = null;
+  if (typeof obj.defense !== 'string' || !SAVE_DEFENSES.has(obj.defense as SpellEntrySave['defense'])) {
+    bag.add(`${path}.defense`, 'must be one of: fortitude, reflex, will');
+    ok = false;
+  } else {
+    defense = obj.defense as SpellEntrySave['defense'];
+  }
+  let basic: boolean | undefined;
+  if (obj.basic !== undefined) {
+    if (typeof obj.basic !== 'boolean') {
+      bag.add(`${path}.basic`, 'must be a boolean');
+      ok = false;
+    } else basic = obj.basic;
+  }
+  if (!ok || defense === null) return null;
+  const out: SpellEntrySave = { defense };
+  if (basic !== undefined) out.basic = basic;
+  return out;
+}
+
 function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | null {
   const obj = requireObject(bag, path, raw);
   if (!obj) return null;
@@ -210,6 +267,13 @@ function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | nul
     else effects = e;
   }
 
+  let primaryDamageIndex: number | undefined;
+  if (obj.primaryDamageIndex !== undefined) {
+    const n = requireNumber(bag, `${path}.primaryDamageIndex`, obj.primaryDamageIndex);
+    if (n === null) ok = false;
+    else primaryDamageIndex = n;
+  }
+
   if (!ok || name === null || type === null || modifier === null || traits === null) return null;
   return {
     name,
@@ -217,7 +281,8 @@ function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | nul
     modifier,
     traits,
     damage,
-    ...(effects !== undefined ? { effects } : {})
+    ...(effects !== undefined ? { effects } : {}),
+    ...(primaryDamageIndex !== undefined ? { primaryDamageIndex } : {})
   };
 }
 
@@ -260,6 +325,38 @@ function validateAbility(bag: IssueBag, path: string, raw: unknown): Ability | n
     }
   }
 
+  let save: AbilitySave | undefined;
+  if (obj.save !== undefined) {
+    const s = validateAbilitySave(bag, `${path}.save`, obj.save);
+    if (s === null) ok = false;
+    else save = s;
+  }
+
+  let damage: DamageComponent[] | undefined;
+  if (obj.damage !== undefined) {
+    const arr = requireArray(bag, `${path}.damage`, obj.damage);
+    if (arr === null) ok = false;
+    else {
+      const out: DamageComponent[] = [];
+      let allOk = true;
+      for (let i = 0; i < arr.length; i++) {
+        const d = validateDamageComponent(bag, `${path}.damage[${i}]`, arr[i]);
+        if (d === null) allOk = false;
+        else out.push(d);
+      }
+      if (allOk) damage = out;
+      else ok = false;
+    }
+  }
+
+  let isLimitedUse: boolean | undefined;
+  if (obj.isLimitedUse !== undefined) {
+    if (typeof obj.isLimitedUse !== 'boolean') {
+      bag.add(`${path}.isLimitedUse`, 'must be a boolean');
+      ok = false;
+    } else isLimitedUse = obj.isLimitedUse;
+  }
+
   if (!ok || name === null || description === null) return null;
   const out: Ability = { name, description };
   if (actions !== undefined) out.actions = actions;
@@ -267,6 +364,9 @@ function validateAbility(bag: IssueBag, path: string, raw: unknown): Ability | n
   if (optionalStrings.trigger !== undefined) out.trigger = optionalStrings.trigger;
   if (optionalStrings.frequency !== undefined) out.frequency = optionalStrings.frequency;
   if (optionalStrings.requirements !== undefined) out.requirements = optionalStrings.requirements;
+  if (save !== undefined) out.save = save;
+  if (damage !== undefined) out.damage = damage;
+  if (isLimitedUse !== undefined) out.isLimitedUse = isLimitedUse;
   return out;
 }
 
@@ -317,11 +417,37 @@ function validateSpellListEntry(bag: IssueBag, path: string, raw: unknown): Spel
     else count = n;
   }
 
+  let save: SpellEntrySave | undefined;
+  if (obj.save !== undefined) {
+    const s = validateSpellEntrySave(bag, `${path}.save`, obj.save);
+    if (s === null) ok = false;
+    else save = s;
+  }
+
+  let damage: DamageComponent[] | undefined;
+  if (obj.damage !== undefined) {
+    const arr = requireArray(bag, `${path}.damage`, obj.damage);
+    if (arr === null) ok = false;
+    else {
+      const components: DamageComponent[] = [];
+      let allOk = true;
+      for (let i = 0; i < arr.length; i++) {
+        const d = validateDamageComponent(bag, `${path}.damage[${i}]`, arr[i]);
+        if (d === null) allOk = false;
+        else components.push(d);
+      }
+      if (allOk) damage = components;
+      else ok = false;
+    }
+  }
+
   if (!ok || spellSlug === null || name === null || level === null) return null;
   const out: SpellListEntry = { spellSlug, name, level };
   if (isCantrip !== undefined) out.isCantrip = isCantrip;
   if (frequency !== undefined) out.frequency = frequency;
   if (count !== undefined) out.count = count;
+  if (save !== undefined) out.save = save;
+  if (damage !== undefined) out.damage = damage;
   return out;
 }
 
