@@ -1,12 +1,17 @@
 import type {
   Ability,
+  AbilityScores,
   ActionCost,
   Attack,
   AttackType,
   Creature,
+  CreatureImmunity,
   CreatureRarity,
   CreatureSize,
   DamageComponent,
+  Languages,
+  Sense,
+  SenseAcuity,
   SpellcastingBlock,
   SpellcastingType,
   SpellFrequency,
@@ -21,6 +26,8 @@ const ATTACK_TYPES: ReadonlySet<AttackType> = new Set(['melee', 'ranged']);
 const ACTION_COSTS = new Set<ActionCost>([1, 2, 3, 'free', 'reaction']);
 const TRADITIONS: ReadonlySet<SpellTradition> = new Set(['arcane', 'divine', 'occult', 'primal']);
 const SPELLCASTING_TYPES: ReadonlySet<SpellcastingType> = new Set(['prepared', 'spontaneous', 'innate', 'focus']);
+const SENSE_ACUITIES: ReadonlySet<SenseAcuity> = new Set(['precise', 'imprecise', 'vague']);
+const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 
 export type ParseOutcome<T> =
   | { ok: true; value: T; issues: ValidationIssue[] }
@@ -404,6 +411,82 @@ function validateSpellcastingBlock(bag: IssueBag, path: string, raw: unknown): S
   return block;
 }
 
+function validateCreatureImmunity(bag: IssueBag, path: string, raw: unknown): CreatureImmunity | null {
+  const obj = requireObject(bag, path, raw);
+  if (!obj) return null;
+  let ok = true;
+  const type = requireString(bag, `${path}.type`, obj.type);
+  if (type === null) ok = false;
+  let exceptions: string[] | undefined;
+  if (obj.exceptions !== undefined) {
+    const e = requireStringArray(bag, `${path}.exceptions`, obj.exceptions);
+    if (e === null) ok = false;
+    else exceptions = e;
+  }
+  if (!ok || type === null) return null;
+  const out: CreatureImmunity = { type };
+  if (exceptions !== undefined) out.exceptions = exceptions;
+  return out;
+}
+
+function validateSense(bag: IssueBag, path: string, raw: unknown): Sense | null {
+  const obj = requireObject(bag, path, raw);
+  if (!obj) return null;
+  let ok = true;
+  const type = requireString(bag, `${path}.type`, obj.type);
+  if (type === null) ok = false;
+  let acuity: SenseAcuity | undefined;
+  if (obj.acuity !== undefined) {
+    if (typeof obj.acuity !== 'string' || !SENSE_ACUITIES.has(obj.acuity as SenseAcuity)) {
+      bag.add(`${path}.acuity`, 'must be one of: precise, imprecise, vague');
+      ok = false;
+    } else acuity = obj.acuity as SenseAcuity;
+  }
+  let range: number | undefined;
+  if (obj.range !== undefined) {
+    const n = requireNumber(bag, `${path}.range`, obj.range);
+    if (n === null) ok = false;
+    else range = n;
+  }
+  if (!ok || type === null) return null;
+  const out: Sense = { type };
+  if (acuity !== undefined) out.acuity = acuity;
+  if (range !== undefined) out.range = range;
+  return out;
+}
+
+function validateAbilityScores(bag: IssueBag, path: string, raw: unknown): AbilityScores | null {
+  const obj = requireObject(bag, path, raw);
+  if (!obj) return null;
+  const out = {} as Record<string, number>;
+  let ok = true;
+  for (const key of ABILITY_KEYS) {
+    const n = requireNumber(bag, `${path}.${key}`, obj[key]);
+    if (n === null) ok = false;
+    else out[key] = n;
+  }
+  if (!ok) return null;
+  return out as unknown as AbilityScores;
+}
+
+function validateLanguages(bag: IssueBag, path: string, raw: unknown): Languages | null {
+  const obj = requireObject(bag, path, raw);
+  if (!obj) return null;
+  let ok = true;
+  const value = requireStringArray(bag, `${path}.value`, obj.value);
+  if (value === null) ok = false;
+  let details: string | undefined;
+  if (obj.details !== undefined) {
+    const s = requireString(bag, `${path}.details`, obj.details);
+    if (s === null) ok = false;
+    else details = s;
+  }
+  if (!ok || value === null) return null;
+  const out: Languages = { value };
+  if (details !== undefined) out.details = details;
+  return out;
+}
+
 function validateAbilityArray(bag: IssueBag, path: string, raw: unknown): Ability[] | null {
   const arr = requireArray(bag, path, raw);
   if (arr === null) return null;
@@ -459,8 +542,20 @@ export function validateCreature(raw: unknown, documentIndex: number): ParseOutc
   const hp = requireNumber(bag, 'hp', obj.hp);
   if (hp === null) ok = false;
 
-  const immunities = requireStringArray(bag, 'immunities', obj.immunities);
-  if (immunities === null) ok = false;
+  const immunitiesRaw = requireArray(bag, 'immunities', obj.immunities);
+  const immunities: CreatureImmunity[] = [];
+  let immunitiesOk: boolean = immunitiesRaw !== null;
+  if (immunitiesRaw === null) {
+    ok = false;
+  } else {
+    for (let i = 0; i < immunitiesRaw.length; i++) {
+      const im = validateCreatureImmunity(bag, `immunities[${i}]`, immunitiesRaw[i]);
+      if (im === null) {
+        ok = false;
+        immunitiesOk = false;
+      } else immunities.push(im);
+    }
+  }
 
   const resistancesRaw = requireArray(bag, 'resistances', obj.resistances);
   const resistances: { type: string; value: number }[] = [];
@@ -530,6 +625,37 @@ export function validateCreature(raw: unknown, documentIndex: number): ParseOutc
     else notes = s;
   }
 
+  let senses: Sense[] | undefined;
+  if (obj.senses !== undefined) {
+    const arr = requireArray(bag, 'senses', obj.senses);
+    if (arr === null) ok = false;
+    else {
+      const out: Sense[] = [];
+      let allOk = true;
+      for (let i = 0; i < arr.length; i++) {
+        const s = validateSense(bag, `senses[${i}]`, arr[i]);
+        if (s === null) allOk = false;
+        else out.push(s);
+      }
+      if (allOk) senses = out;
+      else ok = false;
+    }
+  }
+
+  let abilities: AbilityScores | undefined;
+  if (obj.abilities !== undefined) {
+    const a = validateAbilityScores(bag, 'abilities', obj.abilities);
+    if (a === null) ok = false;
+    else abilities = a;
+  }
+
+  let languages: Languages | undefined;
+  if (obj.languages !== undefined) {
+    const l = validateLanguages(bag, 'languages', obj.languages);
+    if (l === null) ok = false;
+    else languages = l;
+  }
+
   let spellcasting: SpellcastingBlock[] | undefined;
   if (obj.spellcasting !== undefined) {
     const arr = requireArray(bag, 'spellcasting', obj.spellcasting);
@@ -559,7 +685,7 @@ export function validateCreature(raw: unknown, documentIndex: number): ParseOutc
     will === null ||
     perception === null ||
     hp === null ||
-    immunities === null ||
+    !immunitiesOk ||
     speed === null ||
     passive === null ||
     reactive === null ||
@@ -596,7 +722,10 @@ export function validateCreature(raw: unknown, documentIndex: number): ParseOutc
     ...(alignment !== undefined ? { alignment } : {}),
     ...(source !== undefined ? { source } : {}),
     ...(notes !== undefined ? { notes } : {}),
-    ...(spellcasting !== undefined ? { spellcasting } : {})
+    ...(spellcasting !== undefined ? { spellcasting } : {}),
+    ...(senses !== undefined ? { senses } : {}),
+    ...(abilities !== undefined ? { abilities } : {}),
+    ...(languages !== undefined ? { languages } : {})
   };
   return { ok: true, value: creature, issues: bag.issues };
 }

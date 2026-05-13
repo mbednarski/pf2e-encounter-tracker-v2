@@ -20,13 +20,21 @@ export type ClearCreaturesResult =
   | { ok: true }
   | { ok: false; reason: StorageFailureReason; error?: unknown };
 
+function hasLegacyImmunityShape(c: Creature): boolean {
+  if (!Array.isArray(c.immunities)) return true;
+  return c.immunities.some((im) => typeof im === 'string' || im == null);
+}
+
 export async function loadCreatures(): Promise<LoadCreaturesResult> {
   const promise = getDb();
   if (!promise) return { ok: false, reason: 'unavailable' };
   try {
     const db = await promise;
     const stored = (await db.getAll(CREATURE_LIBRARY_STORE)) as Creature[];
-    return { ok: true, creatures: stored };
+    // Drop legacy entries whose immunities use the pre-migration string[] shape.
+    // Users re-import; see plan: "Strict + drop legacy data".
+    const creatures = stored.filter((c) => !hasLegacyImmunityShape(c));
+    return { ok: true, creatures };
   } catch (error) {
     return { ok: false, reason: 'failed', error };
   }

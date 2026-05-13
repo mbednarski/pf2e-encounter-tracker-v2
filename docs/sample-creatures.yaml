@@ -76,12 +76,12 @@ data:
   perception: 6
   hp: 20
   immunities:
-    - death effects
-    - disease
-    - mental
-    - paralyzed
-    - poison
-    - unconscious
+    - type: death effects
+    - type: disease
+    - type: mental
+    - type: paralyzed
+    - type: poison
+    - type: unconscious
   resistances:
     - type: piercing
       value: 5

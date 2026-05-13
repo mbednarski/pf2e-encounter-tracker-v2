@@ -91,6 +91,33 @@ export interface CombatantSpellcasting extends SpellcastingBlock {
   usedEntries?: Record<string, number>;
 }
 
+export type SenseAcuity = 'precise' | 'imprecise' | 'vague';
+
+export interface Sense {
+  type: string;
+  acuity?: SenseAcuity;
+  range?: number;
+}
+
+export interface AbilityScores {
+  str: number;
+  dex: number;
+  con: number;
+  int: number;
+  wis: number;
+  cha: number;
+}
+
+export interface CreatureImmunity {
+  type: string;
+  exceptions?: string[];
+}
+
+export interface Languages {
+  value: string[];
+  details?: string;
+}
+
 export interface Creature {
   id: string;
   name: string;
@@ -105,7 +132,7 @@ export interface Creature {
   will: number;
   perception: number;
   hp: number;
-  immunities: string[];
+  immunities: CreatureImmunity[];
   resistances: { type: string; value: number }[];
   weaknesses: { type: string; value: number }[];
   speed: Record<string, number>;
@@ -115,6 +142,9 @@ export interface Creature {
   reactiveAbilities: Ability[];
   activeAbilities: Ability[];
   skills: Record<string, number>;
+  senses?: Sense[];
+  abilities?: AbilityScores;
+  languages?: Languages;
   source?: string;
   tags: string[];
   notes?: string;

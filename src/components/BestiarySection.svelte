@@ -10,7 +10,7 @@
   export let encounterCounts: Record<string, number> = {};
   export let onAddToEncounter: (creature: Creature, adjustment: TemplateAdjustmentChoice) => void;
   export let onRemoveOneFromEncounter: (creatureId: string) => void;
-  export let onImportYamlFiles: ((files: File[]) => void) | undefined = undefined;
+  export let onImportCreatureFiles: ((files: File[]) => void) | undefined = undefined;
   export let onOpenManageLibrary: (() => void) | undefined = undefined;
 
   let query = '';
@@ -32,7 +32,7 @@
     const input = event.currentTarget as HTMLInputElement;
     const files = input.files ? Array.from(input.files) : [];
     if (files.length > 0) {
-      onImportYamlFiles?.(files);
+      onImportCreatureFiles?.(files);
     }
     input.value = '';
   }
@@ -45,12 +45,12 @@
   </header>
 
   <div class="bestiary__actions">
-    {#if onImportYamlFiles}
-      <Button variant="secondary" size="sm" onclick={() => fileInput?.click()}>Import YAML…</Button>
+    {#if onImportCreatureFiles}
+      <Button variant="secondary" size="sm" onclick={() => fileInput?.click()}>Import…</Button>
       <input
         bind:this={fileInput}
         type="file"
-        accept=".yaml,.yml,application/yaml,text/yaml"
+        accept=".yaml,.yml,.json,application/yaml,text/yaml,application/json"
         multiple
         hidden
         onchange={handleFileChange}
@@ -100,7 +100,7 @@
   </fieldset>
 
   {#if creatures.length === 0}
-    <p class="empty">Import a YAML file to add creatures.</p>
+    <p class="empty">Import a YAML or Foundry JSON file to add creatures.</p>
   {:else if filtered.length === 0}
     <p class="empty">No matching creatures.</p>
   {:else}

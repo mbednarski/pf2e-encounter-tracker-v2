@@ -72,6 +72,7 @@
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
   import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
+  import { importCreatureFoundryJson } from '$lib/foundry';
 
   const conditionOptions = listConditionOptions();
   const conditionGroups = groupConditionsByCategory();
@@ -295,7 +296,7 @@
     runCommand(toCommand('REMOVE_COMBATANT', { combatantId: target.id }, nextCommandId()));
   }
 
-  async function handleImportYamlFiles(files: File[]) {
+  async function handleImportCreatureFiles(files: File[]) {
     for (const file of files) {
       let text: string;
       try {
@@ -308,11 +309,14 @@
         continue;
       }
 
+      const isJson = file.name.toLowerCase().endsWith('.json');
       let creatures: Creature[];
       let issues: ReturnType<typeof importCreatureYaml>['issues'];
       let skipped: ReturnType<typeof importCreatureYaml>['skipped'];
       try {
-        ({ creatures, issues, skipped } = importCreatureYaml(text));
+        ({ creatures, issues, skipped } = isJson
+          ? importCreatureFoundryJson(text)
+          : importCreatureYaml(text));
       } catch (err) {
         appendFeedback(
           nextFeedbackId('import-fail'),
@@ -886,7 +890,7 @@
         onAddOneFromBestiary={handleAddOneFromBestiary}
         onRemoveOneFromBestiaryCount={handleRemoveOneFromBestiaryCount}
         onAddManual={handleAddManual}
-        onImportYamlFiles={handleImportYamlFiles}
+        onImportCreatureFiles={handleImportCreatureFiles}
         onRemoveCreature={handleRemoveCreature}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}

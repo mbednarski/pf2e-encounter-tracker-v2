@@ -108,7 +108,7 @@ describe('BestiarySection', () => {
   test('renders the empty-library message when the library is empty', () => {
     render(BestiarySection, { props: defaultProps() });
     expect(
-      screen.getByText('Import a YAML file to add creatures.')
+      screen.getByText('Import a YAML or Foundry JSON file to add creatures.')
     ).toBeInTheDocument();
     expect(screen.queryByText('No matching creatures.')).not.toBeInTheDocument();
   });
