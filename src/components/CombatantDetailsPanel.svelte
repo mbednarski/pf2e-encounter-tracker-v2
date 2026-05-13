@@ -43,6 +43,14 @@
   export let onRestoreFocusPoint: (combatantId: string, blockId: string) => void = () => {};
   export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
+  export let onSetAdjustment: (combatantId: string, adjustment: TemplateAdjustment) => void = () => {};
+
+  const ADJUSTMENT_OPTIONS: TemplateAdjustment[] = ['weak', 'normal', 'elite'];
+  const ADJUSTMENT_LABEL: Record<TemplateAdjustment, string> = {
+    weak: 'Weak',
+    normal: 'Normal',
+    elite: 'Elite'
+  };
 
   function templateChipVariant(adjustment: TemplateAdjustment | undefined) {
     if (adjustment === 'elite') return 'warning';
@@ -110,6 +118,23 @@
       </div>
       {#if subtitle}
         <div class="details__subtitle">{subtitle}</div>
+      {/if}
+      {#if combatant.sourceType === 'creature'}
+        <div
+          class="details__adjustment"
+          role="group"
+          aria-label="Template adjustment"
+        >
+          {#each ADJUSTMENT_OPTIONS as opt (opt)}
+            <button
+              type="button"
+              class="details__adjustment-opt"
+              class:details__adjustment-opt--active={adjustment === opt}
+              aria-pressed={adjustment === opt}
+              onclick={() => onSetAdjustment(combatant.id, opt)}
+            >{ADJUSTMENT_LABEL[opt]}</button>
+          {/each}
+        </div>
       {/if}
     </header>
 
@@ -293,6 +318,47 @@
     padding: var(--space-4);
     background: var(--color-panel-2);
     border-bottom: var(--border-thin);
+  }
+
+  .details__adjustment {
+    margin-top: var(--space-2);
+    display: inline-flex;
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .details__adjustment-opt {
+    background: transparent;
+    color: var(--color-ink-mute);
+    border: 0;
+    border-left: var(--border-thin);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .details__adjustment-opt:first-child {
+    border-left: 0;
+  }
+
+  .details__adjustment-opt:hover {
+    color: var(--color-ink);
+  }
+
+  .details__adjustment-opt--active {
+    background: var(--color-ink);
+    color: var(--color-panel);
+  }
+
+  .details__adjustment-opt:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: -2px;
   }
 
   .details__title {

@@ -23,12 +23,17 @@ describe('CombatantDetailsPanel', () => {
   test('renders header with name and no template badge by default', () => {
     renderPanel(combatant('goblin-1', { name: 'Goblin Warrior' }));
     expect(screen.getByRole('heading', { level: 2, name: 'Goblin Warrior' })).toBeInTheDocument();
-    expect(screen.queryByText(/Elite|Weak|Normal/)).not.toBeInTheDocument();
+    // No chip in the title row; the adjustment toggle still exists.
+    const title = screen.getByRole('heading', { level: 2, name: 'Goblin Warrior' }).parentElement!;
+    expect(title.textContent?.trim()).toBe('Goblin Warrior');
   });
 
   test('renders Elite badge when templateAdjustment is elite', () => {
     renderPanel(combatant('goblin-1', { name: 'Goblin', templateAdjustment: 'elite' }));
-    expect(screen.getByText('Elite')).toBeInTheDocument();
+    // The badge is a Chip; the adjustment toggle also has a button labeled Elite,
+    // so scope the lookup to the title row.
+    const title = screen.getByRole('heading', { level: 2, name: 'Goblin' }).parentElement!;
+    expect(title.textContent).toContain('Elite');
   });
 
   test('renders adjusted attack modifier and damage for an elite combatant', () => {
@@ -67,6 +72,19 @@ describe('CombatantDetailsPanel', () => {
     );
     // DC 22 → 24 (elite)
     expect(screen.getByText(/DC 24 Fort/)).toBeInTheDocument();
+  });
+
+  test('clicking the Elite button fires onSetAdjustment with the combatant id', async () => {
+    const onSetAdjustment = vi.fn();
+    renderPanel(combatant('goblin-1', { name: 'Goblin' }), { onSetAdjustment });
+    const eliteBtn = screen.getByRole('button', { name: 'Elite' });
+    eliteBtn.click();
+    expect(onSetAdjustment).toHaveBeenCalledWith('goblin-1', 'elite');
+  });
+
+  test('toggle is hidden for party-member combatants', () => {
+    renderPanel(combatant('lyra-1', { name: 'Lyra', sourceType: 'partyMember' }));
+    expect(screen.queryByRole('group', { name: 'Template adjustment' })).toBeNull();
   });
 
   test('renders ±4 damage on a limited-use elite ability', () => {

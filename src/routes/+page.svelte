@@ -987,6 +987,10 @@
         onRestoreFocusPoint={restoreFocusPoint}
         onUseInnateSpell={useInnateSpell}
         onRestoreInnateSpell={restoreInnateSpell}
+        onSetAdjustment={(combatantId, adjustment) =>
+          runCommand(
+            toCommand('SET_TEMPLATE_ADJUSTMENT', { combatantId, adjustment }, nextCommandId())
+          )}
       />
     </aside>
 
