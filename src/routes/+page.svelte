@@ -664,6 +664,15 @@
     closeRadial();
   }
 
+  function radialRemoveCombatant() {
+    const id = radialCombatantId;
+    if (!id) return;
+    const name = encounter.combatants[id]?.name ?? 'combatant';
+    runCommand(toCommand('REMOVE_COMBATANT', { combatantId: id }, nextCommandId()));
+    appendFeedback(nextFeedbackId('radial-remove'), `Removed ${name} from the encounter.`, 'success');
+    closeRadial();
+  }
+
   function modifyConditionValue(combatantId: string, instanceId: string, delta: number) {
     runCommand(
       toCommand('MODIFY_EFFECT_VALUE', { targetId: combatantId, instanceId, delta }, nextCommandId())
@@ -972,6 +981,7 @@
     {wedgeCounts}
     onApply={radialApply}
     onOpenModal={radialOpenModal}
+    onRemove={radialRemoveCombatant}
     onClose={closeRadial}
   />
 {/if}

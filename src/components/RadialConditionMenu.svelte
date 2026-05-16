@@ -18,6 +18,7 @@
   export let wedgeCounts: ConditionWedgeCounts;
   export let onApply: (choice: ApplyConditionChoice) => void;
   export let onOpenModal: (tab: EffectModalTab) => void;
+  export let onRemove: () => void;
   export let onClose: () => void;
 
   // Geometry — ported verbatim from design/radial-menu.jsx.
@@ -28,7 +29,7 @@
   const SUB_RING_R = 200;
   const LABEL_R = 95;
   const SUB_LABEL_R = 165;
-  const WEDGE_COUNT = 6;
+  const WEDGE_COUNT = 7;
   const SLICE = 360 / WEDGE_COUNT;
   const SCRUB_DEG_PER_TICK = 5;
   const RADIAL_DIAMETER = 440;
@@ -41,14 +42,16 @@
     | 'persistent'
     | 'manage'
     | 'effects'
-    | 'afflict';
-  // Only Recent fans out as a sub-arc; the others open the modal.
+    | 'afflict'
+    | 'remove';
+  // Only Recent fans out as a sub-arc; the others open the modal or (for remove) a confirm step.
   type SubArcWedgeId = 'recent';
   interface WedgeDef {
     id: WedgeId;
     icon: string;
     label: string;
     modalTab: EffectModalTab | null;
+    danger?: boolean;
   }
 
   const WEDGES: readonly WedgeDef[] = [
@@ -57,13 +60,15 @@
     { id: 'persistent', icon: '✷', label: 'Persistent', modalTab: 'persistent' },
     { id: 'manage', icon: '⚙', label: 'Manage', modalTab: 'applied' },
     { id: 'effects', icon: '✚', label: 'Effects', modalTab: 'effects' },
-    { id: 'afflict', icon: '☣', label: 'Afflictions', modalTab: 'afflictions' }
+    { id: 'afflict', icon: '☣', label: 'Afflictions', modalTab: 'afflictions' },
+    { id: 'remove', icon: '✕', label: 'Remove', modalTab: null, danger: true }
   ];
 
   type Phase =
     | { kind: 'hub' }
     | { kind: 'subarc'; wedge: SubArcWedgeId }
-    | { kind: 'scrub'; wedge: SubArcWedgeId; option: ConditionOption; value: number };
+    | { kind: 'scrub'; wedge: SubArcWedgeId; option: ConditionOption; value: number }
+    | { kind: 'confirm-remove'; focus: 'cancel' | 'confirm' };
 
   let phase: Phase = { kind: 'hub' };
   let hoveredWedgeId: WedgeId | null = null;
@@ -160,6 +165,11 @@
   function selectWedge(wedgeId: WedgeId) {
     const wedge = WEDGES.find((w) => w.id === wedgeId);
     if (!wedge) return;
+    if (wedge.id === 'remove') {
+      phase = { kind: 'confirm-remove', focus: 'cancel' };
+      hoveredWedgeId = 'remove';
+      return;
+    }
     if (wedge.modalTab) {
       onOpenModal(wedge.modalTab);
       onClose();
@@ -168,6 +178,16 @@
     // Recent wedge: fan out the sub-arc.
     phase = { kind: 'subarc', wedge: 'recent' };
     hoveredItemIndex = null;
+  }
+
+  function commitRemove() {
+    onRemove();
+    onClose();
+  }
+
+  function cancelRemove() {
+    phase = { kind: 'hub' };
+    hoveredWedgeId = 'remove';
   }
 
   function handleSubItemActivate(index: number) {
@@ -264,14 +284,44 @@
     }
   }
 
+  function handleConfirmRemoveKey(event: KeyboardEvent) {
+    if (phase.kind !== 'confirm-remove') return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelRemove();
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (phase.focus === 'confirm') {
+        commitRemove();
+      } else {
+        cancelRemove();
+      }
+      return;
+    }
+    if (
+      event.key === 'ArrowRight' ||
+      event.key === 'ArrowLeft' ||
+      event.key === 'ArrowUp' ||
+      event.key === 'ArrowDown' ||
+      event.key === 'Tab'
+    ) {
+      event.preventDefault();
+      phase = { kind: 'confirm-remove', focus: phase.focus === 'cancel' ? 'confirm' : 'cancel' };
+    }
+  }
+
   function handleKeyDown(event: KeyboardEvent) {
     if (phase.kind === 'hub') handleHubKey(event);
     else if (phase.kind === 'subarc') handleSubarcKey(event);
-    else handleScrubKey(event);
+    else if (phase.kind === 'scrub') handleScrubKey(event);
+    else handleConfirmRemoveKey(event);
   }
 
   function handlePointerMove(event: PointerEvent) {
     if (!svgEl) return;
+    if (phase.kind === 'confirm-remove') return;
     const { x, y } = clientToSvg(svgEl, event.clientX, event.clientY);
     const r = radiusOf(x, y);
     const ang = angleOf(x, y);
@@ -447,17 +497,22 @@
     {#each WEDGES as w, i (w.id)}
       {@const angles = wedgeAngles(i)}
       {@const labelPos = polar(angles.mid, LABEL_R)}
-      {@const isActiveWedge = (phase.kind === 'subarc' || phase.kind === 'scrub') && phase.wedge === w.id}
-      {@const isDimmed = (phase.kind === 'subarc' || phase.kind === 'scrub') && phase.wedge !== w.id}
+      {@const isActiveWedge =
+        ((phase.kind === 'subarc' || phase.kind === 'scrub') && phase.wedge === w.id) ||
+        (phase.kind === 'confirm-remove' && w.id === 'remove')}
+      {@const isDimmed =
+        ((phase.kind === 'subarc' || phase.kind === 'scrub') && phase.wedge !== w.id) ||
+        (phase.kind === 'confirm-remove' && w.id !== 'remove')}
       {@const isHover = phase.kind === 'hub' && hoveredWedgeId === w.id}
       <g
         class="wedge wedge-active"
         class:wedge-hover={isHover}
         class:wedge-selected={isActiveWedge}
         class:wedge-dim={isDimmed}
+        class:wedge-danger={w.danger}
         role="menuitem"
         tabindex="-1"
-        aria-label={`${w.label} ${wedgeCount(w.id)}`}
+        aria-label={w.danger ? w.label : `${w.label} ${wedgeCount(w.id)}`}
       >
         <path
           class="wedge-fill"
@@ -465,7 +520,9 @@
         />
         <text class="wedge-icon" x={labelPos.x} y={labelPos.y - 4} text-anchor="middle">{w.icon}</text>
         <text class="wedge-label" x={labelPos.x} y={labelPos.y + 14} text-anchor="middle">{w.label.toUpperCase()}</text>
-        <text class="wedge-count" x={labelPos.x} y={labelPos.y + 26} text-anchor="middle">{wedgeCount(w.id)}</text>
+        {#if !w.danger}
+          <text class="wedge-count" x={labelPos.x} y={labelPos.y + 26} text-anchor="middle">{wedgeCount(w.id)}</text>
+        {/if}
       </g>
     {/each}
 
@@ -516,13 +573,47 @@
     {/if}
 
     <g class="hub" filter="url(#radialShadow)">
-      <circle class="hub-bg" cx={CX} cy={CY} r={INNER_R} />
-      <circle class="hub-portrait" cx={CX} cy={CY - 18} r="14" />
-      <text class="hub-initials" x={CX} y={CY - 14} text-anchor="middle">{hubInitials}</text>
-      <text class="hub-name" x={CX} y={CY + 8} text-anchor="middle">{combatantName}</text>
-      <text class="hub-hp" x={CX} y={CY + 22} text-anchor="middle">{combatantHpLabel}</text>
-      {#if combatantSubtitle}
-        <text class="hub-subtitle" x={CX} y={CY + 34} text-anchor="middle">{combatantSubtitle}</text>
+      {#if phase.kind === 'confirm-remove'}
+        <circle class="hub-bg hub-bg-danger" cx={CX} cy={CY} r={INNER_R} />
+        <text class="hub-confirm-prompt" x={CX} y={CY - 22} text-anchor="middle">REMOVE?</text>
+        <text class="hub-confirm-name" x={CX} y={CY - 6} text-anchor="middle">{combatantName}</text>
+        <g
+          class="confirm-btn confirm-cancel"
+          class:focused={phase.focus === 'cancel'}
+          role="button"
+          tabindex="-1"
+          aria-label="Cancel remove"
+          onpointerdown={(e) => {
+            e.stopPropagation();
+            cancelRemove();
+          }}
+        >
+          <rect x={CX - 44} y={CY + 8} width="40" height="22" rx="3" />
+          <text x={CX - 24} y={CY + 23} text-anchor="middle">Cancel</text>
+        </g>
+        <g
+          class="confirm-btn confirm-delete"
+          class:focused={phase.focus === 'confirm'}
+          role="button"
+          tabindex="-1"
+          aria-label="Confirm remove"
+          onpointerdown={(e) => {
+            e.stopPropagation();
+            commitRemove();
+          }}
+        >
+          <rect x={CX + 4} y={CY + 8} width="40" height="22" rx="3" />
+          <text x={CX + 24} y={CY + 23} text-anchor="middle">Delete</text>
+        </g>
+      {:else}
+        <circle class="hub-bg" cx={CX} cy={CY} r={INNER_R} />
+        <circle class="hub-portrait" cx={CX} cy={CY - 18} r="14" />
+        <text class="hub-initials" x={CX} y={CY - 14} text-anchor="middle">{hubInitials}</text>
+        <text class="hub-name" x={CX} y={CY + 8} text-anchor="middle">{combatantName}</text>
+        <text class="hub-hp" x={CX} y={CY + 22} text-anchor="middle">{combatantHpLabel}</text>
+        {#if combatantSubtitle}
+          <text class="hub-subtitle" x={CX} y={CY + 34} text-anchor="middle">{combatantSubtitle}</text>
+        {/if}
       {/if}
     </g>
   </svg>
@@ -730,5 +821,87 @@
     font-weight: 700;
     fill: var(--color-amber);
     letter-spacing: 0.08em;
+  }
+
+  .wedge-danger .wedge-icon {
+    fill: var(--color-red);
+  }
+
+  .wedge-danger .wedge-label {
+    fill: var(--color-red);
+    opacity: 0.75;
+  }
+
+  .wedge-danger.wedge-hover .wedge-fill,
+  .wedge-danger.wedge-selected .wedge-fill {
+    fill: var(--color-red);
+    filter: url(#radialShadow);
+  }
+
+  .wedge-danger.wedge-hover .wedge-icon,
+  .wedge-danger.wedge-hover .wedge-label,
+  .wedge-danger.wedge-selected .wedge-icon,
+  .wedge-danger.wedge-selected .wedge-label {
+    fill: var(--color-bg);
+    opacity: 1;
+  }
+
+  .hub-bg-danger {
+    stroke: var(--color-red);
+    stroke-width: 2;
+  }
+
+  .hub-confirm-prompt {
+    font-family: var(--font-sans);
+    font-size: 9px;
+    font-weight: 700;
+    fill: var(--color-red);
+    letter-spacing: 0.16em;
+  }
+
+  .hub-confirm-name {
+    font-family: var(--font-serif);
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--color-ink);
+  }
+
+  .confirm-btn {
+    cursor: pointer;
+  }
+
+  .confirm-btn rect {
+    fill: var(--color-bg);
+    stroke: var(--color-ink);
+    stroke-width: 1;
+  }
+
+  .confirm-btn text {
+    font-family: var(--font-sans);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    fill: var(--color-ink);
+    pointer-events: none;
+  }
+
+  .confirm-btn.focused rect {
+    stroke-width: 1.5;
+  }
+
+  .confirm-delete rect {
+    stroke: var(--color-red);
+  }
+
+  .confirm-delete text {
+    fill: var(--color-red);
+  }
+
+  .confirm-delete.focused rect {
+    fill: var(--color-red);
+  }
+
+  .confirm-delete.focused text {
+    fill: var(--color-bg);
   }
 </style>
