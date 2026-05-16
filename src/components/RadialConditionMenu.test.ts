@@ -10,19 +10,20 @@ const GEOMETRY = {
   INNER_R: 56, // hub radius
   RING_R: 130, // outer ring radius
   SUB_LABEL_R: 165, // radius at which sub-arc labels sit
-  SLICE: 60, // 360 / WEDGE_COUNT (6)
+  SLICE: 360 / 7, // 360 / WEDGE_COUNT (7)
   // Mid-angle for the active radius band: inside (INNER_R + 4)..RING_R.
   ACTIVE_BAND_INSIDE: 60
 } as const;
 
-// Wedge order is load-bearing for keyboard navigation. Recent is index 0.
+// Wedge order is load-bearing for keyboard navigation. Recent is index 0; Remove is last.
 const WEDGE_LABELS: ReadonlyArray<string> = [
   'Recent',
   'Conditions',
   'Persistent',
   'Manage',
   'Effects',
-  'Afflictions'
+  'Afflictions',
+  'Remove'
 ];
 
 /**
@@ -73,13 +74,14 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     wedgeCounts: { conditions: 28, persistent: 11, spells: 10, afflictions: 4 },
     onApply: vi.fn(),
     onOpenModal: vi.fn(),
+    onRemove: vi.fn(),
     onClose: vi.fn(),
     ...overrides
   };
 }
 
 describe('RadialConditionMenu', () => {
-  test('renders all six wedge labels', () => {
+  test('renders all seven wedge labels', () => {
     render(RadialConditionMenu, { props: baseProps() });
     for (const label of WEDGE_LABELS) {
       expect(screen.getByText(label.toUpperCase())).toBeInTheDocument();
@@ -89,7 +91,7 @@ describe('RadialConditionMenu', () => {
   test('all wedges are active (no aria-disabled)', () => {
     const { container } = render(RadialConditionMenu, { props: baseProps() });
     const wedges = container.querySelectorAll('g.wedge[role="menuitem"]');
-    expect(wedges.length).toBe(6);
+    expect(wedges.length).toBe(7);
     for (const wedge of Array.from(wedges)) {
       expect(wedge.getAttribute('aria-disabled')).toBeNull();
     }
@@ -214,5 +216,145 @@ describe('RadialConditionMenu', () => {
     expect(bubble).not.toBeNull();
     expect(bubble?.getAttribute('aria-label')).toBe(`R${targetIdx}`);
     expect(bubble?.getAttribute('aria-label')).not.toBe(`R${count - 1 - targetIdx}`);
+  });
+
+  test('Remove wedge: single keyboard activation enters confirm phase without calling onRemove', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    // Navigate to the Remove wedge (last, index 6 → 7 ArrowRight presses).
+    for (let i = 0; i < WEDGE_LABELS.length; i++) {
+      await fireEvent.keyDown(svg, { key: 'ArrowRight' });
+    }
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+
+    // Confirm phase is open: the prompt and both buttons render.
+    expect(screen.getByText('REMOVE?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel remove' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm remove' })).toBeInTheDocument();
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('Remove confirm: Escape returns to hub without calling onRemove or onClose', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    for (let i = 0; i < WEDGE_LABELS.length; i++) {
+      await fireEvent.keyDown(svg, { key: 'ArrowRight' });
+    }
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+    expect(screen.getByText('REMOVE?')).toBeInTheDocument();
+
+    await fireEvent.keyDown(svg, { key: 'Escape' });
+    expect(screen.queryByText('REMOVE?')).toBeNull();
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('Remove confirm: Enter on default-focused Cancel returns to hub (no commit)', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    for (let i = 0; i < WEDGE_LABELS.length; i++) {
+      await fireEvent.keyDown(svg, { key: 'ArrowRight' });
+    }
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+
+    // Cancel is the initial focus. Pressing Enter cancels.
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByText('REMOVE?')).toBeNull();
+  });
+
+  test('Remove confirm: ArrowRight then Enter commits via onRemove + onClose', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    for (let i = 0; i < WEDGE_LABELS.length; i++) {
+      await fireEvent.keyDown(svg, { key: 'ArrowRight' });
+    }
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+    await fireEvent.keyDown(svg, { key: 'ArrowRight' }); // flip focus to confirm
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('Remove confirm: clicking Cancel button restores hub without onRemove', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    for (let i = 0; i < WEDGE_LABELS.length; i++) {
+      await fireEvent.keyDown(svg, { key: 'ArrowRight' });
+    }
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel remove' });
+    await fireEvent.pointerDown(cancelBtn);
+
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByText('REMOVE?')).toBeNull();
+  });
+
+  test('Remove confirm: clicking Delete button calls onRemove and onClose once each', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    for (let i = 0; i < WEDGE_LABELS.length; i++) {
+      await fireEvent.keyDown(svg, { key: 'ArrowRight' });
+    }
+    await fireEvent.keyDown(svg, { key: 'Enter' });
+
+    const deleteBtn = screen.getByRole('button', { name: 'Confirm remove' });
+    await fireEvent.pointerDown(deleteBtn);
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('Remove wedge: pointerdown inside the wedge enters confirm phase without committing', async () => {
+    const onRemove = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onRemove, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+    stubSvgGeometry(svg);
+
+    // Remove wedge is index 6 (last). Its mid angle is 6 * SLICE.
+    const removeMid = 6 * GEOMETRY.SLICE;
+    await fireEvent.pointerDown(svg, pointAt(removeMid, 90));
+
+    expect(screen.getByText('REMOVE?')).toBeInTheDocument();
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
