@@ -4,6 +4,10 @@ import type { PartyMember } from '../domain';
 import type { ConditionOption } from '$lib/encounter-app';
 import PartyMemberEditModal from './PartyMemberEditModal.svelte';
 
+function fieldset(legend: string): HTMLElement {
+  return screen.getByRole('group', { name: legend });
+}
+
 function member(overrides: Partial<PartyMember> = {}): PartyMember {
   return {
     id: 'aric',
@@ -144,6 +148,34 @@ describe('PartyMemberEditModal — JS-level defensive validation', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/level must be at least 1/i);
   });
 
+  // The defense-stat loop in handleSubmit fires per-field. We test each one in
+  // isolation so a regression that breaks a single stat (e.g. typo in the loop)
+  // is caught with a precise message.
+  type DefenseCase = { input: string; alert: RegExp };
+  const defenseCases: ReadonlyArray<DefenseCase> = [
+    { input: 'AC', alert: /AC must be a non-negative number/i },
+    { input: 'Fort', alert: /FORTITUDE must be a non-negative number/i },
+    { input: 'Ref', alert: /REFLEX must be a non-negative number/i },
+    { input: 'Will', alert: /WILL must be a non-negative number/i },
+    { input: 'Per', alert: /PERCEPTION must be a non-negative number/i },
+    { input: 'Max HP', alert: /HP must be a non-negative number/i }
+  ];
+
+  for (const { input, alert } of defenseCases) {
+    test(`submitting with a negative ${input} renders the matching defense alert`, async () => {
+      const onSave = vi.fn();
+      const { container } = render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+      const form = container.querySelector('form') as HTMLFormElement;
+
+      await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+      await fireEvent.input(screen.getByLabelText(input), { target: { value: '-1' } });
+      await fireEvent.submit(form);
+
+      expect(onSave).not.toHaveBeenCalled();
+      expect(await screen.findByRole('alert')).toHaveTextContent(alert);
+    });
+  }
+
   test('the alert clears and onSave fires once the name is supplied', async () => {
     const onSave = vi.fn();
     const { container } = render(PartyMemberEditModal, { props: baseProps({ onSave }) });
@@ -170,13 +202,15 @@ describe('PartyMemberEditModal — dynamic rows', () => {
     await fireEvent.click(screen.getByRole('button', { name: '+ Speed' }));
     await fireEvent.click(screen.getByRole('button', { name: '+ Skill' }));
 
-    const [landKey, landValue] = screen.getAllByPlaceholderText(/land|30/i);
-    await fireEvent.input(landKey, { target: { value: 'land' } });
-    await fireEvent.input(landValue, { target: { value: '30' } });
+    const speedInputs = within(fieldset('Speed')).getAllByRole('textbox');
+    const speedNumber = within(fieldset('Speed')).getAllByRole('spinbutton');
+    await fireEvent.input(speedInputs[0], { target: { value: 'land' } });
+    await fireEvent.input(speedNumber[0], { target: { value: '30' } });
 
-    const [skillKey, skillValue] = screen.getAllByPlaceholderText(/arcana|14/i);
-    await fireEvent.input(skillKey, { target: { value: 'arcana' } });
-    await fireEvent.input(skillValue, { target: { value: '14' } });
+    const skillInputs = within(fieldset('Skills')).getAllByRole('textbox');
+    const skillNumber = within(fieldset('Skills')).getAllByRole('spinbutton');
+    await fireEvent.input(skillInputs[0], { target: { value: 'arcana' } });
+    await fireEvent.input(skillNumber[0], { target: { value: '14' } });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -197,6 +231,122 @@ describe('PartyMemberEditModal — dynamic rows', () => {
 
     const payload = onSave.mock.calls[0][0] as PartyMember;
     expect(payload.speed).toBeUndefined();
+  });
+});
+
+describe('PartyMemberEditModal — resistances / weaknesses / immunities', () => {
+  test('Add Resistance + fill type and value: payload.resistances contains the entry', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+    await fireEvent.click(screen.getByRole('button', { name: '+ Resistance' }));
+
+    const [typeInput] = within(fieldset('Resistances')).getAllByRole('textbox');
+    const [valueInput] = within(fieldset('Resistances')).getAllByRole('spinbutton');
+    await fireEvent.input(typeInput, { target: { value: 'cold' } });
+    await fireEvent.input(valueInput, { target: { value: '3' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.resistances).toEqual([{ type: 'cold', value: 3 }]);
+  });
+
+  test('Blank-type resistance rows are filtered out; remaining typed rows are kept', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+    await fireEvent.click(screen.getByRole('button', { name: '+ Resistance' }));
+    await fireEvent.click(screen.getByRole('button', { name: '+ Resistance' }));
+
+    const typeInputs = within(fieldset('Resistances')).getAllByRole('textbox');
+    const valueInputs = within(fieldset('Resistances')).getAllByRole('spinbutton');
+    // First row blank-type (kept open), second row typed.
+    await fireEvent.input(typeInputs[1], { target: { value: '  fire  ' } });
+    await fireEvent.input(valueInputs[1], { target: { value: '5' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.resistances).toEqual([{ type: 'fire', value: 5 }]);
+  });
+
+  test('All resistance rows blank-type: resistances field is omitted from the payload', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+    await fireEvent.click(screen.getByRole('button', { name: '+ Resistance' }));
+    await fireEvent.click(screen.getByRole('button', { name: '+ Resistance' }));
+    // Both rows leave type blank.
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.resistances).toBeUndefined();
+  });
+
+  test('Weaknesses round-trip from initial member through Save', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, {
+      props: baseProps({
+        onSave,
+        partyMember: member({ weaknesses: [{ type: 'fire', value: 5 }] })
+      })
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.weaknesses).toEqual([{ type: 'fire', value: 5 }]);
+  });
+
+  test('Blank-type weakness rows are filtered out', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+    await fireEvent.click(screen.getByRole('button', { name: '+ Weakness' }));
+    await fireEvent.click(screen.getByRole('button', { name: '+ Weakness' }));
+
+    const typeInputs = within(fieldset('Weaknesses')).getAllByRole('textbox');
+    const valueInputs = within(fieldset('Weaknesses')).getAllByRole('spinbutton');
+    await fireEvent.input(typeInputs[0], { target: { value: 'cold' } });
+    await fireEvent.input(valueInputs[0], { target: { value: '2' } });
+    // Second row left blank.
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.weaknesses).toEqual([{ type: 'cold', value: 2 }]);
+  });
+
+  test('Immunities text is parsed into a trimmed, comma-separated list', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+    const immunitiesInput = within(fieldset('Immunities')).getByRole('textbox');
+    await fireEvent.input(immunitiesInput, { target: { value: '  sleep,  poison , ' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.immunities).toEqual(['sleep', 'poison']);
+  });
+
+  test('Empty immunities text omits the immunities field from the payload', async () => {
+    const onSave = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onSave }) });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Aric' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const payload = onSave.mock.calls[0][0] as PartyMember;
+    expect(payload.immunities).toBeUndefined();
   });
 });
 
@@ -263,6 +413,14 @@ describe('PartyMemberEditModal — close', () => {
     render(PartyMemberEditModal, { props: baseProps({ onClose }) });
 
     await fireEvent.click(screen.getByLabelText('Close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('pressing Escape (window-level handler) calls onClose', async () => {
+    const onClose = vi.fn();
+    render(PartyMemberEditModal, { props: baseProps({ onClose }) });
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

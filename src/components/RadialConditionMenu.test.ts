@@ -3,6 +3,60 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import RadialConditionMenu from './RadialConditionMenu.svelte';
 import type { ConditionOption } from '$lib/encounter-app';
 
+// Geometry mirrors RadialConditionMenu.svelte. Keep in sync if those constants change.
+const GEOMETRY = {
+  CX: 220,
+  CY: 220,
+  INNER_R: 56, // hub radius
+  RING_R: 130, // outer ring radius
+  SUB_LABEL_R: 165, // radius at which sub-arc labels sit
+  SLICE: 60, // 360 / WEDGE_COUNT (6)
+  // Mid-angle for the active radius band: inside (INNER_R + 4)..RING_R.
+  ACTIVE_BAND_INSIDE: 60
+} as const;
+
+// Wedge order is load-bearing for keyboard navigation. Recent is index 0.
+const WEDGE_LABELS: ReadonlyArray<string> = [
+  'Recent',
+  'Conditions',
+  'Persistent',
+  'Manage',
+  'Effects',
+  'Afflictions'
+];
+
+/**
+ * Stub jsdom's missing SVG CTM/SVGPoint so `clientToSvg` becomes an identity
+ * transform: clientX/clientY pass through to SVG-local coordinates unchanged.
+ */
+function stubSvgGeometry(svg: SVGSVGElement): void {
+  const identity = {
+    inverse: () => identity,
+    multiply: () => identity,
+    a: 1,
+    b: 0,
+    c: 0,
+    d: 1,
+    e: 0,
+    f: 0
+  } as unknown as DOMMatrix;
+  (svg as unknown as { getScreenCTM: () => DOMMatrix }).getScreenCTM = () => identity;
+  (svg as unknown as { createSVGPoint: () => DOMPoint }).createSVGPoint = () => {
+    const pt = { x: 0, y: 0 } as DOMPoint;
+    (pt as unknown as { matrixTransform: (m: DOMMatrix) => DOMPoint }).matrixTransform = () => pt;
+    return pt;
+  };
+}
+
+/** Convert a (radius, degrees) polar point centred on (CX, CY) into clientX/clientY. */
+function pointAt(angleDeg: number, radius: number): { clientX: number; clientY: number } {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    clientX: GEOMETRY.CX + Math.cos(rad) * radius,
+    clientY: GEOMETRY.CY + Math.sin(rad) * radius
+  };
+}
+
 function baseProps(overrides: Record<string, unknown> = {}) {
   const recentOptions: ConditionOption[] = [
     { id: 'frightened', name: 'Frightened', value: { kind: 'valued', defaultValue: 1, maxValue: 4 } },
@@ -27,7 +81,7 @@ function baseProps(overrides: Record<string, unknown> = {}) {
 describe('RadialConditionMenu', () => {
   test('renders all six wedge labels', () => {
     render(RadialConditionMenu, { props: baseProps() });
-    for (const label of ['Recent', 'Conditions', 'Persistent', 'Manage', 'Effects', 'Afflictions']) {
+    for (const label of WEDGE_LABELS) {
       expect(screen.getByText(label.toUpperCase())).toBeInTheDocument();
     }
   });
@@ -58,15 +112,15 @@ describe('RadialConditionMenu', () => {
   });
 
   test('keyboard-activating each non-Recent wedge calls onOpenModal with the right tab', async () => {
-    const expected: Array<[string, string]> = [
-      ['Conditions', 'conditions'],
-      ['Persistent', 'persistent'],
-      ['Manage', 'applied'],
-      ['Effects', 'effects'],
-      ['Afflictions', 'afflictions']
-    ];
+    const tabsByLabel: Record<string, string> = {
+      Conditions: 'conditions',
+      Persistent: 'persistent',
+      Manage: 'applied',
+      Effects: 'effects',
+      Afflictions: 'afflictions'
+    };
 
-    for (const [label, tab] of expected) {
+    for (const [label, tab] of Object.entries(tabsByLabel)) {
       const onOpenModal = vi.fn();
       const onClose = vi.fn();
       const { container, unmount } = render(RadialConditionMenu, {
@@ -74,19 +128,12 @@ describe('RadialConditionMenu', () => {
       });
       const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
 
-      // Hub starts un-hovered. ArrowRight focuses wedge 0 (Recent), then walks to the target.
-      // WEDGES order: Recent (0), Conditions (1), Persistent (2), Manage (3), Effects (4), Afflictions (5).
-      const target =
-        label === 'Conditions'
-          ? 2
-          : label === 'Persistent'
-            ? 3
-            : label === 'Manage'
-              ? 4
-              : label === 'Effects'
-                ? 5
-                : 6; // Afflictions
-      for (let i = 0; i < target; i++) {
+      // Hub starts un-hovered. The first ArrowRight focuses wedge 0 (Recent);
+      // each subsequent ArrowRight advances by one wedge. Total presses to reach
+      // wedge i is i + 1.
+      const wedgeIndex = WEDGE_LABELS.indexOf(label);
+      const presses = wedgeIndex + 1;
+      for (let i = 0; i < presses; i++) {
         await fireEvent.keyDown(svg, { key: 'ArrowRight' });
       }
       await fireEvent.keyDown(svg, { key: 'Enter' });
@@ -105,31 +152,11 @@ describe('RadialConditionMenu', () => {
       props: baseProps({ onOpenModal, onClose })
     });
     const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+    stubSvgGeometry(svg);
 
-    // Identity CTM stubs so clientToSvg passes (clientX, clientY) through unchanged.
-    const identity = {
-      inverse: () => identity,
-      multiply: () => identity,
-      a: 1, b: 0, c: 0, d: 1, e: 0, f: 0
-    } as unknown as DOMMatrix;
-    (svg as unknown as { getScreenCTM: () => DOMMatrix }).getScreenCTM = () => identity;
-    (svg as unknown as { createSVGPoint: () => DOMPoint }).createSVGPoint = () => {
-      const pt = { x: 0, y: 0 } as DOMPoint;
-      (pt as unknown as { matrixTransform: (m: DOMMatrix) => DOMPoint }).matrixTransform = () => pt;
-      return pt;
-    };
-
-    // Conditions wedge sits at mid 60° (index 1, SLICE=60). Pick a point inside the
-    // active radius band (INNER_R+4=60 .. RING_R=130). Radius 90, angle 60°.
-    const CX = 220;
-    const CY = 220;
-    const angleDeg = 60;
-    const radius = 90;
-    const rad = ((angleDeg - 90) * Math.PI) / 180;
-    const clientX = CX + Math.cos(rad) * radius;
-    const clientY = CY + Math.sin(rad) * radius;
-
-    await fireEvent.pointerDown(svg, { clientX, clientY });
+    // Conditions wedge sits at mid 60° (index 1, SLICE=60). Pick a point inside
+    // the active radius band (INNER_R+4 .. RING_R). Radius 90 lies inside that.
+    await fireEvent.pointerDown(svg, pointAt(GEOMETRY.SLICE, 90));
 
     expect(onOpenModal).toHaveBeenCalledTimes(1);
     expect(onOpenModal).toHaveBeenCalledWith('conditions');
@@ -143,21 +170,10 @@ describe('RadialConditionMenu', () => {
       props: baseProps({ onOpenModal, onClose })
     });
     const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+    stubSvgGeometry(svg);
 
-    const identity = {
-      inverse: () => identity,
-      multiply: () => identity,
-      a: 1, b: 0, c: 0, d: 1, e: 0, f: 0
-    } as unknown as DOMMatrix;
-    (svg as unknown as { getScreenCTM: () => DOMMatrix }).getScreenCTM = () => identity;
-    (svg as unknown as { createSVGPoint: () => DOMPoint }).createSVGPoint = () => {
-      const pt = { x: 0, y: 0 } as DOMPoint;
-      (pt as unknown as { matrixTransform: (m: DOMMatrix) => DOMPoint }).matrixTransform = () => pt;
-      return pt;
-    };
-
-    // Click inside the inner hub (radius 30 < INNER_R+4=60). Should be ignored.
-    await fireEvent.pointerDown(svg, { clientX: 220, clientY: 250 });
+    // 30px below the centre is inside the inner hub (radius 30 < INNER_R+4=60).
+    await fireEvent.pointerDown(svg, { clientX: GEOMETRY.CX, clientY: GEOMETRY.CY + 30 });
 
     expect(onOpenModal).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
@@ -174,56 +190,29 @@ describe('RadialConditionMenu', () => {
     ];
     const { container } = render(RadialConditionMenu, { props: baseProps({ recentOptions }) });
     const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+    stubSvgGeometry(svg);
 
     // Open the Recent sub-arc via keyboard: hub → ArrowRight to wedge 0 (Recent) → Enter.
     await fireEvent.keyDown(svg, { key: 'ArrowRight' });
     await fireEvent.keyDown(svg, { key: 'Enter' });
 
-    // Geometry constants must match the component.
-    const CX = 220;
-    const CY = 220;
-    const SUB_LABEL_R = 165;
-    const SLICE = 60;
-    const RECENT_MID_DEG = 0; // wedge 0 sits at 12 o'clock.
+    // Sub-arc layout (recent wedge at 0°): the items fan out across a span.
+    const RECENT_MID_DEG = 0;
     const count = recentOptions.length;
     const span = Math.min(240, Math.max(110, 9 * (count - 1)));
     const step = span / (count - 1);
 
-    // Stub getScreenCTM so clientToSvg is a no-op identity transform.
-    const identity = {
-      inverse: () => identity,
-      multiply: () => identity,
-      a: 1,
-      b: 0,
-      c: 0,
-      d: 1,
-      e: 0,
-      f: 0
-    } as unknown as DOMMatrix;
-    (svg as unknown as { getScreenCTM: () => DOMMatrix }).getScreenCTM = () => identity;
-    (svg as unknown as { createSVGPoint: () => DOMPoint }).createSVGPoint = () => {
-      const pt = { x: 0, y: 0 } as DOMPoint;
-      (pt as unknown as { matrixTransform: (m: DOMMatrix) => DOMPoint }).matrixTransform = () => pt;
-      return pt;
-    };
-
-    function pointFor(index: number) {
-      const angDeg = RECENT_MID_DEG - span / 2 + index * step;
-      const rad = ((angDeg - 90) * Math.PI) / 180;
-      return {
-        clientX: CX + Math.cos(rad) * SUB_LABEL_R,
-        clientY: CY + Math.sin(rad) * SUB_LABEL_R
-      };
+    function pointForItem(index: number) {
+      return pointAt(RECENT_MID_DEG - span / 2 + index * step, GEOMETRY.SUB_LABEL_R);
     }
 
     // Hover item 0 (leftmost): expect bubble around the R0 label, NOT around R4.
     const targetIdx = 0;
-    await fireEvent.pointerMove(svg, pointFor(targetIdx));
+    await fireEvent.pointerMove(svg, pointForItem(targetIdx));
 
     const bubble = container.querySelector('g.subitem-hover');
     expect(bubble).not.toBeNull();
     expect(bubble?.getAttribute('aria-label')).toBe(`R${targetIdx}`);
-    // Sanity: also verify that the rightmost item is NOT the highlighted one.
     expect(bubble?.getAttribute('aria-label')).not.toBe(`R${count - 1 - targetIdx}`);
   });
 });
