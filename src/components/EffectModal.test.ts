@@ -175,3 +175,145 @@ describe('EffectModal', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('EffectModal — duration editor', () => {
+  test('Applied tab: edit → Save with type=unlimited dispatches onSetDuration with {type:"unlimited"}', async () => {
+    const onSetDuration = vi.fn();
+    render(EffectModal, { props: baseProps({ onSetDuration }) });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit duration for Frightened' }));
+
+    // Default type buffer matches the current duration ('unlimited'), so we just save.
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSetDuration).toHaveBeenCalledTimes(1);
+    expect(onSetDuration).toHaveBeenCalledWith('inst-1', { type: 'unlimited' });
+  });
+
+  test('Applied tab: rounds branch dispatches {type:"rounds", count}', async () => {
+    const onSetDuration = vi.fn();
+    render(EffectModal, { props: baseProps({ onSetDuration }) });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit duration for Frightened' }));
+
+    const typeSelect = screen.getByLabelText('Type') as HTMLSelectElement;
+    await fireEvent.change(typeSelect, { target: { value: 'rounds' } });
+
+    const countInput = screen.getByLabelText('Round count') as HTMLInputElement;
+    await fireEvent.input(countInput, { target: { value: '3' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSetDuration).toHaveBeenCalledWith('inst-1', { type: 'rounds', count: 3 });
+  });
+
+  test('Applied tab: untilTurnEnd branch dispatches {type, combatantId} from the dropdown default', async () => {
+    const onSetDuration = vi.fn();
+    render(EffectModal, { props: baseProps({ onSetDuration }) });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit duration for Frightened' }));
+    const typeSelect = screen.getByLabelText('Type') as HTMLSelectElement;
+    await fireEvent.change(typeSelect, { target: { value: 'untilTurnEnd' } });
+
+    // The combatant select defaults to the first otherCombatant ('pc-1').
+    expect(
+      screen.getByLabelText('Combatant whose turn anchors the duration')
+    ).toHaveValue('pc-1');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSetDuration).toHaveBeenCalledWith('inst-1', {
+      type: 'untilTurnEnd',
+      combatantId: 'pc-1'
+    });
+  });
+
+  test('Applied tab: conditional branch dispatches {type:"conditional", description}', async () => {
+    const onSetDuration = vi.fn();
+    render(EffectModal, { props: baseProps({ onSetDuration }) });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit duration for Frightened' }));
+    const typeSelect = screen.getByLabelText('Type') as HTMLSelectElement;
+    await fireEvent.change(typeSelect, { target: { value: 'conditional' } });
+
+    const descInput = screen.getByLabelText('Conditional description') as HTMLInputElement;
+    await fireEvent.input(descInput, { target: { value: '  After dawn  ' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSetDuration).toHaveBeenCalledWith('inst-1', {
+      type: 'conditional',
+      description: 'After dawn'
+    });
+  });
+
+  test('Applied tab: conditional with a blank description falls back to "conditional"', async () => {
+    const onSetDuration = vi.fn();
+    render(EffectModal, { props: baseProps({ onSetDuration }) });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit duration for Frightened' }));
+    const typeSelect = screen.getByLabelText('Type') as HTMLSelectElement;
+    await fireEvent.change(typeSelect, { target: { value: 'conditional' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSetDuration).toHaveBeenCalledWith('inst-1', {
+      type: 'conditional',
+      description: 'conditional'
+    });
+  });
+
+  test('Applied tab: Cancel closes the editor without calling onSetDuration', async () => {
+    const onSetDuration = vi.fn();
+    render(EffectModal, { props: baseProps({ onSetDuration }) });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit duration for Frightened' }));
+    expect(screen.getByLabelText('Type')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onSetDuration).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Type')).not.toBeInTheDocument();
+  });
+});
+
+describe('EffectModal — afflictions tab', () => {
+  test('clicking a valued affliction opens a stage picker; Apply dispatches onApply', async () => {
+    const onApply = vi.fn();
+    const { container } = render(
+      EffectModal,
+      { props: baseProps({ onApply, initialTab: 'afflictions' as EffectModalTab }) }
+    );
+
+    const chip = container.querySelector('[data-option-id="ghoul-fever"]') as HTMLButtonElement;
+    expect(chip).not.toBeNull();
+    await fireEvent.click(chip);
+
+    const stageInput = screen.getByLabelText('Stage for Ghoul Fever') as HTMLInputElement;
+    await fireEvent.input(stageInput, { target: { value: '3' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith({
+      kind: 'valued',
+      effectId: 'ghoul-fever',
+      value: 3,
+      note: undefined
+    });
+  });
+
+  test('Cancel inside the stage picker closes it without dispatching onApply', async () => {
+    const onApply = vi.fn();
+    const { container } = render(
+      EffectModal,
+      { props: baseProps({ onApply, initialTab: 'afflictions' as EffectModalTab }) }
+    );
+
+    await fireEvent.click(container.querySelector('[data-option-id="ghoul-fever"]') as HTMLButtonElement);
+    expect(screen.getByLabelText('Stage for Ghoul Fever')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onApply).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Stage for Ghoul Fever')).not.toBeInTheDocument();
+  });
+});

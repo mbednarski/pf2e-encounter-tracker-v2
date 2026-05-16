@@ -98,6 +98,71 @@ describe('RadialConditionMenu', () => {
     }
   });
 
+  test('pointerdown inside a non-Recent wedge calls onOpenModal with its tab and onClose', async () => {
+    const onOpenModal = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onOpenModal, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    // Identity CTM stubs so clientToSvg passes (clientX, clientY) through unchanged.
+    const identity = {
+      inverse: () => identity,
+      multiply: () => identity,
+      a: 1, b: 0, c: 0, d: 1, e: 0, f: 0
+    } as unknown as DOMMatrix;
+    (svg as unknown as { getScreenCTM: () => DOMMatrix }).getScreenCTM = () => identity;
+    (svg as unknown as { createSVGPoint: () => DOMPoint }).createSVGPoint = () => {
+      const pt = { x: 0, y: 0 } as DOMPoint;
+      (pt as unknown as { matrixTransform: (m: DOMMatrix) => DOMPoint }).matrixTransform = () => pt;
+      return pt;
+    };
+
+    // Conditions wedge sits at mid 60° (index 1, SLICE=60). Pick a point inside the
+    // active radius band (INNER_R+4=60 .. RING_R=130). Radius 90, angle 60°.
+    const CX = 220;
+    const CY = 220;
+    const angleDeg = 60;
+    const radius = 90;
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    const clientX = CX + Math.cos(rad) * radius;
+    const clientY = CY + Math.sin(rad) * radius;
+
+    await fireEvent.pointerDown(svg, { clientX, clientY });
+
+    expect(onOpenModal).toHaveBeenCalledTimes(1);
+    expect(onOpenModal).toHaveBeenCalledWith('conditions');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('pointerdown outside the active radius band does nothing', async () => {
+    const onOpenModal = vi.fn();
+    const onClose = vi.fn();
+    const { container } = render(RadialConditionMenu, {
+      props: baseProps({ onOpenModal, onClose })
+    });
+    const svg = container.querySelector('svg.radial-svg') as SVGSVGElement;
+
+    const identity = {
+      inverse: () => identity,
+      multiply: () => identity,
+      a: 1, b: 0, c: 0, d: 1, e: 0, f: 0
+    } as unknown as DOMMatrix;
+    (svg as unknown as { getScreenCTM: () => DOMMatrix }).getScreenCTM = () => identity;
+    (svg as unknown as { createSVGPoint: () => DOMPoint }).createSVGPoint = () => {
+      const pt = { x: 0, y: 0 } as DOMPoint;
+      (pt as unknown as { matrixTransform: (m: DOMMatrix) => DOMPoint }).matrixTransform = () => pt;
+      return pt;
+    };
+
+    // Click inside the inner hub (radius 30 < INNER_R+4=60). Should be ignored.
+    await fireEvent.pointerDown(svg, { clientX: 220, clientY: 250 });
+
+    expect(onOpenModal).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   test('hovering item K in the Recent sub-arc highlights item K, not its mirror (regression #92)', async () => {
     // Build a 5-item Recent list so the sub-arc has clear angular spread.
     const recentOptions: ConditionOption[] = [
