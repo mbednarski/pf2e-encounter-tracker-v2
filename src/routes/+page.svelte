@@ -74,6 +74,7 @@
   import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
   import { importCreatureFoundryJson } from '$lib/foundry';
   import {
+    COMMAND_ID_PREFIX,
     computeEncounterCounts,
     dedupeLogById,
     nextCombatantCounterFor,
@@ -189,7 +190,7 @@
     if (restored) {
       encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
       commandCounter = nextCommandCounterFor(encounter.combatLog);
-      combatantCounter = nextCombatantCounterFor(encounter);
+      combatantCounter = nextCombatantCounterFor(encounter.combatants);
     }
     if (loadResult.ok) {
       storedCreatures = loadResult.creatures;
@@ -222,7 +223,7 @@
   });
 
   function nextCommandId() {
-    return `cmd-${commandCounter++}`;
+    return `${COMMAND_ID_PREFIX}${commandCounter++}`;
   }
 
   function addCombatant(combatant: CombatantState) {

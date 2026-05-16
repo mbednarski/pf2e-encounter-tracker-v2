@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { LogEntry } from '../domain';
 import { combatant } from '../domain/test-support';
 import {
+  COMMAND_ID_PREFIX,
   computeEncounterCounts,
   dedupeLogById,
   nextCombatantCounterFor,
@@ -60,42 +61,63 @@ describe('nextCommandCounterFor', () => {
   test('returns 1 when no id matches', () => {
     expect(nextCommandCounterFor([log('hello'), log('cmd-x-y')])).toBe(1);
   });
+
+  test('requires the trailing dash after the digits (cmd-N alone does not match)', () => {
+    // Log entry ids in production are `${commandId}-${eventIndex}`, so `cmd-5`
+    // without a suffix is not a valid log-entry id and must be ignored.
+    expect(nextCommandCounterFor([log('cmd-5'), log('cmd-7')])).toBe(1);
+  });
+
+  test('COMMAND_ID_PREFIX matches the prefix the regex expects', () => {
+    // Guards against producer/consumer drift: if the prefix constant moves,
+    // the regex inside nextCommandCounterFor must move with it.
+    expect(COMMAND_ID_PREFIX).toBe('cmd-');
+    expect(nextCommandCounterFor([log(`${COMMAND_ID_PREFIX}9-0`)])).toBe(10);
+  });
 });
 
 describe('nextCombatantCounterFor', () => {
   test('returns 1 for empty combatants', () => {
-    expect(nextCombatantCounterFor({ combatants: {} })).toBe(1);
+    expect(nextCombatantCounterFor({})).toBe(1);
   });
 
   test('returns max + 1 across ids ending in -N', () => {
-    const state = {
-      combatants: {
+    expect(
+      nextCombatantCounterFor({
         'goblin-1': combatant('goblin-1'),
         'goblin-4': combatant('goblin-4'),
         'wolf-2': combatant('wolf-2')
-      }
-    };
-    expect(nextCombatantCounterFor(state)).toBe(5);
+      })
+    ).toBe(5);
   });
 
   test('ignores ids without a trailing -N', () => {
-    const state = {
-      combatants: {
+    expect(
+      nextCombatantCounterFor({
         aric: combatant('aric'),
         'wolf-3': combatant('wolf-3')
-      }
-    };
-    expect(nextCombatantCounterFor(state)).toBe(4);
+      })
+    ).toBe(4);
   });
 
   test('returns 1 when no id has a trailing -N', () => {
-    const state = {
-      combatants: {
+    expect(
+      nextCombatantCounterFor({
         aric: combatant('aric'),
         merisiel: combatant('merisiel')
-      }
-    };
-    expect(nextCombatantCounterFor(state)).toBe(1);
+      })
+    ).toBe(1);
+  });
+
+  test('anchors to trailing digits (middle-of-id digits are not used)', () => {
+    // `foo-3-bar-7` ends in `-7`, so the regex captures 7 (not 3).
+    // `wolf-9` ends in `-9`. Highest trailing digit is 9 → next is 10.
+    expect(
+      nextCombatantCounterFor({
+        'foo-3-bar-7': combatant('foo-3-bar-7'),
+        'wolf-9': combatant('wolf-9')
+      })
+    ).toBe(10);
   });
 });
 

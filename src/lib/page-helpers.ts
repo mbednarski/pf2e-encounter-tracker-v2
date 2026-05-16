@@ -1,5 +1,12 @@
 import type { CombatantState, LogEntry } from '../domain';
 
+export const COMMAND_ID_PREFIX = 'cmd-';
+
+const COMMAND_LOG_ENTRY_PATTERN = new RegExp(`^${COMMAND_ID_PREFIX}(\\d+)-`);
+const COMBATANT_INSTANCE_SUFFIX_PATTERN = /-(\d+)$/;
+
+export type CountsBySourceId = Record<string, number>;
+
 export function dedupeLogById(log: LogEntry[]): LogEntry[] {
   const seen = new Set<string>();
   const out: LogEntry[] = [];
@@ -14,7 +21,7 @@ export function dedupeLogById(log: LogEntry[]): LogEntry[] {
 export function nextCommandCounterFor(log: LogEntry[]): number {
   let highest = 0;
   for (const entry of log) {
-    const match = /^cmd-(\d+)-/.exec(entry.id);
+    const match = COMMAND_LOG_ENTRY_PATTERN.exec(entry.id);
     if (match) {
       const n = Number(match[1]);
       if (n > highest) highest = n;
@@ -23,12 +30,10 @@ export function nextCommandCounterFor(log: LogEntry[]): number {
   return highest + 1;
 }
 
-export function nextCombatantCounterFor(state: {
-  combatants: Record<string, CombatantState>;
-}): number {
+export function nextCombatantCounterFor(combatants: Record<string, CombatantState>): number {
   let highest = 0;
-  for (const id of Object.keys(state.combatants)) {
-    const match = /-(\d+)$/.exec(id);
+  for (const id of Object.keys(combatants)) {
+    const match = COMBATANT_INSTANCE_SUFFIX_PATTERN.exec(id);
     if (match) {
       const n = Number(match[1]);
       if (n > highest) highest = n;
@@ -39,8 +44,8 @@ export function nextCombatantCounterFor(state: {
 
 export function computeEncounterCounts(
   combatants: Record<string, CombatantState>
-): Record<string, number> {
-  const counts: Record<string, number> = {};
+): CountsBySourceId {
+  const counts: CountsBySourceId = {};
   for (const combatant of Object.values(combatants)) {
     if (combatant.sourceType !== 'creature') continue;
     counts[combatant.sourceId] = (counts[combatant.sourceId] ?? 0) + 1;
