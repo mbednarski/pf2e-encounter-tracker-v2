@@ -11,6 +11,7 @@
     "test:run": "vitest run",
     "coverage": "vitest run --coverage",
     "yaml:check": "tsx scripts/validate-creature-yaml.ts",
+    "spells:import": "tsx scripts/import-spells.ts",
     "audit": "npm audit --audit-level=moderate",
     "audit:low": "npm audit --audit-level=low"
   },
