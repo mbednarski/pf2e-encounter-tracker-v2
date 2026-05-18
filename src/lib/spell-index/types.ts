@@ -1,8 +1,9 @@
 // src/lib/spell-index/types.ts
 
-export type SpellActionCost = 'reaction' | 'free' | 1 | 2 | 3 | 'varies';
+import type { ActionCost, SpellTradition } from '../../domain';
+export type { SpellTradition };
 
-export type SpellTradition = 'arcane' | 'divine' | 'occult' | 'primal';
+export type SpellActionCost = ActionCost | 'varies';
 
 export interface SpellDefense {
   kind: 'save' | 'attack';
