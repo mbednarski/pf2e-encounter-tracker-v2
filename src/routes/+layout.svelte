@@ -34,3 +34,22 @@
 </svelte:head>
 
 <slot />
+
+<footer class="orc-attribution">
+  Spell data adapted from the
+  <a href="https://github.com/foundryvtt/pf2e" target="_blank" rel="noopener">Foundry VTT pf2e system</a>,
+  derived from Pathfinder content published under the
+  <a href="https://paizo.com/orc" target="_blank" rel="noopener">ORC License</a>.
+  Pathfinder is © Paizo Inc.
+</footer>
+
+<style>
+  .orc-attribution {
+    margin-top: 2rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    opacity: 0.65;
+    text-align: center;
+  }
+  .orc-attribution a { color: inherit; }
+</style>

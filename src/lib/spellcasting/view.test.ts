@@ -43,7 +43,7 @@ describe('buildSpellcastingView (prepared)', () => {
     const view = buildSpellcastingView(preparedBlock());
     if (view.type !== 'prepared') throw new Error('expected prepared');
     const rank2 = view.ranks.find((r) => r.rank === 2)!;
-    expect(rank2.entries).toEqual([{ spellSlug: 'spiritual-weapon', name: 'Spiritual Weapon', count: 2 }]);
+    expect(rank2.entries).toEqual([{ spellSlug: 'spiritual-weapon', name: 'Spiritual Weapon', level: 2, count: 2 }]);
   });
 });
 

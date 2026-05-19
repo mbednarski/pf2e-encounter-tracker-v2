@@ -2,6 +2,7 @@
   import type { CombatantSpellcasting } from '../../domain';
   import { buildSpellcastingView } from '$lib/spellcasting/view';
   import { formatModifier } from '$lib/abilities/format-damage';
+  import SpellRow from './SpellRow.svelte';
 
   export let block: CombatantSpellcasting;
   export let dcBonus: number = 0;
@@ -90,7 +91,13 @@
           {#if rank.entries.length > 0}
             <ul class="spell-list">
               {#each rank.entries as entry, i (i)}
-                <li>{entry.name}{entry.count > 1 ? ` (×${entry.count})` : ''}</li>
+                <SpellRow
+                  entry={entry}
+                  dc={view.header.dc + dcBonus}
+                  attackModifier={view.header.attackModifier !== undefined
+                    ? view.header.attackModifier + attackBonus
+                    : undefined}
+                />
               {/each}
             </ul>
           {/if}
@@ -130,7 +137,13 @@
           {#if rank.entries.length > 0}
             <ul class="spell-list">
               {#each rank.entries as entry, i (i)}
-                <li>{entry.name}</li>
+                <SpellRow
+                  entry={entry}
+                  dc={view.header.dc + dcBonus}
+                  attackModifier={view.header.attackModifier !== undefined
+                    ? view.header.attackModifier + attackBonus
+                    : undefined}
+                />
               {/each}
             </ul>
           {/if}
@@ -168,17 +181,31 @@
       {#if view.entries.length > 0}
         <ul class="spell-list">
           {#each view.entries as entry, i (i)}
-            <li>{entry.name} <span class="muted">({ordinal(entry.level)})</span></li>
+            <SpellRow
+              entry={entry}
+              dc={view.header.dc + dcBonus}
+              attackModifier={view.header.attackModifier !== undefined
+                ? view.header.attackModifier + attackBonus
+                : undefined}
+            />
           {/each}
         </ul>
       {/if}
     </div>
   {:else}
     {#if view.entries.length > 0}
-      <ul class="innate-list">
+      <div class="innate-list">
         {#each view.entries as entry, i (i)}
-          <li class="innate-row">
-            <span class="innate-name">{entry.name} <span class="muted">({ordinal(entry.level)})</span></span>
+          <div class="innate-row">
+            <ul class="innate-spell-list">
+              <SpellRow
+                entry={entry}
+                dc={view.header.dc + dcBonus}
+                attackModifier={view.header.attackModifier !== undefined
+                  ? view.header.attackModifier + attackBonus
+                  : undefined}
+              />
+            </ul>
             {#if entry.interactive && entry.max !== undefined}
               <span class="innate-uses">
                 {#each pipState(entry.used, entry.max) as state, i (i)}
@@ -206,9 +233,9 @@
             {:else}
               <span class="innate-marker">{entry.marker}</span>
             {/if}
-          </li>
+          </div>
         {/each}
-      </ul>
+      </div>
     {/if}
   {/if}
 
@@ -347,11 +374,18 @@
   }
 
   .innate-list {
-    list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
     gap: 4px;
+  }
+
+  .innate-spell-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
+    min-width: 0;
   }
 
   .innate-row {
@@ -388,12 +422,6 @@
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
-  }
-
-  .muted {
-    color: var(--color-ink-mute);
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
   }
 
   .block__stat.modified {

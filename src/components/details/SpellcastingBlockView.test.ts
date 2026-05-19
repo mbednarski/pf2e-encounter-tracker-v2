@@ -180,7 +180,7 @@ describe('SpellcastingBlockView — prepared slot pips', () => {
         ...baseHandlers()
       }
     });
-    expect(screen.getByText('Magic Missile (×3)')).toBeInTheDocument();
+    expect(screen.getByText('Magic Missile ×3')).toBeInTheDocument();
   });
 });
 
@@ -303,4 +303,45 @@ describe('SpellcastingBlockView — cantrips', () => {
     });
     expect(container.querySelector('.cantrips')).toBeNull();
   });
+});
+
+test('expands a spell row to show mechanics from the spell index', async () => {
+  const file = {
+    version: 1,
+    generatedAt: '2026-05-18T00:00:00Z',
+    source: { repo: 'foundryvtt/pf2e', tag: 'test' },
+    spells: [
+      {
+        slug: 'magic-missile',
+        name: 'Magic Missile',
+        baseLevel: 1,
+        isCantrip: false,
+        isFocus: false,
+        actionCost: 'varies',
+        traits: ['force'],
+        traditions: ['arcane', 'occult'],
+        defense: undefined,
+        effectSummary: 'Force projectile hits without a roll.',
+        base: { damage: '1d4+1 force' },
+        aonUrl: 'https://example.invalid'
+      }
+    ]
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(file), { status: 200 }))
+  );
+  const { __resetForTests } = await import('$lib/spell-index');
+  __resetForTests();
+
+  render(SpellcastingBlockView, {
+    props: {
+      block: preparedBlock(),
+      ...baseHandlers()
+    }
+  });
+
+  await fireEvent.click(screen.getByRole('button', { name: /Magic Missile/ }));
+  expect(await screen.findByText(/1d4\+1 force/)).toBeTruthy();
+  expect(screen.getByText(/Archives of Nethys/)).toBeTruthy();
 });

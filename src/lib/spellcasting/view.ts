@@ -16,6 +16,7 @@ export interface PreparedRankGroup {
 export interface PreparedEntryView {
   spellSlug: string;
   name: string;
+  level: number;
   count: number;
 }
 
@@ -107,7 +108,7 @@ export function buildSpellcastingView(block: CombatantSpellcasting): Spellcastin
     const byRank = new Map<number, PreparedEntryView[]>();
     for (const e of spells) {
       const list = byRank.get(e.level) ?? [];
-      list.push({ spellSlug: e.spellSlug, name: e.name, count: e.count ?? 1 });
+      list.push({ spellSlug: e.spellSlug, name: e.name, level: e.level, count: e.count ?? 1 });
       byRank.set(e.level, list);
     }
     const ranks: PreparedRankGroup[] = Object.keys(slots)
