@@ -209,7 +209,12 @@ function extractSummary(html: string | undefined): string {
   if (!stripped) return '';
   const firstSentenceMatch = stripped.match(/^.+?[.!?](?=\s|$)/);
   const summary = (firstSentenceMatch?.[0] ?? stripped.split('\n')[0]).trim();
-  return summary.length > 200 ? summary.slice(0, 197) + '...' : summary;
+  if (summary.length <= 200) return summary;
+  const head = summary.slice(0, 197);
+  const lastSpace = head.lastIndexOf(' ');
+  // Only break on whitespace when it's not absurdly close to the start.
+  const truncated = lastSpace > 100 ? head.slice(0, lastSpace) : head;
+  return truncated + '...';
 }
 
 function aonSearchUrl(name: string): string {

@@ -47,7 +47,7 @@ describe('resolveAtLevel', () => {
     expect(resolveAtLevel(entry, 9)).toEqual({ damage: '6d6 force' });
   });
 
-  test('interval mode adds delta per step', () => {
+  test('interval mode sums dice of the same type', () => {
     const fireball = spell({
       slug: 'fireball',
       name: 'Fireball',
@@ -60,8 +60,8 @@ describe('resolveAtLevel', () => {
       }
     });
     expect(resolveAtLevel(fireball, 3)).toEqual({ damage: '6d6 fire' });
-    expect(resolveAtLevel(fireball, 4)).toEqual({ damage: '6d6 fire +2d6 fire' });
-    expect(resolveAtLevel(fireball, 5)).toEqual({ damage: '6d6 fire +2d6 fire +2d6 fire' });
+    expect(resolveAtLevel(fireball, 4)).toEqual({ damage: '8d6 fire' });
+    expect(resolveAtLevel(fireball, 5)).toEqual({ damage: '10d6 fire' });
     expect(resolveAtLevel(fireball, 2)).toEqual({ damage: '6d6 fire' });
   });
 
@@ -79,7 +79,47 @@ describe('resolveAtLevel', () => {
       }
     });
     expect(resolveAtLevel(electricArc, 1)).toEqual({ damage: '1d4 electricity' });
-    expect(resolveAtLevel(electricArc, 3)).toEqual({ damage: '1d4 electricity +1d4 electricity' });
-    expect(resolveAtLevel(electricArc, 5)).toEqual({ damage: '1d4 electricity +1d4 electricity +1d4 electricity' });
+    expect(resolveAtLevel(electricArc, 3)).toEqual({ damage: '2d4 electricity' });
+    expect(resolveAtLevel(electricArc, 5)).toEqual({ damage: '3d4 electricity' });
+  });
+
+  test('interval preserves the base modifier when summing dice', () => {
+    const entry = spell({
+      base: { damage: '1d4+1 force' },
+      heightening: {
+        mode: 'interval',
+        per: 2,
+        delta: { damage: '+1d4 force' }
+      }
+    });
+    expect(resolveAtLevel(entry, 5)).toEqual({ damage: '3d4+1 force' });
+  });
+
+  test('interval falls back to verbose stacking when base is compound', () => {
+    const entry = spell({
+      baseLevel: 1,
+      base: { damage: '6d6 fire + 1d4 evil' },
+      heightening: {
+        mode: 'interval',
+        per: 1,
+        delta: { damage: '+2d6 fire' }
+      }
+    });
+    // One step at castLevel = baseLevel + 1; can't safely sum into a compound
+    // expression so the additive form is kept.
+    expect(resolveAtLevel(entry, 2).damage).toBe('6d6 fire + 1d4 evil +2d6 fire');
+  });
+
+  test('interval scales a typeless delta with no base damage', () => {
+    const entry = spell({
+      base: {},
+      heightening: {
+        mode: 'interval',
+        per: 1,
+        delta: { damage: '+1d6' }
+      },
+      baseLevel: 1
+    });
+    expect(resolveAtLevel(entry, 4)).toEqual({ damage: '3d6' });
   });
 });

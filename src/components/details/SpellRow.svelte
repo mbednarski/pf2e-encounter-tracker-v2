@@ -2,6 +2,7 @@
   import type { SpellListEntry } from '../../domain';
   import { ensureSpellIndex, resolveAtLevel } from '$lib/spell-index';
   import type { SpellIndexEntry, SpellIndexState } from '$lib/spell-index';
+  import ActionGlyph from './ActionGlyph.svelte';
 
   export let entry: SpellListEntry;
   export let dc: number;
@@ -12,12 +13,14 @@
 
   $: countSuffix = entry.count && entry.count > 1 ? ` ×${entry.count}` : '';
 
+  // Expand first so the user sees immediate feedback (the "Loading…" panel)
+  // even on slow networks; the fetch resolves into the populated panel.
   async function toggleExpand() {
-    if (!expanded && indexState.status === 'idle') {
+    expanded = !expanded;
+    if (expanded && indexState.status === 'idle') {
       indexState = { status: 'loading' };
       indexState = await ensureSpellIndex();
     }
-    expanded = !expanded;
   }
 
   function resolvedEntry(state: SpellIndexState): SpellIndexEntry | undefined {
@@ -38,15 +41,6 @@
 
   function capitalize(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-
-  function formatActionCost(cost: SpellIndexEntry['actionCost']): string {
-    if (cost === 1) return '◆';
-    if (cost === 2) return '◆◆';
-    if (cost === 3) return '◆◆◆';
-    if (cost === 'reaction') return '↺';
-    if (cost === 'free') return '◇';
-    return '—';
   }
 </script>
 
@@ -70,7 +64,11 @@
         {@const resolved = resolveAtLevel(spell, entry.level)}
         <div class="spell-row__panel">
           <div class="spell-row__line">
-            <span>{formatActionCost(spell.actionCost)}</span>
+            {#if spell.actionCost === 'varies'}
+              <span aria-label="Variable action cost">—</span>
+            {:else}
+              <ActionGlyph cost={spell.actionCost} />
+            {/if}
             {#if spell.range}<span>· Range {spell.range}</span>{/if}
             {#if spell.area}<span>· Area {spell.area}</span>{/if}
             {#if spell.targets}<span>· Targets {spell.targets}</span>{/if}

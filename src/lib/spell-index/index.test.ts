@@ -68,6 +68,28 @@ describe('ensureSpellIndex', () => {
     warn.mockRestore();
   });
 
+  test('network error (fetch rejects) leaves index unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const state = await ensureSpellIndex();
+    expect(state.status).toBe('unavailable');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('unavailable state is sticky — no retry on subsequent calls', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('offline'));
+    vi.stubGlobal('fetch', fetchMock);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await ensureSpellIndex();
+    await ensureSpellIndex();
+    await ensureSpellIndex();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   test('concurrent calls share one fetch', async () => {
     const fetchMock = vi
       .fn()
