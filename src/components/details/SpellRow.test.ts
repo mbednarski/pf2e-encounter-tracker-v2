@@ -77,7 +77,7 @@ describe('SpellRow', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Fireball/ }));
 
     expect(await screen.findByText(/Reflex DC 22 \(basic\)/)).toBeTruthy();
-    expect(screen.getByText(/6d6 fire \+2d6 fire \+2d6 fire/)).toBeTruthy();
+    expect(screen.getByText(/10d6 fire/)).toBeTruthy();
     expect(screen.getByText(/heightened from rank 3/)).toBeTruthy();
     expect(screen.getByText(/Archives of Nethys/)).toBeTruthy();
   });

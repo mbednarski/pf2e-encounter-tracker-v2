@@ -9,6 +9,10 @@ export type SpellIndexState =
 let inflight: Promise<SpellIndexState> | null = null;
 let cached: SpellIndexState = { status: 'idle' };
 
+// `unavailable` is sticky for the rest of the session — we don't retry. The
+// asset is a same-origin static file so a single failure is almost certainly
+// a build/deploy problem rather than a transient one; callers fall back to
+// the AoN search link in that case.
 export async function ensureSpellIndex(): Promise<SpellIndexState> {
   if (cached.status === 'ready' || cached.status === 'unavailable') {
     return cached;
