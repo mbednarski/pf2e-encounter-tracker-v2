@@ -4,6 +4,7 @@ import {
   ACTIVE_ENCOUNTER_STORE,
   CREATURE_LIBRARY_STORE,
   DB_NAME,
+  HAZARD_LIBRARY_STORE,
   PARTY_MEMBER_STORE,
   SETTINGS_STORE
 } from './db';
@@ -52,14 +53,20 @@ describe('IndexedDB schema migration', () => {
     openConnections.push(db);
 
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
+      [
+        ACTIVE_ENCOUNTER_STORE,
+        SETTINGS_STORE,
+        CREATURE_LIBRARY_STORE,
+        PARTY_MEMBER_STORE,
+        HAZARD_LIBRARY_STORE
+      ].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
       sentinel: 'v1-data'
     });
   });
 
-  it('preserves prior records when upgrading from v3 to v4 and adds the partyMembers store', async () => {
+  it('preserves prior records when upgrading from v3 and adds the partyMembers + hazardLibrary stores', async () => {
     const v3 = await openDB(DB_NAME, 3, {
       upgrade(db) {
         db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
@@ -77,7 +84,13 @@ describe('IndexedDB schema migration', () => {
     openConnections.push(db);
 
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
+      [
+        ACTIVE_ENCOUNTER_STORE,
+        SETTINGS_STORE,
+        CREATURE_LIBRARY_STORE,
+        PARTY_MEMBER_STORE,
+        HAZARD_LIBRARY_STORE
+      ].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
       sentinel: 'v3-active'
@@ -85,6 +98,38 @@ describe('IndexedDB schema migration', () => {
     expect(await db.get(SETTINGS_STORE, 'llmApiKey')).toBe('sk-test');
     expect(await db.getAll(CREATURE_LIBRARY_STORE)).toEqual([{ id: 'goblin', name: 'Goblin' }]);
     expect(await db.getAll(PARTY_MEMBER_STORE)).toEqual([]);
+    expect(await db.getAll(HAZARD_LIBRARY_STORE)).toEqual([]);
+  });
+
+  it('preserves prior records when upgrading from v4 to v5 and adds the hazardLibrary store', async () => {
+    const v4 = await openDB(DB_NAME, 4, {
+      upgrade(db) {
+        db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
+        db.createObjectStore(SETTINGS_STORE);
+        db.createObjectStore(CREATURE_LIBRARY_STORE);
+        db.createObjectStore(PARTY_MEMBER_STORE);
+      }
+    });
+    await v4.put(CREATURE_LIBRARY_STORE, { id: 'goblin', name: 'Goblin' }, 'goblin');
+    await v4.put(PARTY_MEMBER_STORE, { id: 'hero', name: 'Hero' }, 'hero');
+    v4.close();
+
+    const { getDb } = await import('./db');
+    const db = await getDb()!;
+    openConnections.push(db);
+
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(
+      [
+        ACTIVE_ENCOUNTER_STORE,
+        SETTINGS_STORE,
+        CREATURE_LIBRARY_STORE,
+        PARTY_MEMBER_STORE,
+        HAZARD_LIBRARY_STORE
+      ].sort()
+    );
+    expect(await db.getAll(CREATURE_LIBRARY_STORE)).toEqual([{ id: 'goblin', name: 'Goblin' }]);
+    expect(await db.getAll(PARTY_MEMBER_STORE)).toEqual([{ id: 'hero', name: 'Hero' }]);
+    expect(await db.getAll(HAZARD_LIBRARY_STORE)).toEqual([]);
   });
 
   it('preserves prior activeEncounter + settings records when upgrading from v2 to v3', async () => {
@@ -104,7 +149,13 @@ describe('IndexedDB schema migration', () => {
     openConnections.push(db);
 
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
+      [
+        ACTIVE_ENCOUNTER_STORE,
+        SETTINGS_STORE,
+        CREATURE_LIBRARY_STORE,
+        PARTY_MEMBER_STORE,
+        HAZARD_LIBRARY_STORE
+      ].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
       sentinel: 'v2-active'
@@ -113,12 +164,18 @@ describe('IndexedDB schema migration', () => {
     expect(await db.getAll(CREATURE_LIBRARY_STORE)).toEqual([]);
   });
 
-  it('creates all three stores on a fresh install (no prior database)', async () => {
+  it('creates all stores on a fresh install (no prior database)', async () => {
     const { getDb } = await import('./db');
     const db = await getDb()!;
     openConnections.push(db);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [ACTIVE_ENCOUNTER_STORE, SETTINGS_STORE, CREATURE_LIBRARY_STORE, PARTY_MEMBER_STORE].sort()
+      [
+        ACTIVE_ENCOUNTER_STORE,
+        SETTINGS_STORE,
+        CREATURE_LIBRARY_STORE,
+        PARTY_MEMBER_STORE,
+        HAZARD_LIBRARY_STORE
+      ].sort()
     );
   });
 });

@@ -52,8 +52,52 @@ describe('LibraryManageModal', () => {
       props: { creatures: [], onRemove: vi.fn(), onClose: vi.fn() }
     });
     expect(
-      screen.getByText('Your library is empty. Import a YAML file to add creatures.')
+      screen.getByText(
+        'Your library is empty. Import a YAML or Foundry JSON file to add creatures or hazards.'
+      )
     ).toBeInTheDocument();
+  });
+
+  test('lists hazards in their own section and confirms removal via onRemoveHazard', async () => {
+    const onRemoveHazard = vi.fn();
+    render(LibraryManageModal, {
+      props: {
+        creatures: [],
+        hazards: [
+          {
+            id: 'dart-gallery',
+            name: 'Dart Gallery',
+            level: 8,
+            traits: ['trap'],
+            rarity: 'common',
+            stealth: 28,
+            ac: 27,
+            fortitude: 13,
+            reflex: 17,
+            will: 8,
+            hp: 100,
+            immunities: [],
+            resistances: [],
+            weaknesses: [],
+            attacks: [],
+            passiveAbilities: [],
+            reactiveAbilities: [],
+            activeAbilities: [],
+            tags: []
+          }
+        ],
+        onRemove: vi.fn(),
+        onRemoveHazard,
+        onClose: vi.fn()
+      }
+    });
+    expect(screen.getByText('Hazards')).toBeInTheDocument();
+    expect(screen.getByText('Dart Gallery')).toBeInTheDocument();
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Remove Dart Gallery from library' })
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(onRemoveHazard).toHaveBeenCalledWith('dart-gallery');
   });
 
   test('Remove button does not immediately call onRemove — requires inline confirm', async () => {

@@ -375,4 +375,45 @@ describe('CombatantDetailsPanel', () => {
     expect(onSetNote).toHaveBeenCalledTimes(1);
     expect(onSetNote).toHaveBeenCalledWith('goblin-1', 'Watch the door.');
   });
+
+  describe('hazard combatants', () => {
+    function hazardCombatant() {
+      return combatant('dart-gallery-1', {
+        name: 'Poisoned Dart Gallery',
+        sourceType: 'hazard',
+        hazardData: {
+          stealth: 28,
+          stealthNote: 'DC 30 to detect; trained',
+          hardness: 10,
+          routine: 'The trap fires a volley of poisoned darts.',
+          disable: 'Thievery DC 26 to disarm a launcher.'
+        }
+      });
+    }
+
+    test('renders the Hazard section with routine and disable text', () => {
+      renderPanel(hazardCombatant());
+      const hazard = screen.getByLabelText('Hazard');
+      expect(hazard).toHaveTextContent('The trap fires a volley of poisoned darts.');
+      expect(hazard).toHaveTextContent('Thievery DC 26 to disarm a launcher.');
+    });
+
+    test('labels the initiative stat "Stealth" and shows Hardness instead of Speed', () => {
+      renderPanel(hazardCombatant());
+      const defenses = screen.getByLabelText('Defenses');
+      expect(defenses).toHaveTextContent('Stealth');
+      expect(defenses).toHaveTextContent('Hardness');
+      expect(defenses).not.toHaveTextContent('Speed');
+    });
+
+    test('hides the template adjustment toggle for hazards', () => {
+      renderPanel(hazardCombatant());
+      expect(screen.queryByRole('group', { name: 'Template adjustment' })).toBeNull();
+    });
+
+    test('does not render a Hazard section for creature combatants', () => {
+      renderPanel(combatant('goblin-1'));
+      expect(screen.queryByLabelText('Hazard')).not.toBeInTheDocument();
+    });
+  });
 });

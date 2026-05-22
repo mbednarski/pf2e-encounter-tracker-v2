@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, Duration, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, Duration, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import TopBar from '../components/TopBar.svelte';
@@ -28,6 +28,7 @@
     listSpellEffectOptions,
     makeCombatant,
     makeCreatureCombatant,
+    makeHazardCombatant,
     makePartyMemberCombatant,
     newEncounterState,
     toCommand,
@@ -65,14 +66,19 @@
     removeCreature
   } from '$lib/storage/creature-library';
   import {
+    addHazards,
+    loadHazards,
+    removeHazard
+  } from '$lib/storage/hazard-library';
+  import {
     addPartyMembers,
     loadPartyMembers,
     removePartyMember,
     savePartyMember
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { importCreatureYaml, importPartyMemberYaml } from '$lib/yaml';
-  import { importCreatureFoundryJson } from '$lib/foundry';
+  import { importCreatureYaml, importHazardYaml, importPartyMemberYaml } from '$lib/yaml';
+  import { importCreatureFoundryJson, importHazardFoundryJson } from '$lib/foundry';
   import {
     COMMAND_ID_PREFIX,
     computeEncounterCounts,
@@ -101,6 +107,7 @@
   let feedbackCounter = 1;
   let selection: Selection = emptySelection;
   let storedCreatures: Creature[] = [];
+  let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
 
   $: availableCreatures = storedCreatures;
@@ -182,9 +189,10 @@
   }
 
   onMount(async () => {
-    const [restored, loadResult, partyResult] = await Promise.all([
+    const [restored, loadResult, hazardResult, partyResult] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
+      loadHazards(),
       loadPartyMembers()
     ]);
     if (restored) {
@@ -208,6 +216,16 @@
         loadResult.reason === 'unavailable'
           ? 'Could not load your creature library: storage is unavailable. Imports this session will not survive a reload.'
           : 'Could not load your creature library from storage. Try reloading the page; if it persists, your saved data may be inaccessible (another tab on a newer version, full storage, or browser policy).'
+      );
+    }
+    if (hazardResult.ok) {
+      storedHazards = hazardResult.hazards;
+    } else {
+      appendFeedback(
+        nextFeedbackId('hazard-load-fail'),
+        hazardResult.reason === 'unavailable'
+          ? 'Could not load your hazard library: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your hazard library from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
       );
     }
     if (partyResult.ok) {
@@ -376,6 +394,151 @@
       return;
     }
     storedCreatures = storedCreatures.filter((c) => c.id !== id);
+  }
+
+  function handleAddOneFromHazards(hazard: Hazard) {
+    const existing = encounterCounts[hazard.id] ?? 0;
+    const name = existing > 0 ? `${hazard.name} ${existing + 1}` : hazard.name;
+    const combatant = makeHazardCombatant({
+      hazard,
+      combatantId: `${hazard.id}-${combatantCounter++}`,
+      name
+    });
+    addCombatant(combatant);
+  }
+
+  function handleRemoveOneFromHazardsCount(hazardId: string) {
+    let target: CombatantState | undefined;
+    for (const id of [...encounter.initiative.order].reverse()) {
+      const c = encounter.combatants[id];
+      if (c && c.sourceType === 'hazard' && c.sourceId === hazardId) {
+        target = c;
+        break;
+      }
+    }
+    if (!target) {
+      for (const c of Object.values(encounter.combatants)) {
+        if (c.sourceType === 'hazard' && c.sourceId === hazardId) {
+          target = c;
+          break;
+        }
+      }
+    }
+    if (!target) return;
+    runCommand(toCommand('REMOVE_COMBATANT', { combatantId: target.id }, nextCommandId()));
+  }
+
+  async function handleImportHazardFiles(files: File[]) {
+    for (const file of files) {
+      let text: string;
+      try {
+        text = await file.text();
+      } catch (err) {
+        appendFeedback(
+          nextFeedbackId('hz-import-read-fail'),
+          `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+        continue;
+      }
+
+      const lower = file.name.toLowerCase();
+      const isJson = lower.endsWith('.json');
+      const isYaml = lower.endsWith('.yaml') || lower.endsWith('.yml');
+      if (!isJson && !isYaml) {
+        appendFeedback(
+          nextFeedbackId('hz-import-bad-ext'),
+          `"${file.name}": unsupported file type. Use .yaml, .yml, or .json.`
+        );
+        continue;
+      }
+
+      let hazards: Hazard[];
+      let issues: ReturnType<typeof importHazardYaml>['issues'];
+      let skipped: ReturnType<typeof importHazardYaml>['skipped'];
+      try {
+        ({ hazards, issues, skipped } = isJson
+          ? importHazardFoundryJson(text)
+          : importHazardYaml(text));
+      } catch (err) {
+        appendFeedback(
+          nextFeedbackId('hz-import-fail'),
+          `Could not import "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+        continue;
+      }
+
+      const persistResult = await addHazards(hazards);
+
+      if (!persistResult.ok) {
+        appendFeedback(
+          nextFeedbackId('hz-import-persist-fail'),
+          persistResult.reason === 'unavailable'
+            ? `Could not save hazards from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+            : `Could not save hazards from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
+        );
+        continue;
+      }
+
+      for (const hazard of persistResult.rejected) {
+        appendFeedback(
+          nextFeedbackId('hz-import-dup'),
+          `Skipped "${hazard.name}" from "${file.name}": id "${hazard.id}" is already in your library.`
+        );
+      }
+
+      if (persistResult.added.length > 0) {
+        storedHazards = [...storedHazards, ...persistResult.added];
+        appendFeedback(
+          nextFeedbackId('hz-import-ok'),
+          `Imported ${persistResult.added.length} hazard${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
+          'success'
+        );
+      }
+
+      for (const skip of skipped) {
+        appendFeedback(
+          nextFeedbackId('hz-import-skip'),
+          `"${file.name}" doc ${skip.documentIndex + 1}: skipped — kind "${skip.kind}" is not a hazard document.`,
+          'info'
+        );
+      }
+
+      for (const issue of issues) {
+        const where = issue.path ? ` at "${issue.path}"` : '';
+        const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
+        appendFeedback(
+          nextFeedbackId('hz-import-issue'),
+          `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
+        );
+      }
+
+      if (
+        persistResult.added.length === 0 &&
+        persistResult.rejected.length === 0 &&
+        issues.length === 0 &&
+        skipped.length === 0 &&
+        hazards.length === 0
+      ) {
+        appendFeedback(
+          nextFeedbackId('hz-import-empty'),
+          `"${file.name}" contained no hazard documents.`
+        );
+      }
+    }
+  }
+
+  async function handleRemoveHazard(id: string) {
+    const result = await removeHazard(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('hz-remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove hazard: storage is unavailable.'
+          : 'Could not remove hazard: storage write failed.'
+      );
+      return;
+    }
+    storedHazards = storedHazards.filter((h) => h.id !== id);
   }
 
   async function handleImportPartyMemberYamlFiles(files: File[]) {
@@ -872,6 +1035,7 @@
       <LibraryPane
         {canStart}
         creatures={availableCreatures}
+        hazards={storedHazards}
         partyMembers={storedPartyMembers}
         {conditionOptions}
         {encounterCounts}
@@ -880,6 +1044,10 @@
         onAddManual={handleAddManual}
         onImportCreatureFiles={handleImportCreatureFiles}
         onRemoveCreature={handleRemoveCreature}
+        onAddOneFromHazards={handleAddOneFromHazards}
+        onRemoveOneFromHazardsCount={handleRemoveOneFromHazardsCount}
+        onImportHazardFiles={handleImportHazardFiles}
+        onRemoveHazard={handleRemoveHazard}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}
         onSavePartyMember={handleSavePartyMember}
