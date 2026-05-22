@@ -15,6 +15,7 @@
   import StatRollButton from './ui/StatRollButton.svelte';
   import AbilityCard from './details/AbilityCard.svelte';
   import AttackRow from './details/AttackRow.svelte';
+  import HazardStatBlock from './details/HazardStatBlock.svelte';
   import SpellcastingBlockView from './details/SpellcastingBlockView.svelte';
 
   type SaveKey = 'fortitude' | 'reflex' | 'will';
@@ -70,6 +71,7 @@
     : '';
 
   $: computed = combatant ? computeCombatantStats(combatant) : null;
+  $: isHazard = combatant?.sourceType === 'hazard';
   $: adjustment = combatant?.templateAdjustment ?? 'normal';
   $: adjustedAttacks = combatant ? combatant.attacks.map((a) => adjustedAttack(a, adjustment)) : [];
   $: adjustedPassive = combatant
@@ -156,15 +158,21 @@
           </dd>
         </div>
         <div class="stat">
-          <SectionLabel>Perception</SectionLabel>
+          <SectionLabel>{isHazard ? 'Stealth' : 'Perception'}</SectionLabel>
           <dd
             title={computed ? statTooltip(computed.perception) : ''}
             class:modified={computed && computed.perception.final !== computed.perception.base}
           >{formatModifier(computed ? computed.perception.final : adjustedView!.perception)}</dd>
         </div>
         <div class="stat">
-          <SectionLabel>Speed</SectionLabel>
-          <dd>{adjustedView!.speed} ft</dd>
+          <SectionLabel>{isHazard ? 'Hardness' : 'Speed'}</SectionLabel>
+          <dd>
+            {#if isHazard}
+              {combatant.hazardData?.hardness ?? '—'}
+            {:else}
+              {adjustedView!.speed} ft
+            {/if}
+          </dd>
         </div>
       </dl>
       <div class="saves-grid">
@@ -197,6 +205,13 @@
         />
       </div>
     </section>
+
+    {#if isHazard && combatant.hazardData}
+      <section class="details__section" aria-label="Hazard">
+        <SectionLabel as="h3">Hazard</SectionLabel>
+        <HazardStatBlock data={combatant.hazardData} />
+      </section>
+    {/if}
 
     {#if adjustedPassive.length > 0}
       <section class="details__section" aria-label="Passive Abilities">

@@ -40,7 +40,7 @@ export type ParseOutcome<T> =
   | { ok: true; value: T; issues: ValidationIssue[] }
   | { ok: false; issues: ValidationIssue[] };
 
-class IssueBag {
+export class IssueBag {
   readonly issues: ValidationIssue[] = [];
   constructor(private readonly documentIndex: number) {}
 
@@ -57,7 +57,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === 'string');
 }
 
-function requireNumber(bag: IssueBag, path: string, value: unknown): number | null {
+export function requireNumber(bag: IssueBag, path: string, value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     bag.add(path, 'must be a finite number');
     return null;
@@ -65,7 +65,7 @@ function requireNumber(bag: IssueBag, path: string, value: unknown): number | nu
   return value;
 }
 
-function requireString(bag: IssueBag, path: string, value: unknown): string | null {
+export function requireString(bag: IssueBag, path: string, value: unknown): string | null {
   if (typeof value !== 'string') {
     bag.add(path, 'must be a string');
     return null;
@@ -73,7 +73,7 @@ function requireString(bag: IssueBag, path: string, value: unknown): string | nu
   return value;
 }
 
-function requireStringArray(bag: IssueBag, path: string, value: unknown): string[] | null {
+export function requireStringArray(bag: IssueBag, path: string, value: unknown): string[] | null {
   if (!isStringArray(value)) {
     bag.add(path, 'must be an array of strings');
     return null;
@@ -81,7 +81,7 @@ function requireStringArray(bag: IssueBag, path: string, value: unknown): string
   return value;
 }
 
-function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | null {
+export function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | null {
   if (!Array.isArray(value)) {
     bag.add(path, 'must be an array');
     return null;
@@ -89,7 +89,7 @@ function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | 
   return value;
 }
 
-function requireObject(bag: IssueBag, path: string, value: unknown): Record<string, unknown> | null {
+export function requireObject(bag: IssueBag, path: string, value: unknown): Record<string, unknown> | null {
   if (!isPlainObject(value)) {
     bag.add(path, 'must be a mapping (object)');
     return null;
@@ -117,7 +117,7 @@ function validateRecordOfNumbers(
   return ok ? out : null;
 }
 
-function validateDamageType(bag: IssueBag, path: string, raw: unknown): { type: string; value: number } | null {
+export function validateDamageType(bag: IssueBag, path: string, raw: unknown): { type: string; value: number } | null {
   const obj = requireObject(bag, path, raw);
   if (!obj) return null;
   const type = requireString(bag, `${path}.type`, obj.type);
@@ -227,7 +227,7 @@ function validateSpellEntrySave(bag: IssueBag, path: string, raw: unknown): Spel
   return out;
 }
 
-function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | null {
+export function validateAttack(bag: IssueBag, path: string, raw: unknown): Attack | null {
   const obj = requireObject(bag, path, raw);
   if (!obj) return null;
   let ok = true;
@@ -537,7 +537,7 @@ function validateSpellcastingBlock(bag: IssueBag, path: string, raw: unknown): S
   return block;
 }
 
-function validateCreatureImmunity(bag: IssueBag, path: string, raw: unknown): CreatureImmunity | null {
+export function validateCreatureImmunity(bag: IssueBag, path: string, raw: unknown): CreatureImmunity | null {
   const obj = requireObject(bag, path, raw);
   if (!obj) return null;
   let ok = true;
@@ -613,7 +613,7 @@ function validateLanguages(bag: IssueBag, path: string, raw: unknown): Languages
   return out;
 }
 
-function validateAbilityArray(bag: IssueBag, path: string, raw: unknown): Ability[] | null {
+export function validateAbilityArray(bag: IssueBag, path: string, raw: unknown): Ability[] | null {
   const arr = requireArray(bag, path, raw);
   if (arr === null) return null;
   const out: Ability[] = [];

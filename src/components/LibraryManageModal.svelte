@@ -1,25 +1,44 @@
 <script lang="ts">
-  import type { Creature } from '../domain';
+  import type { Creature, Hazard } from '../domain';
   import Button from './ui/Button.svelte';
   import IconButton from './ui/IconButton.svelte';
 
   export let creatures: Creature[];
+  export let hazards: Hazard[] = [];
   export let onRemove: (creatureId: string) => void;
+  export let onRemoveHazard: (hazardId: string) => void = () => {};
   export let onClose: () => void;
 
-  let pendingRemoveId: string | null = null;
+  type EntryKind = 'creature' | 'hazard';
+  interface LibraryEntry {
+    id: string;
+    name: string;
+    level: number;
+    traits: string[];
+  }
 
-  function startRemove(id: string) {
-    pendingRemoveId = id;
+  // `creature` and `hazard` ids share no namespace, so a pending removal must
+  // track which library the id belongs to.
+  let pendingRemove: { kind: EntryKind; id: string } | null = null;
+
+  $: sections = [
+    { kind: 'creature' as EntryKind, label: 'Creatures', entries: creatures as LibraryEntry[] },
+    { kind: 'hazard' as EntryKind, label: 'Hazards', entries: hazards as LibraryEntry[] }
+  ];
+  $: isEmpty = creatures.length === 0 && hazards.length === 0;
+
+  function startRemove(kind: EntryKind, id: string) {
+    pendingRemove = { kind, id };
   }
 
   function cancelRemove() {
-    pendingRemoveId = null;
+    pendingRemove = null;
   }
 
-  function confirmRemove(id: string) {
-    pendingRemoveId = null;
-    onRemove(id);
+  function confirmRemove(kind: EntryKind, id: string) {
+    pendingRemove = null;
+    if (kind === 'creature') onRemove(id);
+    else onRemoveHazard(id);
   }
 
   function handleBackdropClick(event: MouseEvent) {
@@ -28,16 +47,12 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      if (pendingRemoveId !== null) {
+      if (pendingRemove !== null) {
         cancelRemove();
         return;
       }
       onClose();
     }
-  }
-
-  function formatTraits(creature: Creature): string {
-    return creature.traits.join(' · ');
   }
 </script>
 
@@ -55,40 +70,49 @@
     </header>
 
     <div class="modal__body">
-      {#if creatures.length === 0}
-        <p class="empty">Your library is empty. Import a YAML file to add creatures.</p>
+      {#if isEmpty}
+        <p class="empty">Your library is empty. Import a YAML or Foundry JSON file to add creatures or hazards.</p>
       {:else}
-        <ul class="rows">
-          {#each creatures as creature (creature.id)}
-            <li class="row">
-              <span class="row__level" aria-label="Level {creature.level}">{creature.level}</span>
-              <span class="row__body">
-                <span class="row__name">{creature.name}</span>
-                {#if creature.traits.length > 0}
-                  <span class="row__traits">{formatTraits(creature)}</span>
-                {/if}
-              </span>
-              {#if pendingRemoveId === creature.id}
-                <span class="row__confirm">
-                  <span class="row__confirm-text">Delete?</span>
-                  <Button variant="ghost" size="sm" onclick={cancelRemove}>Cancel</Button>
-                  <Button variant="destructive" size="sm" onclick={() => confirmRemove(creature.id)}>
-                    Delete
-                  </Button>
-                </span>
-              {:else}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onclick={() => startRemove(creature.id)}
-                  ariaLabel="Remove {creature.name} from library"
-                >
-                  Remove
-                </Button>
-              {/if}
-            </li>
-          {/each}
-        </ul>
+        {#each sections as section (section.kind)}
+          {#if section.entries.length > 0}
+            <h3 class="section-label">{section.label}</h3>
+            <ul class="rows">
+              {#each section.entries as entry (entry.id)}
+                <li class="row">
+                  <span class="row__level" aria-label="Level {entry.level}">{entry.level}</span>
+                  <span class="row__body">
+                    <span class="row__name">{entry.name}</span>
+                    {#if entry.traits.length > 0}
+                      <span class="row__traits">{entry.traits.join(' · ')}</span>
+                    {/if}
+                  </span>
+                  {#if pendingRemove?.kind === section.kind && pendingRemove.id === entry.id}
+                    <span class="row__confirm">
+                      <span class="row__confirm-text">Delete?</span>
+                      <Button variant="ghost" size="sm" onclick={cancelRemove}>Cancel</Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onclick={() => confirmRemove(section.kind, entry.id)}
+                      >
+                        Delete
+                      </Button>
+                    </span>
+                  {:else}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onclick={() => startRemove(section.kind, entry.id)}
+                      ariaLabel="Remove {entry.name} from library"
+                    >
+                      Remove
+                    </Button>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {/each}
       {/if}
     </div>
 
@@ -155,6 +179,20 @@
     color: var(--color-ink-mute);
     font-size: var(--text-base);
     font-style: italic;
+  }
+
+  .section-label {
+    margin: var(--space-3) 0 var(--space-1);
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-widest);
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .section-label:first-child {
+    margin-top: 0;
   }
 
   .rows {

@@ -1,6 +1,7 @@
 import {
   applyCommand,
   createCombatantFromCreature,
+  createCombatantFromHazard,
   createCombatantFromPartyMember,
   deriveStats,
   effectLibrary,
@@ -19,6 +20,7 @@ import type {
   Duration,
   EffectDefinition,
   EncounterState,
+  Hazard,
   LogEntry,
   PartyMember
 } from '../domain';
@@ -115,6 +117,20 @@ export function makeCreatureCombatant(input: CreatureCombatantInput): CombatantS
     combatantId: input.combatantId,
     name: input.name,
     adjustment: input.adjustment === 'normal' ? undefined : input.adjustment
+  });
+}
+
+export interface HazardCombatantInput {
+  hazard: Hazard;
+  combatantId: string;
+  name?: string;
+}
+
+export function makeHazardCombatant(input: HazardCombatantInput): CombatantState {
+  return createCombatantFromHazard({
+    hazard: input.hazard,
+    combatantId: input.combatantId,
+    name: input.name
   });
 }
 

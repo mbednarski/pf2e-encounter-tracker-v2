@@ -79,11 +79,17 @@ Tracking only. Captured in issue #49. Domain commands are stubbed in `src/domain
 - [ ] Wire `USE_INNATE_SPELL`, `RESTORE_INNATE_SPELL`, `SET_INNATE_USAGE`.
 - [ ] Add spellcasting block UI on combatant cards.
 
+## M7 Complex Hazards
+
+- [x] Add `Hazard` domain type, `HazardData`, and `createCombatantFromHazard` factory.
+- [x] Add Foundry pf2e `hazard` actor JSON importer + YAML hazard validator.
+- [x] Add IndexedDB hazard library (DB v5) with import/manage UI.
+- [x] Add hazard combatant rendering: stat block, Stealth/Hardness, free-form routine + disable text. (Spec: `pf2e-hazards-spec.md`.)
+
 ## Deferred milestones
 
 Specs are authoritative; tracking issues hold scope so the work is not lost. None of these are in the active backlog filter.
 
-- **Hazards** — issue #50, spec `pf2e-hazards-spec.md`. Hazards as initiative participants with reactions, triggers, and disables.
 - **Afflictions** — issue #51, spec `pf2e-afflictions-spec.md`. Poison/disease/curse staging, saves, and turn-boundary prompts.
 - **Party members** — issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entities, not ad-hoc combatants.
 - **Creature types** — spec `pf2e-creature-types-spec.md`. Folds into #48 once the import-driven creature library lands.

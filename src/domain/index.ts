@@ -1,6 +1,7 @@
 export { applyCommand } from './reducer';
 export { createCombatantFromCreature } from './creatures/clone';
 export { createCombatantFromPartyMember } from './party/factory';
+export { createCombatantFromHazard } from './hazards/factory';
 export { applyEliteWeak, adjustedLevel } from './creatures/templates';
 export {
   adjustedAbility,
@@ -63,6 +64,8 @@ export type {
   EffectLibrary,
   EncounterPhase,
   EncounterState,
+  Hazard,
+  HazardData,
   InitiativeState,
   Languages,
   LogEntry,

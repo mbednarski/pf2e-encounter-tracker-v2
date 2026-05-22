@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import type { Creature, PartyMember } from '../domain';
+import type { Creature, Hazard, PartyMember } from '../domain';
 import LibraryPane from './LibraryPane.svelte';
 
 function creature(id: string, name: string): Creature {
@@ -31,10 +31,35 @@ function creature(id: string, name: string): Creature {
   };
 }
 
+function hazard(id: string, name: string): Hazard {
+  return {
+    id,
+    name,
+    level: 5,
+    traits: ['trap'],
+    rarity: 'common',
+    stealth: 20,
+    ac: 22,
+    fortitude: 10,
+    reflex: 14,
+    will: 8,
+    hp: 60,
+    immunities: [],
+    resistances: [],
+    weaknesses: [],
+    attacks: [],
+    passiveAbilities: [],
+    reactiveAbilities: [],
+    activeAbilities: [],
+    tags: []
+  };
+}
+
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     canStart: false,
     creatures: [] as Creature[],
+    hazards: [] as Hazard[],
     partyMembers: [] as PartyMember[],
     conditionOptions: [],
     encounterCounts: {},
@@ -43,6 +68,10 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     onAddManual: vi.fn(),
     onImportCreatureFiles: vi.fn(),
     onRemoveCreature: vi.fn(),
+    onAddOneFromHazards: vi.fn(),
+    onRemoveOneFromHazardsCount: vi.fn(),
+    onImportHazardFiles: vi.fn(),
+    onRemoveHazard: vi.fn(),
     onAddPartyMemberToEncounter: vi.fn(),
     onRemovePartyMember: vi.fn(),
     onSavePartyMember: vi.fn(),
@@ -51,6 +80,12 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     onReset: vi.fn(),
     ...overrides
   };
+}
+
+// The Bestiary and Hazards sections each render their own "Manage…" button;
+// both open the same modal, so the first is a fine handle.
+function openManage() {
+  return fireEvent.click(screen.getAllByRole('button', { name: 'Manage…' })[0]);
 }
 
 describe('LibraryPane', () => {
@@ -66,14 +101,14 @@ describe('LibraryPane', () => {
 
   test('clicking "Manage…" from the bestiary section opens the manage modal', async () => {
     render(LibraryPane, { props: baseProps({ creatures: [creature('goblin-1', 'Goblin')] }) });
-    await fireEvent.click(screen.getByRole('button', { name: 'Manage…' }));
+    await openManage();
     // Manage modal shows a "Done" button — the cheapest non-ambiguous handle.
     expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
   test('closing the manage modal hides it again', async () => {
     render(LibraryPane, { props: baseProps({ creatures: [creature('goblin-1', 'Goblin')] }) });
-    await fireEvent.click(screen.getByRole('button', { name: 'Manage…' }));
+    await openManage();
     await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument();
   });
@@ -86,11 +121,27 @@ describe('LibraryPane', () => {
         onRemoveCreature
       })
     });
-    await fireEvent.click(screen.getByRole('button', { name: 'Manage…' }));
+    await openManage();
     await fireEvent.click(
       screen.getByRole('button', { name: 'Remove Goblin Warrior from library' })
     );
     await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(onRemoveCreature).toHaveBeenCalledWith('goblin-1');
+  });
+
+  test('manage modal forwards remove-hazard events through onRemoveHazard', async () => {
+    const onRemoveHazard = vi.fn();
+    render(LibraryPane, {
+      props: baseProps({
+        hazards: [hazard('dart-gallery', 'Dart Gallery')],
+        onRemoveHazard
+      })
+    });
+    await openManage();
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Remove Dart Gallery from library' })
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(onRemoveHazard).toHaveBeenCalledWith('dart-gallery');
   });
 });

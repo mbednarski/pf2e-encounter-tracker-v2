@@ -156,6 +156,79 @@ export interface Creature {
   notes?: string;
 }
 
+/**
+ * Display-only data carried by hazard combatants. The domain reducer never
+ * reads these fields — they exist purely so the UI can render a hazard's
+ * statblock. Creature, party-member, and companion combatants leave this
+ * `undefined`.
+ *
+ * `routine` and `disable` are free-form text (HTML stripped on import). The GM
+ * reads them at the hazard's turn and resolves outcomes via the standard
+ * command vocabulary — there is no structured disable-progress tracking.
+ */
+export interface HazardData {
+  /** Stealth value — a complex hazard's initiative modifier. */
+  stealth: number;
+  /** Detection note, e.g. "DC 30 to detect; trained". */
+  stealthNote?: string;
+  /** Flat damage reduction. Display-only — the GM subtracts it before APPLY_DAMAGE. */
+  hardness?: number;
+  /** What the hazard does each round. */
+  routine?: string;
+  /** How the hazard can be disabled (skills, DCs). */
+  disable?: string;
+  /** How the hazard resets after being triggered. */
+  reset?: string;
+  /** Flavor text / GM notes. */
+  description?: string;
+}
+
+/**
+ * A complex hazard as stored in the hazard library. Hazards become combatants
+ * via `createCombatantFromHazard` and are then treated identically to creature
+ * combatants by the domain. Simple hazards are not modeled — they are a GM
+ * note, not an encounter entity.
+ */
+export interface Hazard {
+  id: string;
+  name: string;
+  level: number;
+  traits: string[];
+  rarity: CreatureRarity;
+
+  // Detection / initiative
+  stealth: number;
+  stealthNote?: string;
+
+  // Defense
+  ac: number;
+  fortitude: number;
+  reflex: number;
+  will: number;
+  hp: number;
+  hardness?: number;
+  immunities: CreatureImmunity[];
+  resistances: { type: string; value: number }[];
+  weaknesses: { type: string; value: number }[];
+
+  // Free-form text blocks
+  routine?: string;
+  disable?: string;
+  reset?: string;
+  description?: string;
+
+  // Routine actions, reactions, and listed Strikes
+  attacks: Attack[];
+  passiveAbilities: Ability[];
+  reactiveAbilities: Ability[];
+  activeAbilities: Ability[];
+
+  // Meta
+  source?: string;
+  tags: string[];
+  notes?: string;
+}
+
 export interface PartyMember {
   id: string;
   name: string;
@@ -253,6 +326,8 @@ export interface CombatantState {
   spellcasting?: CombatantSpellcasting[];
   traits?: string[];
   size?: CreatureSize;
+  /** Hazard-specific display data. Populated only when `sourceType === 'hazard'`. */
+  hazardData?: HazardData;
 }
 
 export type PromptBoundary = { type: 'turnStart' | 'turnEnd'; ownerId: CombatantId };
