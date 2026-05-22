@@ -4,6 +4,13 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [sveltekit(), svelteTesting()],
+  // Pin the dev server to a project-dedicated port so it never collides with
+  // other local services. strictPort fails loudly instead of drifting to a
+  // random port if 2137 is already taken.
+  server: {
+    port: 2137,
+    strictPort: true
+  },
   test: {
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     environment: 'jsdom',
