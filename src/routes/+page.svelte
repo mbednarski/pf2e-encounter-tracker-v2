@@ -283,7 +283,130 @@
     runCommand(toCommand('REMOVE_COMBATANT', { combatantId: target.id }, nextCommandId()));
   }
 
-  async function handleImportCreatureFiles(files: File[]) {
+  /**
+   * Persists imported creatures and surfaces per-file feedback. Skip notices
+   * are emitted for document kinds this build doesn't import, except `hazard`
+   * — a hazard document in the same file is handled by the hazard importer, so
+   * reporting it as "skipped" would be misleading. Returns true if the file
+   * produced any creature-related outcome.
+   */
+  async function persistImportedCreatures(
+    file: File,
+    result: ReturnType<typeof importCreatureYaml>
+  ): Promise<boolean> {
+    const { creatures, issues, skipped } = result;
+    const persistResult = await addCreatures(creatures);
+    if (!persistResult.ok) {
+      appendFeedback(
+        nextFeedbackId('import-persist-fail'),
+        persistResult.reason === 'unavailable'
+          ? `Could not save creatures from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+          : `Could not save creatures from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
+      );
+      return true;
+    }
+
+    for (const creature of persistResult.rejected) {
+      appendFeedback(
+        nextFeedbackId('import-dup'),
+        `Skipped "${creature.name}" from "${file.name}": id "${creature.id}" is already in your library.`
+      );
+    }
+
+    if (persistResult.added.length > 0) {
+      storedCreatures = [...storedCreatures, ...persistResult.added];
+      appendFeedback(
+        nextFeedbackId('import-ok'),
+        `Imported ${persistResult.added.length} creature${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
+        'success'
+      );
+    }
+
+    const reportableSkips = skipped.filter((skip) => skip.kind !== 'hazard');
+    for (const skip of reportableSkips) {
+      appendFeedback(
+        nextFeedbackId('import-skip'),
+        `"${file.name}" doc ${skip.documentIndex + 1}: skipped — kind "${skip.kind}" is not yet imported by this build.`,
+        'info'
+      );
+    }
+
+    for (const issue of issues) {
+      const where = issue.path ? ` at "${issue.path}"` : '';
+      const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
+      appendFeedback(
+        nextFeedbackId('import-issue'),
+        `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
+      );
+    }
+
+    return (
+      persistResult.added.length > 0 ||
+      persistResult.rejected.length > 0 ||
+      issues.length > 0 ||
+      reportableSkips.length > 0
+    );
+  }
+
+  /**
+   * Persists imported hazards and surfaces per-file feedback. Skipped non-hazard
+   * documents are left to persistImportedCreatures so a mixed YAML file reports
+   * each skipped kind exactly once. Returns true if the file produced any
+   * hazard-related outcome.
+   */
+  async function persistImportedHazards(
+    file: File,
+    result: ReturnType<typeof importHazardYaml>
+  ): Promise<boolean> {
+    const { hazards, issues } = result;
+    const persistResult = await addHazards(hazards);
+    if (!persistResult.ok) {
+      appendFeedback(
+        nextFeedbackId('hz-import-persist-fail'),
+        persistResult.reason === 'unavailable'
+          ? `Could not save hazards from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+          : `Could not save hazards from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
+      );
+      return true;
+    }
+
+    for (const hazard of persistResult.rejected) {
+      appendFeedback(
+        nextFeedbackId('hz-import-dup'),
+        `Skipped "${hazard.name}" from "${file.name}": id "${hazard.id}" is already in your library.`
+      );
+    }
+
+    if (persistResult.added.length > 0) {
+      storedHazards = [...storedHazards, ...persistResult.added];
+      appendFeedback(
+        nextFeedbackId('hz-import-ok'),
+        `Imported ${persistResult.added.length} hazard${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
+        'success'
+      );
+    }
+
+    for (const issue of issues) {
+      const where = issue.path ? ` at "${issue.path}"` : '';
+      const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
+      appendFeedback(
+        nextFeedbackId('hz-import-issue'),
+        `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
+      );
+    }
+
+    return (
+      persistResult.added.length > 0 || persistResult.rejected.length > 0 || issues.length > 0
+    );
+  }
+
+  /**
+   * Imports creature and hazard library files. A Foundry actor JSON is routed
+   * by its `type` field, so it lands in the right library regardless of which
+   * "Import…" button was used. A YAML file may carry both creature and hazard
+   * documents; both kinds are imported from a single file.
+   */
+  async function handleImportLibraryFiles(files: File[]) {
     for (const file of files) {
       let text: string;
       try {
@@ -307,13 +430,34 @@
         continue;
       }
 
-      let creatures: Creature[];
-      let issues: ReturnType<typeof importCreatureYaml>['issues'];
-      let skipped: ReturnType<typeof importCreatureYaml>['skipped'];
+      if (isJson) {
+        // Route a Foundry actor JSON by its declared `type`. A parse failure
+        // falls through to the creature importer, which reports it as an issue.
+        let actorType: unknown;
+        try {
+          actorType = (JSON.parse(text) as { type?: unknown }).type;
+        } catch {
+          actorType = undefined;
+        }
+        const did =
+          actorType === 'hazard'
+            ? await persistImportedHazards(file, importHazardFoundryJson(text))
+            : await persistImportedCreatures(file, importCreatureFoundryJson(text));
+        if (!did) {
+          appendFeedback(
+            nextFeedbackId('import-empty'),
+            `"${file.name}" contained no importable creature or hazard.`
+          );
+        }
+        continue;
+      }
+
+      // A single YAML file may declare creature and/or hazard documents.
+      let didCreatures: boolean;
+      let didHazards: boolean;
       try {
-        ({ creatures, issues, skipped } = isJson
-          ? importCreatureFoundryJson(text)
-          : importCreatureYaml(text));
+        didCreatures = await persistImportedCreatures(file, importCreatureYaml(text));
+        didHazards = await persistImportedHazards(file, importHazardYaml(text));
       } catch (err) {
         appendFeedback(
           nextFeedbackId('import-fail'),
@@ -321,62 +465,10 @@
         );
         continue;
       }
-
-      const persistResult = await addCreatures(creatures);
-
-      if (!persistResult.ok) {
-        appendFeedback(
-          nextFeedbackId('import-persist-fail'),
-          persistResult.reason === 'unavailable'
-            ? `Could not save creatures from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
-            : `Could not save creatures from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
-        );
-        continue;
-      }
-
-      for (const creature of persistResult.rejected) {
-        appendFeedback(
-          nextFeedbackId('import-dup'),
-          `Skipped "${creature.name}" from "${file.name}": id "${creature.id}" is already in your library.`
-        );
-      }
-
-      if (persistResult.added.length > 0) {
-        storedCreatures = [...storedCreatures, ...persistResult.added];
-        appendFeedback(
-          nextFeedbackId('import-ok'),
-          `Imported ${persistResult.added.length} creature${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
-          'success'
-        );
-      }
-
-      for (const skip of skipped) {
-        appendFeedback(
-          nextFeedbackId('import-skip'),
-          `"${file.name}" doc ${skip.documentIndex + 1}: skipped — kind "${skip.kind}" is not yet imported by this build.`,
-          'info'
-        );
-      }
-
-      for (const issue of issues) {
-        const where = issue.path ? ` at "${issue.path}"` : '';
-        const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
-        appendFeedback(
-          nextFeedbackId('import-issue'),
-          `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
-        );
-      }
-
-      if (
-        persistResult.added.length === 0 &&
-        persistResult.rejected.length === 0 &&
-        issues.length === 0 &&
-        skipped.length === 0 &&
-        creatures.length === 0
-      ) {
+      if (!didCreatures && !didHazards) {
         appendFeedback(
           nextFeedbackId('import-empty'),
-          `"${file.name}" contained no creature documents.`
+          `"${file.name}" contained no creature or hazard documents.`
         );
       }
     }
@@ -426,105 +518,6 @@
     }
     if (!target) return;
     runCommand(toCommand('REMOVE_COMBATANT', { combatantId: target.id }, nextCommandId()));
-  }
-
-  async function handleImportHazardFiles(files: File[]) {
-    for (const file of files) {
-      let text: string;
-      try {
-        text = await file.text();
-      } catch (err) {
-        appendFeedback(
-          nextFeedbackId('hz-import-read-fail'),
-          `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
-        );
-        continue;
-      }
-
-      const lower = file.name.toLowerCase();
-      const isJson = lower.endsWith('.json');
-      const isYaml = lower.endsWith('.yaml') || lower.endsWith('.yml');
-      if (!isJson && !isYaml) {
-        appendFeedback(
-          nextFeedbackId('hz-import-bad-ext'),
-          `"${file.name}": unsupported file type. Use .yaml, .yml, or .json.`
-        );
-        continue;
-      }
-
-      let hazards: Hazard[];
-      let issues: ReturnType<typeof importHazardYaml>['issues'];
-      let skipped: ReturnType<typeof importHazardYaml>['skipped'];
-      try {
-        ({ hazards, issues, skipped } = isJson
-          ? importHazardFoundryJson(text)
-          : importHazardYaml(text));
-      } catch (err) {
-        appendFeedback(
-          nextFeedbackId('hz-import-fail'),
-          `Could not import "${file.name}": ${err instanceof Error ? err.message : String(err)}`
-        );
-        continue;
-      }
-
-      const persistResult = await addHazards(hazards);
-
-      if (!persistResult.ok) {
-        appendFeedback(
-          nextFeedbackId('hz-import-persist-fail'),
-          persistResult.reason === 'unavailable'
-            ? `Could not save hazards from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
-            : `Could not save hazards from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
-        );
-        continue;
-      }
-
-      for (const hazard of persistResult.rejected) {
-        appendFeedback(
-          nextFeedbackId('hz-import-dup'),
-          `Skipped "${hazard.name}" from "${file.name}": id "${hazard.id}" is already in your library.`
-        );
-      }
-
-      if (persistResult.added.length > 0) {
-        storedHazards = [...storedHazards, ...persistResult.added];
-        appendFeedback(
-          nextFeedbackId('hz-import-ok'),
-          `Imported ${persistResult.added.length} hazard${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
-          'success'
-        );
-      }
-
-      for (const skip of skipped) {
-        appendFeedback(
-          nextFeedbackId('hz-import-skip'),
-          `"${file.name}" doc ${skip.documentIndex + 1}: skipped — kind "${skip.kind}" is not a hazard document.`,
-          'info'
-        );
-      }
-
-      for (const issue of issues) {
-        const where = issue.path ? ` at "${issue.path}"` : '';
-        const lineHint = issue.line !== undefined ? ` (line ${issue.line})` : '';
-        appendFeedback(
-          nextFeedbackId('hz-import-issue'),
-          `"${file.name}" doc ${issue.documentIndex + 1}${where}${lineHint}: ${issue.message}`
-        );
-      }
-
-      if (
-        persistResult.added.length === 0 &&
-        persistResult.rejected.length === 0 &&
-        issues.length === 0 &&
-        skipped.length === 0 &&
-        hazards.length === 0
-      ) {
-        appendFeedback(
-          nextFeedbackId('hz-import-empty'),
-          `"${file.name}" contained no hazard documents.`
-        );
-      }
-    }
   }
 
   async function handleRemoveHazard(id: string) {
@@ -1042,11 +1035,11 @@
         onAddOneFromBestiary={handleAddOneFromBestiary}
         onRemoveOneFromBestiaryCount={handleRemoveOneFromBestiaryCount}
         onAddManual={handleAddManual}
-        onImportCreatureFiles={handleImportCreatureFiles}
+        onImportCreatureFiles={handleImportLibraryFiles}
         onRemoveCreature={handleRemoveCreature}
         onAddOneFromHazards={handleAddOneFromHazards}
         onRemoveOneFromHazardsCount={handleRemoveOneFromHazardsCount}
-        onImportHazardFiles={handleImportHazardFiles}
+        onImportHazardFiles={handleImportLibraryFiles}
         onRemoveHazard={handleRemoveHazard}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}
