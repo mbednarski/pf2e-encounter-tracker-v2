@@ -27,7 +27,7 @@
     "@vitest/coverage-v8": "^4.1.6",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
-    "svelte": "^5.38.0",
+    "svelte": "^5.55.9",
     "svelte-check": "^4.4.8",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
