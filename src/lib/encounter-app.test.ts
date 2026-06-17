@@ -674,7 +674,11 @@ describe('end-to-end condition dispatches', () => {
       }, 'cmd-remove')
     );
 
-    expect(removed.state.combatants['fighter-1'].appliedEffects).toEqual([]);
+    // Removing Dying cascades away its implied Unconscious / Off-Guard, and
+    // recovering from Dying grants Wounded 1 (death-tracking spec §3.4).
+    const remaining = removed.state.combatants['fighter-1'].appliedEffects;
+    expect(remaining.map((e) => e.effectId)).toEqual(['wounded']);
+    expect(remaining[0]).toMatchObject({ effectId: 'wounded', value: 1 });
   });
 });
 
