@@ -77,6 +77,8 @@
     savePartyMember
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
+  import { loadGameClock, saveGameClock } from '$lib/storage/game-clock';
+  import { clampClock } from '$lib/game-clock';
   import { importCreatureYaml, importHazardYaml, importPartyMemberYaml } from '$lib/yaml';
   import { importCreatureFoundryJson, importHazardFoundryJson } from '$lib/foundry';
   import {
@@ -109,6 +111,12 @@
   let storedCreatures: Creature[] = [];
   let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
+  let clockMinutes = 0;
+
+  function setClock(minutes: number) {
+    clockMinutes = clampClock(minutes);
+    void saveGameClock(clockMinutes);
+  }
 
   $: availableCreatures = storedCreatures;
 
@@ -189,12 +197,16 @@
   }
 
   onMount(async () => {
-    const [restored, loadResult, hazardResult, partyResult] = await Promise.all([
+    const [restored, loadResult, hazardResult, partyResult, clock] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
       loadHazards(),
-      loadPartyMembers()
+      loadPartyMembers(),
+      loadGameClock()
     ]);
+    if (clock !== null) {
+      clockMinutes = clampClock(clock);
+    }
     if (restored) {
       encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
       commandCounter = nextCommandCounterFor(encounter.combatLog);
@@ -1019,6 +1031,8 @@
     phase={encounter.phase}
     round={encounter.round}
     activeName={activeCombatant?.name}
+    {clockMinutes}
+    onClockChange={setClock}
   />
 
   <EncounterDifficultyMeter summary={xpSummary} />

@@ -2,11 +2,14 @@
   import type { EncounterState } from '../domain';
   import Chip from './ui/Chip.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
+  import GameClock from './GameClock.svelte';
 
   export let name: string;
   export let phase: EncounterState['phase'];
   export let round: number;
   export let activeName: string | undefined;
+  export let clockMinutes: number;
+  export let onClockChange: (minutes: number) => void;
 </script>
 
 <header class="topbar">
@@ -15,6 +18,7 @@
     <h1>{name}</h1>
   </div>
   <div class="topbar__status" aria-label="Encounter status">
+    <GameClock minutes={clockMinutes} onChange={onClockChange} />
     <Chip variant={phase === 'ACTIVE' ? 'success' : 'default'}>{phase}</Chip>
     <div class="topbar__round">
       <SectionLabel>Round</SectionLabel>
