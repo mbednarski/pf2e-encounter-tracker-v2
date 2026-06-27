@@ -102,7 +102,7 @@
         <div class="spell-row__panel">
           <a
             class="spell-row__aon"
-            href={`https://2e.aonprd.com/Search.aspx?Query=${encodeURIComponent(entry.name)}&type=spell`}
+            href={`https://2e.aonprd.com/Search.aspx?q=${encodeURIComponent(entry.name)}`}
             target="_blank"
             rel="noopener"
           >
@@ -114,7 +114,7 @@
       <div class="spell-row__panel">
         <a
           class="spell-row__aon"
-          href={`https://2e.aonprd.com/Search.aspx?Query=${encodeURIComponent(entry.name)}&type=spell`}
+          href={`https://2e.aonprd.com/Search.aspx?q=${encodeURIComponent(entry.name)}`}
           target="_blank"
           rel="noopener"
         >

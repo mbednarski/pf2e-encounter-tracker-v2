@@ -8,6 +8,7 @@ import type {
   SpellTradition
 } from '../../src/lib/spell-index/types';
 import { stripFoundryMarkup } from '../../src/lib/foundry/text';
+import { aonSearchUrl } from './aon-ids';
 
 export type TransformResult =
   | { ok: true; value: SpellIndexEntry }
@@ -94,6 +95,8 @@ export function transformSpell(input: unknown): TransformResult {
       effectSummary: extractSummary(spell.system?.description?.value),
       base: parseBaseDamage(spell.system?.damage),
       heightening: parseHeightening(spell.system?.heightening),
+      // Default to the (working) search URL. import-spells.ts then enriches
+      // matched spells with a direct AoN page link via resolveAonUrl.
       aonUrl: aonSearchUrl(name)
     }
   };
@@ -215,8 +218,4 @@ function extractSummary(html: string | undefined): string {
   // Only break on whitespace when it's not absurdly close to the start.
   const truncated = lastSpace > 100 ? head.slice(0, lastSpace) : head;
   return truncated + '...';
-}
-
-function aonSearchUrl(name: string): string {
-  return `https://2e.aonprd.com/Search.aspx?Query=${encodeURIComponent(name)}&type=spell`;
 }
