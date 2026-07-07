@@ -3,7 +3,7 @@
   import type { Command, CombatantState, Creature, Duration, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
-  import TopBar from '../components/TopBar.svelte';
+  import EncounterHeader from '../components/EncounterHeader.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
   import CombatantDetailsPanel from '../components/CombatantDetailsPanel.svelte';
@@ -1014,11 +1014,16 @@
 </script>
 
 <main class="shell">
-  <TopBar
+  <EncounterHeader
     name={encounter.name}
     phase={encounter.phase}
     round={encounter.round}
     activeName={activeCombatant?.name}
+    canRollAll={orderedCombatants.length > 0}
+    canEndTurn={activeCombatant !== undefined &&
+      combatantCardActions(encounter, activeCombatant.id).canEndTurn}
+    onRollAllInitiative={rollAllInitiative}
+    onEndTurn={() => activeCombatant && endTurn(activeCombatant.id)}
   />
 
   <EncounterDifficultyMeter summary={xpSummary} />
@@ -1059,14 +1064,6 @@
               <li>{combatant.name}</li>
             {/each}
           </ul>
-        </div>
-      {/if}
-      {#if encounter.phase === 'PREPARING' && orderedCombatants.length > 0}
-        <div class="initiative-bar" aria-label="Initiative actions">
-          <button type="button" class="initiative-bar__roll" onclick={rollAllInitiative}>
-            Roll all initiative
-          </button>
-          <span class="initiative-bar__hint">Rolls only blanks. Click a combatant's Roll button to re-roll one.</span>
         </div>
       {/if}
       <div class="cards">
@@ -1221,43 +1218,6 @@
   .cards {
     display: grid;
     gap: 10px;
-  }
-
-  .initiative-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    background: var(--color-panel);
-    border: var(--border-thin);
-    border-radius: var(--radius-card);
-  }
-
-  .initiative-bar__roll {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border: 0;
-    border-radius: var(--radius-card);
-    padding: 6px 14px;
-    font: inherit;
-    font-weight: 600;
-    font-size: var(--text-base);
-    cursor: pointer;
-  }
-
-  .initiative-bar__roll:hover {
-    background: var(--color-ink);
-  }
-
-  .initiative-bar__roll:focus-visible {
-    outline: 2px solid var(--color-blue);
-    outline-offset: 2px;
-  }
-
-  .initiative-bar__hint {
-    color: var(--color-ink-mute);
-    font-size: var(--text-sm);
   }
 
   .not-yet-rolled {

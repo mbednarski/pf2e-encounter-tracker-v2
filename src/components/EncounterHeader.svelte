@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EncounterState } from '../domain';
+  import Button from './ui/Button.svelte';
   import Chip from './ui/Chip.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
 
@@ -7,28 +8,51 @@
   export let phase: EncounterState['phase'];
   export let round: number;
   export let activeName: string | undefined;
+  export let canRollAll = false;
+  export let canEndTurn = false;
+  export let onRollAllInitiative: () => void = () => {};
+  export let onEndTurn: () => void = () => {};
 </script>
 
-<header class="topbar">
-  <div class="topbar__title">
+<header class="header">
+  <div class="header__title">
     <SectionLabel>PF2e Encounter Tracker v2</SectionLabel>
     <h1>{name}</h1>
   </div>
-  <div class="topbar__status" aria-label="Encounter status">
+  <div class="header__status" aria-label="Encounter status">
     <Chip variant={phase === 'ACTIVE' ? 'success' : 'default'}>{phase}</Chip>
-    <div class="topbar__round">
+    <div class="header__round">
       <SectionLabel>Round</SectionLabel>
-      <span class="topbar__round-value">{round}</span>
+      <span class="header__round-value">{round}</span>
     </div>
-    <span class="topbar__turn">
+    <span class="header__turn">
       {activeName ? `${activeName}'s turn` : 'No active turn'}
     </span>
-    <a class="topbar__settings" href="/settings">Settings</a>
+    {#if phase === 'PREPARING' && canRollAll}
+      <div class="header__action">
+        <Button variant="primary" size="sm" ariaLabel="Roll all initiative" onclick={onRollAllInitiative}>
+          Roll all initiative
+        </Button>
+        <span class="header__hint">Rolls only blanks — use a card's Roll button to re-roll one.</span>
+      </div>
+    {/if}
+    {#if phase === 'ACTIVE'}
+      <Button
+        variant="primary"
+        ariaLabel="End turn"
+        disabled={!canEndTurn}
+        onclick={onEndTurn}
+      >End Turn</Button>
+    {/if}
+    <a class="header__settings" href="/settings">Settings</a>
   </div>
 </header>
 
 <style>
-  .topbar {
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
     display: flex;
     align-items: end;
     justify-content: space-between;
@@ -39,9 +63,10 @@
     background: var(--color-panel);
     border: var(--border-strong);
     border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
   }
 
-  .topbar__title {
+  .header__title {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
@@ -58,7 +83,7 @@
     letter-spacing: -0.2px;
   }
 
-  .topbar__status {
+  .header__status {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -68,28 +93,40 @@
     font-size: var(--text-base);
   }
 
-  .topbar__round {
+  .header__round {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 0;
   }
 
-  .topbar__round-value {
+  .header__round-value {
     font-family: var(--font-mono);
     font-size: var(--text-xl);
     font-weight: 700;
-    color: var(--color-red);
+    color: var(--accent);
     line-height: var(--leading-tight);
   }
 
-  .topbar__turn {
+  .header__turn {
     color: var(--color-ink-soft);
     font-size: var(--text-base);
     font-style: italic;
   }
 
-  .topbar__settings {
+  .header__action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .header__hint {
+    color: var(--color-ink-mute);
+    font-size: var(--text-sm);
+  }
+
+  .header__settings {
     color: var(--color-ink);
     text-decoration: none;
     font-family: var(--font-sans);
@@ -103,23 +140,23 @@
     transition: background 0.12s, border-color 0.12s;
   }
 
-  .topbar__settings:hover {
+  .header__settings:hover {
     background: var(--color-panel-2);
     border-color: var(--color-ink);
   }
 
-  .topbar__settings:focus-visible {
+  .header__settings:focus-visible {
     outline: 2px solid var(--color-blue);
     outline-offset: 2px;
   }
 
   @media (max-width: 760px) {
-    .topbar {
+    .header {
       display: grid;
       grid-template-columns: 1fr;
     }
 
-    .topbar__status {
+    .header__status {
       justify-content: start;
     }
   }
