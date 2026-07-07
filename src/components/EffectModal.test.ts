@@ -169,14 +169,14 @@ describe('EffectModal', () => {
     const onClose = vi.fn();
     render(EffectModal, { props: baseProps({ onClose }) });
 
-    // Dispatch on the dialog (the element bound to focus + the keydown handler in
-    // onMount/handleKey). Using role 'dialog' rather than a CSS class keeps the
+    // Dispatch on the dialog (the ui/Modal element that owns the keydown
+    // handler). Using role 'dialog' rather than a CSS class keeps the
     // assertion stable across stylesheet refactors and reflects the contract:
     // "a keypress on the focused modal closes it".
     await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Close effect modal' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

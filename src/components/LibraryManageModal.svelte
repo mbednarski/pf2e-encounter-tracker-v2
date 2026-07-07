@@ -2,6 +2,7 @@
   import type { Creature, Hazard } from '../domain';
   import Button from './ui/Button.svelte';
   import IconButton from './ui/IconButton.svelte';
+  import Modal from './ui/Modal.svelte';
 
   export let creatures: Creature[];
   export let hazards: Hazard[] = [];
@@ -41,36 +42,28 @@
     else onRemoveHazard(id);
   }
 
-  function handleBackdropClick(event: MouseEvent) {
-    if (event.target === event.currentTarget) onClose();
-  }
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      if (pendingRemove !== null) {
-        cancelRemove();
-        return;
-      }
-      onClose();
+  function handleRequestClose(reason: 'escape' | 'backdrop') {
+    // Escape steps back out of an open inline delete confirm before it
+    // closes the whole dialog.
+    if (reason === 'escape' && pendingRemove !== null) {
+      cancelRemove();
+      return;
     }
+    onClose();
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<Modal labelledBy="library-manage-title" size="md" onClose={handleRequestClose}>
+  <svelte:fragment slot="header">
+    <h2 id="library-manage-title">Manage Library</h2>
+    <IconButton ariaLabel="Close" variant="default" onclick={onClose}>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M2 2l8 8M10 2l-8 8" />
+      </svg>
+    </IconButton>
+  </svelte:fragment>
 
-<div class="backdrop" role="presentation" onclick={handleBackdropClick}>
-  <div class="modal" role="dialog" aria-labelledby="library-manage-title" aria-modal="true">
-    <header class="modal__header">
-      <h2 id="library-manage-title">Manage Library</h2>
-      <IconButton ariaLabel="Close" variant="default" onclick={onClose}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <path d="M2 2l8 8M10 2l-8 8" />
-        </svg>
-      </IconButton>
-    </header>
-
-    <div class="modal__body">
-      {#if isEmpty}
+  {#if isEmpty}
         <p class="empty">Your library is empty. Import a YAML or Foundry JSON file to add creatures or hazards.</p>
       {:else}
         {#each sections as section (section.kind)}
@@ -114,64 +107,18 @@
           {/if}
         {/each}
       {/if}
-    </div>
 
-    <footer class="modal__footer">
-      <Button variant="primary" onclick={onClose}>Done</Button>
-    </footer>
-  </div>
-</div>
+  <svelte:fragment slot="footer">
+    <Button variant="primary" onclick={onClose}>Done</Button>
+  </svelte:fragment>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 35%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    padding: var(--space-4);
-  }
-
-  .modal {
-    background: var(--color-panel);
-    border: var(--border-strong);
-    border-radius: var(--radius-card);
-    width: min(560px, 100%);
-    max-height: 85vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 8px 32px rgb(29 37 40 / 25%);
-  }
-
-  .modal__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: var(--border-thin);
-  }
-
-  .modal__header h2 {
+  h2 {
     margin: 0;
     font-family: var(--font-serif);
     font-size: var(--text-lg);
     font-weight: 600;
-  }
-
-  .modal__body {
-    padding: var(--space-3) var(--space-4);
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
-  }
-
-  .modal__footer {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--space-3) var(--space-4);
-    border-top: var(--border-thin);
   }
 
   .empty {

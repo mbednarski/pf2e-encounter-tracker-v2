@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
   import {
     resolveApplyChoice,
     type ApplyConditionChoice,
@@ -10,6 +9,7 @@
   } from '$lib/encounter-app';
   import { persistentEffectIdToDamageType } from '$lib/effects/damage-type-glyph';
   import DamageTypeGlyph from './ui/DamageTypeGlyph.svelte';
+  import Modal from './ui/Modal.svelte';
   import type { Duration } from '../domain';
 
   export let combatantName: string;
@@ -61,8 +61,6 @@
   let durationCountBuf = 1;
   let durationCombatantBuf = '';
   let durationDescriptionBuf = '';
-  let cardEl: HTMLDivElement | null = null;
-  let returnFocusTo: HTMLElement | null = null;
 
   $: filteredConditionGroups = filterGroups(conditionGroups, conditionSearch);
 
@@ -147,52 +145,24 @@
     durationEditorForId = null;
   }
 
-  function handleKey(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onClose();
-    }
-  }
 
-  function handleBackdrop() {
-    onClose();
-  }
-
-  onMount(() => {
-    returnFocusTo = (document.activeElement as HTMLElement) ?? null;
-    void tick().then(() => cardEl?.focus());
-    return () => {
-      returnFocusTo?.focus?.();
-    };
-  });
 </script>
 
-<div class="modal-host">
-  <button
-    type="button"
-    class="modal-backdrop"
-    aria-label="Close effect modal"
-    onclick={handleBackdrop}
-    tabindex="-1"
-  ></button>
-  <div
-    bind:this={cardEl}
-    class="modal-card"
-    role="dialog"
-    aria-modal="true"
-    aria-label={`Manage effects on ${combatantName}`}
-    tabindex="-1"
-    onkeydown={handleKey}
-  >
-    <header class="modal-header">
-      <div>
-        <h2>{combatantName}</h2>
-        <p class="hp">{combatantHpLabel}</p>
-      </div>
-      <button type="button" class="close" aria-label="Close" onclick={onClose}>×</button>
-    </header>
+<Modal
+  label={`Manage effects on ${combatantName}`}
+  size="lg"
+  scrollBody={false}
+  onClose={() => onClose()}
+>
+  <svelte:fragment slot="header">
+    <div>
+      <h2>{combatantName}</h2>
+      <p class="hp">{combatantHpLabel}</p>
+    </div>
+    <button type="button" class="close" aria-label="Close" onclick={onClose}>×</button>
+  </svelte:fragment>
 
-    <div class="tabs" role="tablist">
+  <div class="tabs" role="tablist">
       {#each TABS as tab (tab.id)}
         <button
           type="button"
@@ -475,57 +445,13 @@
       {/if}
     </div>
 
-    <footer class="actions">
-      <button type="button" class="primary" onclick={onClose}>Done</button>
-    </footer>
-  </div>
-</div>
+  <svelte:fragment slot="footer">
+    <button type="button" class="primary" onclick={onClose}>Done</button>
+  </svelte:fragment>
+</Modal>
 
 <style>
-  .modal-host {
-    position: fixed;
-    inset: 0;
-    z-index: 110;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: color-mix(in srgb, var(--color-ink) 42%, transparent);
-    border: 0;
-    padding: 0;
-    cursor: default;
-    pointer-events: auto;
-  }
-
-  .modal-card {
-    position: relative;
-    pointer-events: auto;
-    width: min(720px, 92vw);
-    max-height: min(82vh, 720px);
-    background: var(--color-bg);
-    color: var(--color-ink);
-    border: 1px solid var(--color-rule-strong);
-    border-radius: var(--radius-card);
-    box-shadow: var(--shadow-paper);
-    display: flex;
-    flex-direction: column;
-    outline: none;
-  }
-
-  .modal-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-rule);
-  }
-
-  .modal-header h2 {
+  h2 {
     margin: 0;
     font-family: var(--font-serif);
     font-size: 18px;
@@ -849,13 +775,6 @@
     font: inherit;
     font-size: 12px;
     cursor: pointer;
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--space-3) var(--space-4);
-    border-top: 1px solid var(--color-rule);
   }
 
   .formula-picker {

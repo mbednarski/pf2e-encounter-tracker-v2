@@ -416,11 +416,11 @@ describe('PartyMemberEditModal — close', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  test('pressing Escape (window-level handler) calls onClose', async () => {
+  test('pressing Escape on the dialog calls onClose', async () => {
     const onClose = vi.fn();
     render(PartyMemberEditModal, { props: baseProps({ onClose }) });
 
-    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -3,6 +3,7 @@
   import type { ConditionOption } from '$lib/encounter-app';
   import Button from './ui/Button.svelte';
   import IconButton from './ui/IconButton.svelte';
+  import Modal from './ui/Modal.svelte';
 
   export let partyMember: PartyMember | null;
   export let conditionOptions: ConditionOption[];
@@ -207,40 +208,20 @@
     onSave(member);
   }
 
-  function handleBackdropClick(event: MouseEvent) {
-    if (event.target === event.currentTarget) onClose();
-  }
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') onClose();
-  }
-
   $: selectedOption = selectedConditionOption();
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<Modal labelledBy="party-member-modal-title" size="md" scrollBody={false} onClose={() => onClose()}>
+  <svelte:fragment slot="header">
+    <h2 id="party-member-modal-title">{initial ? 'Edit Party Member' : 'New Party Member'}</h2>
+    <IconButton ariaLabel="Close" variant="default" onclick={onClose}>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M2 2l8 8M10 2l-8 8" />
+      </svg>
+    </IconButton>
+  </svelte:fragment>
 
-<div
-  class="backdrop"
-  role="presentation"
-  onclick={handleBackdropClick}
->
-  <div
-    class="modal"
-    role="dialog"
-    aria-labelledby="party-member-modal-title"
-    aria-modal="true"
-  >
   <form class="modal__form" onsubmit={handleSubmit}>
-    <header class="modal__header">
-      <h2 id="party-member-modal-title">{initial ? 'Edit Party Member' : 'New Party Member'}</h2>
-      <IconButton ariaLabel="Close" variant="default" onclick={onClose}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-          <path d="M2 2l8 8M10 2l-8 8" />
-        </svg>
-      </IconButton>
-    </header>
-
     <div class="modal__body">
       <fieldset class="block">
         <legend>Identity</legend>
@@ -389,32 +370,9 @@
       <Button variant="primary" type="submit">Save</Button>
     </footer>
   </form>
-  </div>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 35%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    padding: var(--space-4);
-  }
-
-  .modal {
-    background: var(--color-panel);
-    border: var(--border-strong);
-    border-radius: var(--radius-card);
-    width: min(640px, 100%);
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 8px 32px rgb(29 37 40 / 25%);
-  }
-
   .modal__form {
     display: flex;
     flex-direction: column;
@@ -422,15 +380,7 @@
     min-height: 0;
   }
 
-  .modal__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: var(--border-thin);
-  }
-
-  .modal__header h2 {
+  h2 {
     margin: 0;
     font-family: var(--font-serif);
     font-size: var(--text-lg);
