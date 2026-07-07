@@ -78,4 +78,18 @@
     cursor: not-allowed;
     opacity: 0.5;
   }
+
+  /* Touch devices: extend the hit area to 44px with an invisible overlay
+     so the visible square stays at --icon-btn-size. */
+  @media (pointer: coarse) {
+    .icon-btn {
+      position: relative;
+    }
+
+    .icon-btn::after {
+      content: '';
+      position: absolute;
+      inset: calc((var(--icon-btn-size) - 44px) / 2);
+    }
+  }
 </style>

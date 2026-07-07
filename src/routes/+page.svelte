@@ -1229,31 +1229,35 @@
     align-items: center;
     gap: 12px;
     padding: 8px 12px;
-    background: var(--color-panel, #fbfcfa);
-    border: 1px solid var(--color-rule, #cfd6d1);
-    border-radius: 8px;
+    background: var(--color-panel);
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
   }
 
   .initiative-bar__roll {
-    background: var(--color-ink, #263235);
-    color: var(--color-bg, #fff);
+    background: var(--accent);
+    color: var(--accent-ink);
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-card);
     padding: 6px 14px;
     font: inherit;
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--text-base);
     cursor: pointer;
   }
 
+  .initiative-bar__roll:hover {
+    background: var(--color-ink);
+  }
+
   .initiative-bar__roll:focus-visible {
-    outline: 2px solid var(--color-blue, var(--color-amber, #b88a2c));
+    outline: 2px solid var(--color-blue);
     outline-offset: 2px;
   }
 
   .initiative-bar__hint {
-    color: var(--color-ink-mute, #627171);
-    font-size: 12px;
+    color: var(--color-ink-mute);
+    font-size: var(--text-sm);
   }
 
   .not-yet-rolled {

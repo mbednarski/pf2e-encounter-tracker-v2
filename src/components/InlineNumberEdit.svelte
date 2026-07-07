@@ -106,8 +106,8 @@
     font: inherit;
     font-variant-numeric: tabular-nums;
     text-align: right;
-    border: 1px solid var(--input-border, #888);
-    border-radius: 3px;
+    border: var(--border-strong);
+    border-radius: var(--radius-chip);
     background: var(--color-panel-up);
     color: inherit;
   }
@@ -134,7 +134,7 @@
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 3px;
-    text-decoration-color: rgba(0, 0, 0, 0.25);
+    text-decoration-color: color-mix(in srgb, var(--color-ink) 25%, transparent);
   }
 
   .display:hover,
@@ -145,6 +145,6 @@
   .display:focus-visible {
     outline: 2px solid var(--color-blue);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
   }
 </style>

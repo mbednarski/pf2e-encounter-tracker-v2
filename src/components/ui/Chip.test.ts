@@ -14,6 +14,12 @@ describe('Chip', () => {
     expect(chip?.className).toContain('chip--warning');
   });
 
+  test('applies the trait variant class', () => {
+    const { container } = render(Wrapper, { props: { label: 'Undead', variant: 'trait' } });
+    const chip = container.querySelector('.chip');
+    expect(chip?.className).toContain('chip--trait');
+  });
+
   test('applies the selected modifier class', () => {
     const { container } = render(Wrapper, { props: { label: 'Selected', selected: true } });
     const chip = container.querySelector('.chip');
