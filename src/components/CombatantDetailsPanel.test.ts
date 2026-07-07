@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { combatant } from '../domain/test-support';
 import type { CombatantState } from '../domain';
 import CombatantDetailsPanel from './CombatantDetailsPanel.svelte';
@@ -351,14 +351,16 @@ describe('CombatantDetailsPanel', () => {
     expect(screen.queryByLabelText('Spellcasting')).not.toBeInTheDocument();
   });
 
-  test('renders existing notes inside the Notes section', () => {
+  test('renders existing notes inside the Notes tab', async () => {
     renderPanel(combatant('goblin-1', { notes: 'Hiding behind the cart.' }));
+    await fireEvent.click(screen.getByRole('tab', { name: 'Notes' }));
     const notes = screen.getByLabelText('Notes');
     expect(notes).toHaveTextContent('Hiding behind the cart.');
   });
 
-  test('renders the Add note placeholder when combatant has no notes', () => {
+  test('renders the Add note placeholder when combatant has no notes', async () => {
     renderPanel(combatant('goblin-1'));
+    await fireEvent.click(screen.getByRole('tab', { name: 'Notes' }));
     const notes = screen.getByLabelText('Notes');
     expect(notes).toHaveTextContent('Add note…');
   });
@@ -366,6 +368,7 @@ describe('CombatantDetailsPanel', () => {
   test('committing a note forwards onSetNote with the combatant id', async () => {
     const onSetNote = vi.fn();
     renderPanel(combatant('goblin-1', { notes: '' }), { onSetNote });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Notes' }));
     const placeholder = screen.getByRole('button', { name: 'Edit note' });
     placeholder.click();
     const textarea = await screen.findByRole('textbox', { name: 'Edit note' });
@@ -415,5 +418,82 @@ describe('CombatantDetailsPanel', () => {
       renderPanel(combatant('goblin-1'));
       expect(screen.queryByLabelText('Hazard')).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('CombatantDetailsPanel tabs', () => {
+  function frightened(value = 2) {
+    return {
+      instanceId: 'fr-1',
+      effectId: 'frightened',
+      name: 'Frightened',
+      value: { kind: 'valued' as const, current: value, maxValue: 4 },
+      duration: { type: 'unlimited' as const },
+      durationLabel: 'until removed',
+      source: { kind: 'direct' as const }
+    };
+  }
+
+  test('Statblock is the default tab and holds the defenses grid', () => {
+    renderPanel(combatant('goblin-1'));
+    expect(screen.getByRole('tab', { name: 'Statblock' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Defenses')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Notes')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Conditions')).not.toBeInTheDocument();
+  });
+
+  test('switching tabs swaps the visible section', async () => {
+    renderPanel(combatant('goblin-1'));
+    await fireEvent.click(screen.getByRole('tab', { name: /Conditions/ }));
+    expect(screen.getByLabelText('Conditions')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Defenses')).not.toBeInTheDocument();
+  });
+
+  test('the Conditions tab lists applied effects and forwards value changes', async () => {
+    const onModifyConditionValue = vi.fn();
+    const onRemoveCondition = vi.fn();
+    renderPanel(combatant('goblin-1'), {
+      appliedEffectsView: [frightened()],
+      onModifyConditionValue,
+      onRemoveCondition
+    });
+    await fireEvent.click(screen.getByRole('tab', { name: /Conditions/ }));
+
+    expect(screen.getByText('Frightened')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Increase Frightened' }));
+    expect(onModifyConditionValue).toHaveBeenCalledWith('goblin-1', 'fr-1', 1);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove Frightened' }));
+    expect(onRemoveCondition).toHaveBeenCalledWith('goblin-1', 'fr-1');
+  });
+
+  test('the Conditions tab shows an empty state without effects', async () => {
+    renderPanel(combatant('goblin-1'), { appliedEffectsView: [] });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Conditions' }));
+    expect(screen.getByText('No effects applied.')).toBeInTheDocument();
+  });
+
+  test('Manage effects forwards the combatant id', async () => {
+    const onManageEffects = vi.fn();
+    renderPanel(combatant('goblin-1'), { onManageEffects });
+    await fireEvent.click(screen.getByRole('tab', { name: 'Conditions' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Manage effects' }));
+    expect(onManageEffects).toHaveBeenCalledWith('goblin-1');
+  });
+
+  test('selecting a different combatant resets to the Statblock tab', async () => {
+    const { rerender } = renderPanel(combatant('goblin-1'));
+    await fireEvent.click(screen.getByRole('tab', { name: 'Notes' }));
+    expect(screen.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true');
+
+    await rerender({ combatant: combatant('owlbear-1', { name: 'Owlbear' }) });
+    expect(screen.getByRole('tab', { name: 'Statblock' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Defenses')).toBeInTheDocument();
+  });
+
+  test('traits render as trait chips in the header', () => {
+    renderPanel(combatant('goblin-1', { traits: ['undead', 'mindless'] }));
+    const chips = document.querySelectorAll('.chip--trait');
+    expect([...chips].map((c) => c.textContent?.trim())).toEqual(['undead', 'mindless']);
   });
 });

@@ -6,10 +6,13 @@
   import {
     computeCombatantStats,
     formatModifierBreakdown,
-    formatStatTooltip
+    formatStatTooltip,
+    type AppliedEffectView
   } from '$lib/encounter-app';
   import type { MapVariant } from '$lib/dice/map';
+  import Button from './ui/Button.svelte';
   import Chip from './ui/Chip.svelte';
+  import IconButton from './ui/IconButton.svelte';
   import NotesEditor from './NotesEditor.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
   import StatRollButton from './ui/StatRollButton.svelte';
@@ -45,6 +48,31 @@
   export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onSetAdjustment: (combatantId: string, adjustment: TemplateAdjustment) => void = () => {};
+  export let appliedEffectsView: AppliedEffectView[] = [];
+  export let onModifyConditionValue: (
+    combatantId: string,
+    instanceId: string,
+    delta: number
+  ) => void = () => {};
+  export let onRemoveCondition: (combatantId: string, instanceId: string) => void = () => {};
+  export let onManageEffects: (combatantId: string) => void = () => {};
+
+  type DetailsTab = 'statblock' | 'conditions' | 'notes';
+
+  const TABS: ReadonlyArray<{ id: DetailsTab; label: string }> = [
+    { id: 'statblock', label: 'Statblock' },
+    { id: 'conditions', label: 'Conditions' },
+    { id: 'notes', label: 'Notes' }
+  ];
+
+  let activeTab: DetailsTab = 'statblock';
+  let lastCombatantId: string | undefined = undefined;
+
+  // Selecting a different combatant always lands on the statblock.
+  $: if (combatant?.id !== lastCombatantId) {
+    activeTab = 'statblock';
+    lastCombatantId = combatant?.id;
+  }
 
   const ADJUSTMENT_OPTIONS: TemplateAdjustment[] = ['weak', 'normal', 'elite'];
   const ADJUSTMENT_LABEL: Record<TemplateAdjustment, string> = {
@@ -61,14 +89,7 @@
 
   $: badgeLabel = combatant ? templateLabel(combatant.templateAdjustment) : '';
   $: adjustedView = combatant ? getAdjustedView(combatant) : null;
-  $: subtitle = combatant
-    ? [
-        adjustedView ? `Level ${adjustedView.level}` : null,
-        ...(combatant.traits ?? [])
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : '';
+  $: traits = combatant?.traits ?? [];
 
   $: computed = combatant ? computeCombatantStats(combatant) : null;
   $: isHazard = combatant?.sourceType === 'hazard';
@@ -118,8 +139,13 @@
           <Chip variant={templateChipVariant(combatant.templateAdjustment)}>{badgeLabel}</Chip>
         {/if}
       </div>
-      {#if subtitle}
-        <div class="details__subtitle">{subtitle}</div>
+      {#if adjustedView || traits.length > 0}
+        <div class="details__subtitle">
+          {#if adjustedView}<span class="details__level">Level {adjustedView.level}</span>{/if}
+          {#each traits as trait (trait)}
+            <Chip variant="trait">{trait}</Chip>
+          {/each}
+        </div>
       {/if}
       {#if combatant.sourceType === 'creature'}
         <div
@@ -140,6 +166,22 @@
       {/if}
     </header>
 
+    <div class="details__tabs" role="tablist" aria-label="Combatant detail sections">
+      {#each TABS as tab (tab.id)}
+        <button
+          type="button"
+          class="details__tab"
+          class:details__tab--active={activeTab === tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          onclick={() => (activeTab = tab.id)}
+        >
+          {tab.label}{#if tab.id === 'conditions' && appliedEffectsView.length > 0}&nbsp;({appliedEffectsView.length}){/if}
+        </button>
+      {/each}
+    </div>
+
+    {#if activeTab === 'statblock'}
     <section class="details__section" aria-label="Defenses">
       <SectionLabel as="h3">Defenses</SectionLabel>
       <dl class="defenses-grid">
@@ -297,14 +339,79 @@
         </div>
       </section>
     {/if}
+    {/if}
 
-    <section class="details__section" aria-label="Notes">
-      <SectionLabel as="h3">GM Notes</SectionLabel>
-      <NotesEditor
-        value={combatant.notes ?? ''}
-        onCommit={(note) => onSetNote(combatant.id, note)}
-      />
-    </section>
+    {#if activeTab === 'conditions'}
+      <section class="details__section" aria-label="Conditions">
+        {#if appliedEffectsView.length === 0}
+          <p class="conditions-empty">No effects applied.</p>
+        {:else}
+          <ul class="applied-list">
+            {#each appliedEffectsView as view (view.instanceId)}
+              <li class="applied-row">
+                <div class="applied-main">
+                  <span class="applied-name">{view.name}</span>
+                  {#if view.value.kind === 'valued'}
+                    <span class="value-controls" aria-label={`${view.name} value controls`}>
+                      <IconButton
+                        size={22}
+                        ariaLabel={`Decrease ${view.name}`}
+                        disabled={view.value.current <= 1}
+                        onclick={() => onModifyConditionValue(combatant.id, view.instanceId, -1)}
+                      >−</IconButton>
+                      <span class="applied-value" aria-label={`${view.name} value`}>{view.value.current}</span>
+                      <IconButton
+                        size={22}
+                        ariaLabel={`Increase ${view.name}`}
+                        disabled={view.value.maxValue !== undefined &&
+                          view.value.current >= view.value.maxValue}
+                        onclick={() => onModifyConditionValue(combatant.id, view.instanceId, 1)}
+                      >+</IconButton>
+                    </span>
+                  {/if}
+                  {#if view.source.kind === 'implied'}
+                    <span class="applied-implied">from {view.source.parentName}</span>
+                  {/if}
+                </div>
+                <div class="applied-meta">
+                  <span class="applied-duration">{view.durationLabel}</span>
+                  {#if view.note}
+                    <span class="applied-note">{view.note}</span>
+                  {/if}
+                  {#if view.source.kind === 'direct'}
+                    <IconButton
+                      size={22}
+                      variant="destructive"
+                      ariaLabel={`Remove ${view.name}`}
+                      title="Remove"
+                      onclick={() => onRemoveCondition(combatant.id, view.instanceId)}
+                    >✕</IconButton>
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <div class="conditions-manage">
+          <Button
+            variant="secondary"
+            size="sm"
+            ariaLabel="Manage effects"
+            onclick={() => onManageEffects(combatant.id)}
+          >Manage effects…</Button>
+        </div>
+      </section>
+    {/if}
+
+    {#if activeTab === 'notes'}
+      <section class="details__section" aria-label="Notes">
+        <SectionLabel as="h3">GM Notes</SectionLabel>
+        <NotesEditor
+          value={combatant.notes ?? ''}
+          onCommit={(note) => onSetNote(combatant.id, note)}
+        />
+      </section>
+    {/if}
   {/if}
 </aside>
 
@@ -394,10 +501,59 @@
   }
 
   .details__subtitle {
-    margin-top: 4px;
+    margin-top: var(--space-1);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1);
     color: var(--color-ink-soft);
     font-size: var(--text-base);
+  }
+
+  .details__level {
     font-style: italic;
+    margin-right: var(--space-1);
+  }
+
+  /* Tab strip — pinned while the pane scrolls. */
+  .details__tabs {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3) 0;
+    background: var(--color-panel);
+    border-bottom: var(--border-thin);
+  }
+
+  .details__tab {
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-serif);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s;
+  }
+
+  .details__tab:hover {
+    color: var(--color-ink);
+  }
+
+  .details__tab--active {
+    color: var(--color-ink);
+    border-bottom-color: var(--accent);
+  }
+
+  .details__tab:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: -2px;
   }
 
   .details__section {
@@ -484,5 +640,86 @@
   .spellcasting-stack {
     display: grid;
     gap: var(--space-3);
+  }
+
+  /* Conditions tab — read-mostly applied-effects list. Full management
+     (pickers, durations) lives in the effect modal behind Manage. */
+  .conditions-empty {
+    margin: 0;
+    color: var(--color-ink-mute);
+    font-size: var(--text-base);
+    font-style: italic;
+  }
+
+  .applied-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .applied-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
+    background: var(--color-panel-2);
+  }
+
+  .applied-main {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .applied-name {
+    font-weight: 600;
+  }
+
+  .value-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .applied-value {
+    min-width: 1.5em;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+
+  .applied-implied {
+    color: var(--color-ink-mute);
+    font-size: var(--text-sm);
+    font-style: italic;
+  }
+
+  .applied-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-ink-soft);
+  }
+
+  .applied-duration {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .applied-note {
+    color: var(--color-ink-mute);
+    font-style: italic;
+  }
+
+  .conditions-manage {
+    margin-top: var(--space-3);
   }
 </style>
