@@ -1118,6 +1118,10 @@
     <aside class="workspace__details">
       <CombatantDetailsPanel
         combatant={selectedCombatant}
+        appliedEffectsView={selectedCombatant ? viewAppliedEffects(selectedCombatant, encounter) : []}
+        onModifyConditionValue={modifyConditionValue}
+        onRemoveCondition={removeCondition}
+        onManageEffects={(combatantId) => openEffectModal(combatantId, 'applied')}
         onSetNote={setNote}
         onRollAttack={rollAttackFor}
         onRollDamage={rollDamageFor}
