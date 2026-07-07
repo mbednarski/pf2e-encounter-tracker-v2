@@ -19,7 +19,6 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     appliedEffectsView: [],
     conditionOptions: [],
     onHpEdit: vi.fn(),
-    onEndTurn: vi.fn(),
     onMarkReactionUsed: vi.fn(),
     onMarkDead: vi.fn(),
     onRevive: vi.fn(),
@@ -375,5 +374,44 @@ describe('CombatantCard conditions modify stats', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('CombatantCard turn state and lifecycle menu', () => {
+  test('isCurrent applies the current-card class on the article', () => {
+    const { container } = render(CombatantCard, { props: baseProps({ isCurrent: true }) });
+    const article = container.querySelector('article.combatant-card');
+    expect(article?.classList.contains('current-card')).toBe(true);
+  });
+
+  test('the card renders no End Turn button (owned by the encounter header)', () => {
+    render(CombatantCard, {
+      props: baseProps({ phase: 'ACTIVE', actions: { ...noopActions, canEndTurn: true } })
+    });
+    expect(screen.queryByRole('button', { name: 'End turn' })).toBeNull();
+  });
+
+  test('the card renders no phase chip (phase lives in the encounter header)', () => {
+    render(CombatantCard, { props: baseProps({ phase: 'ACTIVE' }) });
+    expect(screen.queryByText('ACTIVE')).toBeNull();
+    expect(screen.queryByText('Turn')).toBeNull();
+  });
+
+  test('the overflow menu holds Reaction Used, Mark Dead, and Revive', async () => {
+    const onMarkReactionUsed = vi.fn();
+    render(CombatantCard, {
+      props: baseProps({
+        phase: 'ACTIVE',
+        onMarkReactionUsed,
+        actions: { ...noopActions, canMarkReactionUsed: true }
+      })
+    });
+
+    expect(screen.getByRole('button', { name: 'Reaction used' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark dead' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Revive' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reaction used' }));
+    expect(onMarkReactionUsed).toHaveBeenCalledWith('goblin-1');
   });
 });

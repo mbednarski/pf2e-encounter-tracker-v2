@@ -1068,16 +1068,28 @@
       {/if}
       <div class="cards">
         {#each orderedCombatants as combatant, index (combatant.id)}
-          <CombatantCard
+          {@const isCurrentRow = combatant.id === activeCombatant?.id}
+          <div class="track-row" class:track-row--active={isCurrentRow}>
+            <div class="rail-cell">
+              <span
+                class="rail-init"
+                aria-label={encounter.initiative.scores[combatant.id] !== undefined
+                  ? `Initiative ${encounter.initiative.scores[combatant.id]} for ${combatant.name}`
+                  : `No initiative rolled for ${combatant.name}`}
+              >{encounter.initiative.scores[combatant.id] ?? '—'}</span>
+              {#if isCurrentRow}
+                <span class="rail-marker" aria-hidden="true"></span>
+              {/if}
+            </div>
+            <CombatantCard
             {combatant}
-            isCurrent={combatant.id === activeCombatant?.id}
+            isCurrent={isCurrentRow}
             isSelected={combatant.id === selection.id}
             phase={encounter.phase}
             actions={combatantCardActions(encounter, combatant.id)}
             appliedEffectsView={viewAppliedEffects(combatant, encounter)}
             {conditionOptions}
             onHpEdit={applyHpEdit}
-            onEndTurn={endTurn}
             onMarkReactionUsed={markReactionUsed}
             onMarkDead={markDead}
             onRevive={revive}
@@ -1097,7 +1109,8 @@
             onResolvePrompt={resolvePrompt}
             onApplyPersistentDamage={applyPersistentDamageFromPrompt}
             onRollSave={rollSaveFor}
-          />
+            />
+          </div>
         {/each}
       </div>
     </section>
@@ -1200,6 +1213,8 @@
     grid-area: track;
     display: grid;
     gap: 14px;
+    /* Cards adapt to this pane's width via @container queries. */
+    container-type: inline-size;
   }
 
   .workspace__details {
@@ -1215,14 +1230,78 @@
     grid-area: log;
   }
 
+  /* Initiative rail — a continuous spine down the track connecting the
+     mono initiative numerals; the crimson marker sits on the active row. */
   .cards {
+    position: relative;
     display: grid;
     gap: 10px;
   }
 
+  .cards::before {
+    content: '';
+    position: absolute;
+    left: 25px;
+    top: 20px;
+    bottom: 20px;
+    width: 2px;
+    background: var(--color-rule-strong);
+  }
+
+  .track-row {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .rail-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: var(--space-2);
+    align-self: stretch;
+  }
+
+  .rail-init {
+    position: relative;
+    z-index: 1;
+    min-width: 40px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    font-weight: 700;
+    line-height: var(--leading-tight);
+    color: var(--color-ink-soft);
+    background: var(--color-panel);
+    border: var(--border-strong);
+    padding: 4px 2px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .track-row--active .rail-init {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .rail-marker {
+    position: absolute;
+    z-index: 1;
+    top: calc(var(--space-2) + 9px);
+    right: -8px;
+    width: 0;
+    height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 7px solid var(--accent);
+  }
+
   .not-yet-rolled {
     border: 1px solid var(--color-rule);
-    border-radius: 8px;
+    border-radius: var(--radius-card);
     background: var(--color-panel);
     padding: 12px 14px;
   }
