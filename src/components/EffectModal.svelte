@@ -495,7 +495,7 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(31, 26, 20, 0.42);
+    background: color-mix(in srgb, var(--color-ink) 42%, transparent);
     border: 0;
     padding: 0;
     cursor: default;
@@ -510,8 +510,8 @@
     background: var(--color-bg);
     color: var(--color-ink);
     border: 1px solid var(--color-rule-strong);
-    border-radius: 6px;
-    box-shadow: 0 12px 32px rgba(31, 26, 20, 0.28);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-paper);
     display: flex;
     flex-direction: column;
     outline: none;

@@ -49,7 +49,7 @@
     align-items: baseline;
     gap: 4px;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-chip);
     background: var(--color-panel-2);
     color: var(--color-ink);
     border: 1px solid var(--color-rule);

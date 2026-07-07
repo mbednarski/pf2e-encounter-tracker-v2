@@ -691,7 +691,7 @@
   .selected-card {
     box-shadow:
       inset 0 0 0 2px var(--color-blue),
-      0 1px 2px rgba(20, 20, 14, 0.08);
+      var(--shadow-soft);
   }
 
   .selected-card.current-card {

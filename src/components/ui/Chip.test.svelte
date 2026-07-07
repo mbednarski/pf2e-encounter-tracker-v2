@@ -3,6 +3,7 @@
 
   type Variant =
     | 'default'
+    | 'trait'
     | 'pc'
     | 'enemy'
     | 'success'

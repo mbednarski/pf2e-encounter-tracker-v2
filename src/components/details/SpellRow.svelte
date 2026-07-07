@@ -2,7 +2,7 @@
   import type { SpellListEntry } from '../../domain';
   import { ensureSpellIndex, resolveAtLevel } from '$lib/spell-index';
   import type { SpellIndexEntry, SpellIndexState } from '$lib/spell-index';
-  import ActionGlyph from './ActionGlyph.svelte';
+  import ActionGlyph from '../ui/ActionGlyph.svelte';
 
   export let entry: SpellListEntry;
   export let dc: number;
