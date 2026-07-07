@@ -106,3 +106,21 @@ describe('EncounterHeader', () => {
     expect(onEndTurn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('EncounterHeader library toggle', () => {
+  test('hidden unless showLibraryToggle is set', () => {
+    render(EncounterHeader, { props: baseProps() });
+    expect(screen.queryByRole('button', { name: 'Toggle library' })).toBeNull();
+  });
+
+  test('renders with aria-expanded and fires the callback', async () => {
+    const onToggleLibrary = vi.fn();
+    render(EncounterHeader, {
+      props: baseProps({ showLibraryToggle: true, libraryOpen: false, onToggleLibrary })
+    });
+    const toggle = screen.getByRole('button', { name: 'Toggle library' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(toggle);
+    expect(onToggleLibrary).toHaveBeenCalledTimes(1);
+  });
+});

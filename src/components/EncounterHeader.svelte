@@ -12,9 +12,23 @@
   export let canEndTurn = false;
   export let onRollAllInitiative: () => void = () => {};
   export let onEndTurn: () => void = () => {};
+  /* Rendered only on tablet-or-narrower layouts, where the library pane
+     is an off-canvas drawer the header must be able to summon. */
+  export let showLibraryToggle = false;
+  export let libraryOpen = false;
+  export let onToggleLibrary: () => void = () => {};
 </script>
 
 <header class="header">
+  {#if showLibraryToggle}
+    <button
+      type="button"
+      class="header__library-toggle"
+      aria-label="Toggle library"
+      aria-expanded={libraryOpen}
+      onclick={onToggleLibrary}
+    >☰ Library</button>
+  {/if}
   <div class="header__title">
     <SectionLabel>PF2e Encounter Tracker v2</SectionLabel>
     <h1>{name}</h1>
@@ -150,6 +164,39 @@
     outline-offset: 2px;
   }
 
+  .header__library-toggle {
+    align-self: center;
+    flex: 0 0 auto;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wider);
+    text-transform: uppercase;
+    border: var(--border-thin);
+    background: transparent;
+    padding: 6px var(--space-3);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .header__library-toggle:hover {
+    background: var(--color-panel-2);
+    border-color: var(--color-ink);
+  }
+
+  .header__library-toggle:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    .header__library-toggle {
+      min-height: 44px;
+    }
+  }
+
+  /* phone breakpoint — mirrored in src/lib/breakpoints.ts (PHONE_MAX) */
   @media (max-width: 760px) {
     .header {
       display: grid;

@@ -145,3 +145,30 @@ describe('LibraryPane', () => {
     expect(onRemoveHazard).toHaveBeenCalledWith('dart-gallery');
   });
 });
+
+describe('LibraryPane collapse rail', () => {
+  test('renders expanded by default with no collapse control unless enabled', () => {
+    render(LibraryPane, { props: baseProps() });
+    expect(screen.getByRole('heading', { name: 'Library' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Collapse library' })).toBeNull();
+  });
+
+  test('shows the collapse control when onToggleCollapsed is provided', async () => {
+    const onToggleCollapsed = vi.fn();
+    render(LibraryPane, { props: baseProps({ onToggleCollapsed }) });
+    const collapse = screen.getByRole('button', { name: 'Collapse library' });
+    expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    await fireEvent.click(collapse);
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  test('collapsed renders only the expand rail', async () => {
+    const onToggleCollapsed = vi.fn();
+    render(LibraryPane, { props: baseProps({ collapsed: true, onToggleCollapsed }) });
+    expect(screen.queryByRole('heading', { name: 'Library' })).toBeNull();
+    const expand = screen.getByRole('button', { name: 'Expand library' });
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(expand);
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+});

@@ -501,6 +501,12 @@
     border-bottom-color: var(--color-amber);
   }
 
+  @media (pointer: coarse) {
+    .tab {
+      min-height: 44px;
+    }
+  }
+
   .body {
     flex: 1;
     overflow-y: auto;
