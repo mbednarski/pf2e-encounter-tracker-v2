@@ -36,7 +36,6 @@
   export let appliedEffectsView: AppliedEffectView[];
   export let conditionOptions: ConditionOption[];
   export let onHpEdit: (id: string, field: HpEditField, parsed: CommittableEdit) => void;
-  export let onEndTurn: (id: string) => void;
   export let onMarkReactionUsed: (id: string) => void;
   export let onMarkDead: (id: string) => void;
   export let onRevive: (id: string) => void;
@@ -265,12 +264,6 @@
     }
   }
 
-  $: endTurnTitle = actions.canEndTurn
-    ? 'End this combatant’s turn'
-    : isCurrent
-      ? 'End Turn is only available during the active phase'
-      : 'Only the current combatant can end their turn';
-
   $: reactionTitle = actions.canMarkReactionUsed
     ? 'Mark reaction used this round'
     : combatant.reactionUsedThisRound
@@ -363,9 +356,6 @@
       {/if}
     </div>
     <div class="card-aside">
-      <Chip variant={isCurrent ? 'success' : 'default'}>
-        {isCurrent ? 'Turn' : phase}
-      </Chip>
       <div class="card-reorder" aria-label="Reorder">
         <IconButton
           ariaLabel={`Move ${combatant.name} up`}
@@ -382,6 +372,39 @@
           onclick={() => onMove(combatant.id, 1)}
         >↓</IconButton>
       </div>
+      <details class="card-overflow">
+        <summary
+          class="card-overflow__toggle"
+          aria-label={`More actions for ${combatant.name}`}
+          title="More actions"
+        >⋯</summary>
+        <div class="card-overflow__menu" role="menu">
+          <Button
+            size="sm"
+            variant="secondary"
+            ariaLabel="Reaction used"
+            title={reactionTitle}
+            disabled={!actions.canMarkReactionUsed}
+            onclick={() => onMarkReactionUsed(combatant.id)}
+          >Reaction Used</Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            ariaLabel="Mark dead"
+            title={markDeadTitle}
+            disabled={!actions.canMarkDead}
+            onclick={() => onMarkDead(combatant.id)}
+          >Mark Dead</Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            ariaLabel="Revive"
+            title={reviveTitle}
+            disabled={!actions.canRevive}
+            onclick={() => onRevive(combatant.id)}
+          >Revive</Button>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -606,49 +629,6 @@
     </div>
   {/if}
 
-  <div class="card-turn-actions" aria-label="Turn and lifecycle controls">
-    <Button
-      size="sm"
-      variant="primary"
-      ariaLabel="End turn"
-      title={endTurnTitle}
-      disabled={!actions.canEndTurn}
-      onclick={() => onEndTurn(combatant.id)}
-    >End Turn</Button>
-    <Button
-      size="sm"
-      variant="secondary"
-      ariaLabel="Reaction used"
-      title={reactionTitle}
-      disabled={!actions.canMarkReactionUsed}
-      onclick={() => onMarkReactionUsed(combatant.id)}
-    >Reaction Used</Button>
-    <details class="card-overflow">
-      <summary
-        class="card-overflow__toggle"
-        aria-label={`More actions for ${combatant.name}`}
-        title="More actions"
-      >⋯</summary>
-      <div class="card-overflow__menu" role="menu">
-        <Button
-          size="sm"
-          variant="secondary"
-          ariaLabel="Mark dead"
-          title={markDeadTitle}
-          disabled={!actions.canMarkDead}
-          onclick={() => onMarkDead(combatant.id)}
-        >Mark Dead</Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          ariaLabel="Revive"
-          title={reviveTitle}
-          disabled={!actions.canRevive}
-          onclick={() => onRevive(combatant.id)}
-        >Revive</Button>
-      </div>
-    </details>
-  </div>
 </article>
 
 <style>
@@ -677,15 +657,14 @@
     border-left-color: var(--faction-hazard);
   }
 
-  /* Active card — lifted to eggshell paper, with a soft halo around it.
-     Halo uses --color-blue-soft so the eye is drawn without a bulb-bright
-     surface. The card resting state stays calm. */
-  .current-card {
+  /* Active card — lifted to eggshell paper with the crimson turn accent
+     on its spine edge, matching the rail marker. Selection stays blue so
+     "whose turn" (crimson) and "what I'm looking at" (blue) never merge. */
+  .combatant-card.current-card {
     background: var(--color-panel-up);
     border-color: var(--color-rule-strong);
-    box-shadow:
-      0 0 0 3px var(--color-blue-soft),
-      var(--shadow-soft);
+    border-left-color: var(--accent);
+    box-shadow: var(--shadow-lift);
   }
 
   .selected-card {
@@ -694,11 +673,10 @@
       var(--shadow-soft);
   }
 
-  .selected-card.current-card {
+  .combatant-card.selected-card.current-card {
     box-shadow:
       inset 0 0 0 2px var(--color-blue),
-      0 0 0 4px var(--color-blue-soft),
-      var(--shadow-soft);
+      var(--shadow-lift);
   }
 
   .combatant-card.selectable {
@@ -737,11 +715,24 @@
     outline: none;
   }
 
+  /* Statblock heading — name row over a tapered crimson section rule. */
   .card-heading {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
+    padding-bottom: var(--space-2);
+  }
+
+  .card-heading::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--rule-accent);
   }
 
   .card-title {
@@ -755,13 +746,13 @@
 
   .faction-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--text-xs);
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: var(--tracking-wider);
     text-transform: uppercase;
     padding: 1px 5px;
     border: 1px solid currentColor;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
     flex: 0 0 auto;
     line-height: 1.2;
   }
@@ -809,7 +800,7 @@
     padding: 4px 8px;
     background: var(--color-panel);
     border: var(--border-thin);
-    border-radius: var(--radius-card, 4px);
+    border-radius: var(--radius-card);
     flex-wrap: wrap;
   }
 
@@ -821,13 +812,13 @@
     font-size: var(--text-sm);
     text-align: right;
     border: 1px solid var(--color-rule-strong);
-    border-radius: 3px;
+    border-radius: var(--radius-chip);
     background: var(--color-bg);
     color: inherit;
   }
 
   .card-initiative__input:focus-visible {
-    outline: 2px solid var(--color-blue, var(--color-amber));
+    outline: 2px solid var(--color-blue);
     outline-offset: 1px;
   }
 
@@ -872,7 +863,7 @@
     align-items: baseline;
     gap: 4px;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-chip);
     background: var(--color-panel-2);
     border: 1px solid var(--color-rule);
     cursor: default;
@@ -1036,7 +1027,7 @@
     background: var(--color-panel-up);
     padding: 0 4px;
     border: 1px solid var(--effect-pers);
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
   }
 
   .condition-duration {
@@ -1099,17 +1090,6 @@
     max-width: 160px;
   }
 
-  .card-turn-actions {
-    display: flex;
-    align-items: center;
-    justify-content: start;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    margin-top: var(--space-2);
-    padding-top: var(--space-2);
-    border-top: 1px dashed var(--color-rule);
-  }
-
   .card-overflow {
     position: relative;
   }
@@ -1123,7 +1103,7 @@
     height: 24px;
     padding: 0;
     border: var(--border-thin);
-    border-radius: var(--radius-card, 4px);
+    border-radius: var(--radius-card);
     background: transparent;
     color: var(--color-ink-mute);
     font-family: var(--font-sans);
@@ -1162,13 +1142,15 @@
     padding: 6px;
     background: var(--color-panel);
     border: var(--border-strong);
-    border-radius: var(--radius-card, 4px);
+    border-radius: var(--radius-card);
     box-shadow: var(--shadow-soft);
     z-index: 5;
     white-space: nowrap;
   }
 
-  @media (max-width: 760px) {
+  /* The card adapts to its pane, not the viewport — the center track can
+     be narrow on a wide screen. Container: .workspace__track in +page. */
+  @container (max-width: 640px) {
     .card-heading {
       align-items: stretch;
       flex-direction: column;
