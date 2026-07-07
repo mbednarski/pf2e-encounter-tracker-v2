@@ -55,6 +55,7 @@
     reconcileWithCombatants,
     type Selection
   } from '$lib/selection-state';
+  import { PHONE_QUERY, TABLET_QUERY } from '$lib/breakpoints';
   import {
     clearActiveEncounter,
     loadActiveEncounter,
@@ -186,6 +187,64 @@
       tone: notice.severity === 'warn' ? 'danger' : notice.severity
     }));
     return [...log, ...mapped];
+  }
+
+  /* Responsive layout state. isTablet/isPhone mirror the CSS breakpoints
+     (src/lib/breakpoints.ts) so drawer and slide-over behavior can't
+     drift from the stylesheet. */
+  const LIBRARY_COLLAPSED_KEY = 'pf2e-tracker:library-collapsed';
+  let libraryCollapsed = false;
+  let libraryDrawerOpen = false;
+  let isTablet = false;
+  let isPhone = false;
+
+  $: detailsSlideOverOpen = isTablet && selection.pinned && selectedCombatant !== undefined;
+
+  onMount(() => {
+    libraryCollapsed = localStorage.getItem(LIBRARY_COLLAPSED_KEY) === 'true';
+    const tabletMq = window.matchMedia(TABLET_QUERY);
+    const phoneMq = window.matchMedia(PHONE_QUERY);
+    isTablet = tabletMq.matches;
+    isPhone = phoneMq.matches;
+    const onTabletChange = (event: MediaQueryListEvent) => {
+      isTablet = event.matches;
+      if (!event.matches) libraryDrawerOpen = false;
+    };
+    const onPhoneChange = (event: MediaQueryListEvent) => {
+      isPhone = event.matches;
+    };
+    tabletMq.addEventListener('change', onTabletChange);
+    phoneMq.addEventListener('change', onPhoneChange);
+    return () => {
+      tabletMq.removeEventListener('change', onTabletChange);
+      phoneMq.removeEventListener('change', onPhoneChange);
+    };
+  });
+
+  function toggleLibraryCollapsed() {
+    libraryCollapsed = !libraryCollapsed;
+    try {
+      localStorage.setItem(LIBRARY_COLLAPSED_KEY, String(libraryCollapsed));
+    } catch {
+      // UI preference only — losing it is harmless.
+    }
+  }
+
+  function toggleLibraryDrawer() {
+    libraryDrawerOpen = !libraryDrawerOpen;
+  }
+
+  function unpinDetails() {
+    selection = { id: selection.id, pinned: false };
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || event.defaultPrevented || !isTablet) return;
+    if (libraryDrawerOpen) {
+      libraryDrawerOpen = false;
+      return;
+    }
+    if (detailsSlideOverOpen) unpinDetails();
   }
 
   onMount(async () => {
@@ -1024,13 +1083,25 @@
       combatantCardActions(encounter, activeCombatant.id).canEndTurn}
     onRollAllInitiative={rollAllInitiative}
     onEndTurn={() => activeCombatant && endTurn(activeCombatant.id)}
+    showLibraryToggle={isTablet}
+    libraryOpen={libraryDrawerOpen}
+    onToggleLibrary={toggleLibraryDrawer}
   />
 
-  <EncounterDifficultyMeter summary={xpSummary} />
+  <div class="meter-host">
+    <EncounterDifficultyMeter summary={xpSummary} />
+  </div>
 
-  <section class="workspace">
+  <section
+    class="workspace"
+    class:workspace--library-collapsed={libraryCollapsed && !isTablet}
+    class:workspace--library-open={libraryDrawerOpen}
+    class:workspace--details-open={detailsSlideOverOpen}
+  >
     <div class="workspace__library">
       <LibraryPane
+        collapsed={!isTablet && libraryCollapsed}
+        onToggleCollapsed={isTablet ? undefined : toggleLibraryCollapsed}
         {canStart}
         creatures={availableCreatures}
         hazards={storedHazards}
@@ -1140,10 +1211,26 @@
     </aside>
 
     <section class="workspace__log">
-      <CombatLogDrawer entries={drawerEntries} />
+      {#key isPhone}
+        <CombatLogDrawer entries={drawerEntries} initialOpen={!isPhone} />
+      {/key}
     </section>
+
+    {#if isTablet && (libraryDrawerOpen || detailsSlideOverOpen)}
+      <button
+        type="button"
+        class="pane-scrim"
+        aria-label={libraryDrawerOpen ? 'Close library' : 'Close details'}
+        onclick={() => {
+          if (libraryDrawerOpen) libraryDrawerOpen = false;
+          else unpinDetails();
+        }}
+      ></button>
+    {/if}
   </section>
 </main>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 {#if radialOpen && radialCombatant}
   <RadialConditionMenu
@@ -1331,34 +1418,91 @@
     font-size: 14px;
   }
 
+  /* Desktop library collapse — the pane shrinks to its slim rail. */
+  .workspace--library-collapsed {
+    grid-template-columns: min-content minmax(420px, 1fr) minmax(300px, 380px);
+  }
+
+  .meter-host {
+    max-width: 1440px;
+    margin: 0 auto;
+    /* EncounterDifficultyMeter adapts via @container queries. */
+    container-type: inline-size;
+  }
+
+  .pane-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 85;
+    background: color-mix(in srgb, var(--color-ink) 32%, transparent);
+    border: 0;
+    padding: 0;
+    cursor: default;
+  }
+
+  /* Tablet and narrower — mirrored in src/lib/breakpoints.ts (TABLET_MAX).
+     The track takes the full width; the library becomes a left off-canvas
+     drawer (header toggle) and the details panel a right slide-over that
+     appears when a combatant is explicitly picked. */
   @media (max-width: 1180px) {
     .workspace {
-      grid-template-columns: minmax(260px, 320px) 1fr;
+      grid-template-columns: 1fr;
       grid-template-areas:
-        'library track'
-        'details details'
-        'log     log';
+        'track'
+        'log';
+    }
+
+    .workspace__library {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 90;
+      width: min(340px, 88vw);
+      overflow-y: auto;
+      padding: var(--space-3);
+      background: var(--color-bg);
+      box-shadow: var(--shadow-paper);
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+    }
+
+    .workspace--library-open .workspace__library {
+      transform: translateX(0);
     }
 
     .workspace__details {
-      position: static;
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      z-index: 90;
+      width: min(420px, 92vw);
       max-height: none;
-      overflow: visible;
+      overflow-y: auto;
+      padding: var(--space-3);
+      background: var(--color-bg);
+      box-shadow: var(--shadow-paper);
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
+    }
+
+    .workspace--details-open .workspace__details {
+      transform: translateX(0);
     }
   }
 
+  /* phone breakpoint — mirrored in src/lib/breakpoints.ts (PHONE_MAX) */
   @media (max-width: 760px) {
     .shell {
       padding: 14px;
     }
+  }
 
-    .workspace {
-      grid-template-columns: 1fr;
-      grid-template-areas:
-        'library'
-        'track'
-        'details'
-        'log';
+  @media (prefers-reduced-motion: reduce) {
+    .workspace__library,
+    .workspace__details {
+      transition: none;
     }
   }
 </style>

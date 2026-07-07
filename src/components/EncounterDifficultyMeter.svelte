@@ -371,7 +371,8 @@
     font-size: var(--text-xs);
   }
 
-  @media (max-width: 760px) {
+  /* Adapts to the host pane width (container: .meter-host in +page). */
+  @container (max-width: 760px) {
     .meter__numbers {
       gap: var(--space-3);
     }

@@ -64,7 +64,7 @@ Track B. Slice numbering follows the umbrella issues #15 (combat screen) and #16
 - [x] Slice 4 — combatant notes UI inside details panel. (Issue #40.)
 - [x] Slice 5 — per-card HP delta controls. (Issue #39.)
 - [x] Slice 6 — dead/unconscious visual state. (Issue #43.)
-- [ ] Slice 7 — tablet-first responsive layout pass. (Issue #44.)
+- [x] Slice 7 — tablet-first responsive layout pass. (Issue #44. Landed in the redesign PR stack: library drawer + details slide-over on tablet, container-query card/pane adaptation, touch-target audit.)
 - [ ] Slice 8 — append-only combat log component. (Issue #41.)
 - [ ] Slice 9 — prompt resolution panel. (Issue #46. Depends on #12.)
 - [x] Slice 10 — conditions UI on combatant cards. (Issue #45.)

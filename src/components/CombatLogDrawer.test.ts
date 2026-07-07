@@ -32,3 +32,11 @@ describe('CombatLogDrawer', () => {
     expect(screen.getByText('Hidden when closed')).toBeInTheDocument();
   });
 });
+
+test('initialOpen={false} starts the drawer collapsed', () => {
+  render(CombatLogDrawer, { props: { entries: [], initialOpen: false } });
+  expect(screen.getByRole('button', { name: /Combat Log/ })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  );
+});

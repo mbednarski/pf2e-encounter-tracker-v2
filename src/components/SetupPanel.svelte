@@ -181,7 +181,9 @@
     margin-top: var(--space-3);
   }
 
-  @media (max-width: 760px) {
+  /* Adapts to the pane it sits in (container: .library__configure in
+     LibraryPane) — the controls stack when the pane is narrow. */
+  @container (max-width: 379px) {
     .panel-heading,
     .control-row {
       align-items: stretch;

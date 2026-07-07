@@ -147,4 +147,17 @@
     outline-offset: 2px;
     border-radius: var(--radius-chip);
   }
+
+  /* Touch devices: extend the tap target past the small numeral. */
+  @media (pointer: coarse) {
+    .display {
+      position: relative;
+    }
+
+    .display::after {
+      content: '';
+      position: absolute;
+      inset: -10px -8px;
+    }
+  }
 </style>

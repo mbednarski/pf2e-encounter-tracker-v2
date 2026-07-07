@@ -3,8 +3,9 @@
   import CombatLog from './CombatLog.svelte';
 
   export let entries: LogEntry[];
+  export let initialOpen = true;
 
-  let open = true;
+  let open = initialOpen;
 
   function toggle() {
     open = !open;
@@ -97,5 +98,11 @@
     max-height: 240px;
     overflow: auto;
     padding: var(--space-3) var(--space-4);
+  }
+
+  @media (pointer: coarse) {
+    .drawer__header {
+      height: 44px;
+    }
   }
 </style>

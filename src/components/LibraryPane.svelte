@@ -32,6 +32,10 @@
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
   export let onReset: () => void;
+  /* Desktop icon-rail collapse. When onToggleCollapsed is omitted the
+     pane is always expanded (tablet drawer renders it that way). */
+  export let collapsed = false;
+  export let onToggleCollapsed: (() => void) | undefined = undefined;
 
   let manageOpen = false;
 
@@ -44,9 +48,33 @@
   }
 </script>
 
+{#if collapsed}
+  <aside class="library library--rail" aria-label="Library (collapsed)">
+    <button
+      type="button"
+      class="library__expand"
+      aria-label="Expand library"
+      aria-expanded="false"
+      onclick={() => onToggleCollapsed?.()}
+    >
+      <span class="library__expand-glyph" aria-hidden="true">▸</span>
+      <span class="library__expand-text">Library</span>
+    </button>
+  </aside>
+{:else}
 <aside class="library" aria-labelledby="library-title">
   <header class="library__header">
     <h2 id="library-title">Library</h2>
+    {#if onToggleCollapsed}
+      <button
+        type="button"
+        class="library__collapse"
+        aria-label="Collapse library"
+        aria-expanded="true"
+        title="Collapse library"
+        onclick={() => onToggleCollapsed?.()}
+      >◂</button>
+    {/if}
   </header>
   <BestiarySection
     {creatures}
@@ -76,6 +104,7 @@
     <SetupPanel {canStart} {onAddManual} {onStart} {onReset} />
   </div>
 </aside>
+{/if}
 
 {#if manageOpen}
   <LibraryManageModal
@@ -99,9 +128,83 @@
   }
 
   .library__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
     background: var(--color-panel-2);
     border-bottom: var(--border-thin);
+  }
+
+  .library__collapse,
+  .library__expand {
+    background: transparent;
+    border: var(--border-thin);
+    color: var(--color-ink-mute);
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+
+  .library__collapse {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: var(--text-sm);
+    line-height: 1;
+  }
+
+  .library__collapse:hover,
+  .library__expand:hover {
+    color: var(--color-ink);
+    border-color: var(--color-ink);
+    background: var(--color-panel);
+  }
+
+  .library__collapse:focus-visible,
+  .library__expand:focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 1px;
+  }
+
+  /* Collapsed rail — a slim vertical tab that restores the pane. */
+  .library--rail {
+    align-items: stretch;
+    min-height: 180px;
+  }
+
+  .library__expand {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-1);
+    background: var(--color-panel-2);
+    border: 0;
+  }
+
+  .library__expand-glyph {
+    font-size: var(--text-sm);
+  }
+
+  .library__expand-text {
+    writing-mode: vertical-rl;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-widest);
+    text-transform: uppercase;
+  }
+
+  @media (pointer: coarse) {
+    .library__collapse {
+      width: 32px;
+      height: 32px;
+    }
   }
 
   h2 {
@@ -116,5 +219,7 @@
   .library__configure {
     border-top: var(--border-thin);
     padding: var(--space-3) var(--space-4);
+    /* SetupPanel adapts to this pane via @container queries. */
+    container-type: inline-size;
   }
 </style>

@@ -123,6 +123,12 @@
   --space-7: 32px;
   --space-8: 48px;
 
+  /* Breakpoints — CSS custom properties cannot be used in media queries.
+     The two viewport switches (tablet=1180, phone=760) are documented
+     literals defined in src/lib/breakpoints.ts and mirrored only in
+     +page.svelte and EncounterHeader.svelte. Component-level adaptation
+     uses @container queries against its pane instead. */
+
   /* Borders */
   --border-thin: 1px solid var(--color-rule);
   --border-strong: 1px solid var(--color-rule-strong);

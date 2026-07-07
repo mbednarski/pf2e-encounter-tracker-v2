@@ -556,6 +556,12 @@
     outline-offset: -2px;
   }
 
+  @media (pointer: coarse) {
+    .details__tab {
+      min-height: 44px;
+    }
+  }
+
   .details__section {
     padding: var(--space-3) var(--space-4);
     border-top: var(--border-thin);
