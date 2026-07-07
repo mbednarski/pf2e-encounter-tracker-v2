@@ -145,7 +145,7 @@ describe('LibraryManageModal', () => {
         onClose
       }
     });
-    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -162,7 +162,7 @@ describe('LibraryManageModal', () => {
     await fireEvent.click(
       screen.getByRole('button', { name: 'Remove Goblin Warrior from library' })
     );
-    await fireEvent.keyDown(window, { key: 'Escape' });
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByText('Delete?')).not.toBeInTheDocument();
   });
