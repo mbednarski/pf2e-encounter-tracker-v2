@@ -183,7 +183,7 @@ interface AllCombatantsDeadEvent {
 }
 ```
 
-**Emitted by:** Turn advancement (END_TURN, RESOLVE_PROMPT, DELAY) when no live combatants remain in initiative.
+**Emitted by:** Turn advancement (END_TURN or RESOLVE_PROMPT) when no live combatants remain in initiative.
 
 **Notes:** Informational. The orchestrator can suggest COMPLETE_ENCOUNTER. The domain does not auto-complete.
 
@@ -271,35 +271,6 @@ interface InitiativeChangedEvent {
 
 ---
 
-#### CombatantDelayedEvent
-
-```typescript
-interface CombatantDelayedEvent {
-  type: "combatant-delayed"
-  combatantId: CombatantId
-}
-```
-
-**Emitted by:** DELAY.
-
----
-
-#### CombatantResumedFromDelayEvent
-
-```typescript
-interface CombatantResumedFromDelayEvent {
-  type: "combatant-resumed-from-delay"
-  combatantId: CombatantId
-  insertIndex: number
-}
-```
-
-**Emitted by:** RESUME_FROM_DELAY.
-
-**Notes:** Distinct from `initiative-changed` because resumption has additional semantics (turn starts immediately, reactions reset, start-of-turn effects process).
-
----
-
 ### 4.4 Turn Boundaries
 
 #### TurnStartedEvent
@@ -312,7 +283,7 @@ interface TurnStartedEvent {
 }
 ```
 
-**Emitted by:** START_ENCOUNTER (first turn), END_TURN, RESOLVE_PROMPT (when last prompt clears and turn advances), DELAY, RESUME_FROM_DELAY, MARK_DEAD (if killing the active combatant advances the turn).
+**Emitted by:** START_ENCOUNTER (first turn), END_TURN, RESOLVE_PROMPT (when the last prompt clears and turn advances), MARK_DEAD (if killing the active combatant advances the turn).
 
 **Notes:** Always preceded by a `turn-ended` event for the prior combatant (except for the very first turn after START_ENCOUNTER). Hard clock expirations (`untilTurnStart`) for this combatant fire before this event; their `effect-removed` events appear immediately before. `prompt-generated` events for start-of-turn suggestions fire immediately after.
 
@@ -327,7 +298,7 @@ interface TurnEndedEvent {
 }
 ```
 
-**Emitted by:** END_TURN, DELAY, MARK_DEAD (active combatant), RESUME_FROM_DELAY (interrupts active combatant).
+**Emitted by:** END_TURN or MARK_DEAD (active combatant).
 
 **Notes:** Hard clock expirations (`untilTurnEnd`) fire after this event. Then `prompt-generated` events. Then phase transitions to RESOLVING (if prompts) or `turn-started` for next combatant (if no prompts).
 
@@ -633,8 +604,6 @@ This table is the source of truth for what each command emits. Where multiple ev
 | SET_INITIATIVE_ORDER | `initiative-set` |
 | REORDER_COMBATANT | `initiative-changed` |
 | END_TURN | `turn-ended`, [`effect-removed` ×N (hard clock)], [`prompt-generated` ×N], then either `phase-changed` (→RESOLVING) OR `turn-started` (+ start-of-turn cascade, see START_ENCOUNTER) |
-| DELAY | `turn-ended`, `combatant-delayed`, `turn-started` (+ start-of-turn cascade) |
-| RESUME_FROM_DELAY | `turn-ended` (interrupts current), `combatant-resumed-from-delay`, `reaction-reset` (auto), `turn-started`, [start-of-turn cascade] |
 | APPLY_DAMAGE | `hp-changed`, optional `hp-reached-zero` |
 | APPLY_HEALING | `hp-changed` |
 | SET_HP | `hp-changed`, optional `hp-reached-zero` |

@@ -19,6 +19,10 @@ afterEach(async () => {
   await clearActiveEncounter();
 });
 
+async function loadState() {
+  return (await loadActiveEncounter())?.state ?? null;
+}
+
 describe('active encounter storage', () => {
   it('returns null when no encounter has been saved', async () => {
     expect(await loadActiveEncounter()).toBeNull();
@@ -27,13 +31,13 @@ describe('active encounter storage', () => {
   it('round-trips an active encounter', async () => {
     const state = activeEncounter();
     await saveActiveEncounter(state);
-    expect(await loadActiveEncounter()).toEqual(state);
+    expect(await loadActiveEncounter()).toEqual({ state, migrations: [] });
   });
 
   it('overwrites the prior record on subsequent save', async () => {
     await saveActiveEncounter(preparingEncounter({ name: 'first' }));
     await saveActiveEncounter(activeEncounter({ name: 'second' }));
-    const restored = await loadActiveEncounter();
+    const restored = await loadState();
     expect(restored?.name).toBe('second');
     expect(restored?.phase).toBe('ACTIVE');
   });
@@ -41,13 +45,13 @@ describe('active encounter storage', () => {
   it('restores PREPARING encounters', async () => {
     const state = preparingEncounter();
     await saveActiveEncounter(state);
-    expect(await loadActiveEncounter()).toEqual(state);
+    expect(await loadActiveEncounter()).toEqual({ state, migrations: [] });
   });
 
   it('restores RESOLVING encounters', async () => {
     const state = resolvingEncounter();
     await saveActiveEncounter(state);
-    expect(await loadActiveEncounter()).toEqual(state);
+    expect(await loadActiveEncounter()).toEqual({ state, migrations: [] });
   });
 
   it('does not auto-resume COMPLETED encounters', async () => {
@@ -78,7 +82,7 @@ describe('active encounter storage', () => {
     }
     await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
 
-    const restored = await loadActiveEncounter();
+    const restored = await loadState();
     expect(restored).not.toBeNull();
     for (const c of Object.values(restored!.combatants)) {
       expect(c.sourceId).toBeDefined();
@@ -118,7 +122,7 @@ describe('active encounter storage', () => {
     }
     await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
 
-    const restored = await loadActiveEncounter();
+    const restored = await loadState();
     expect(restored).not.toBeNull();
     for (const c of Object.values(restored!.combatants)) {
       expect(c.baseSnapshot).toBeDefined();
@@ -161,11 +165,59 @@ describe('active encounter storage', () => {
     }
     await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
 
-    const restored = await loadActiveEncounter();
+    const restored = await loadState();
     expect(restored).not.toBeNull();
     for (const c of Object.values(restored!.combatants)) {
       expect(c.templateAdjustment).toBe('normal');
     }
+  });
+
+  it('discards an empty legacy delaying array without reporting a warning migration', async () => {
+    const state = activeEncounter();
+    await saveActiveEncounter(state);
+
+    const { getDb, ACTIVE_ENCOUNTER_STORE } = await import('./db');
+    const db = await (getDb() as Promise<import('idb').IDBPDatabase>);
+    const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, 'current')) as Record<string, unknown>;
+    (stored.initiative as Record<string, unknown>).delaying = [];
+    await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
+
+    const loaded = await loadActiveEncounter();
+    expect(loaded?.migrations).toEqual([]);
+    expect(loaded?.state.initiative).not.toHaveProperty('delaying');
+  });
+
+  it('restores valid legacy delayed combatants at the end of initiative and reports the migration', async () => {
+    const state = activeEncounter({
+      combatants: {
+        ...activeEncounter().combatants,
+        'wizard-1': {
+          ...activeEncounter().combatants['fighter-1'],
+          id: 'wizard-1',
+          sourceId: 'wizard-1-creature',
+          name: 'Wizard'
+        }
+      }
+    });
+    await saveActiveEncounter(state);
+
+    const { getDb, ACTIVE_ENCOUNTER_STORE } = await import('./db');
+    const db = await (getDb() as Promise<import('idb').IDBPDatabase>);
+    const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, 'current')) as Record<string, unknown>;
+    (stored.initiative as Record<string, unknown>).delaying = [
+      'wizard-1',
+      'missing-1',
+      'fighter-1',
+      'wizard-1'
+    ];
+    await db.put(ACTIVE_ENCOUNTER_STORE, stored, 'current');
+
+    const loaded = await loadActiveEncounter();
+    expect(loaded?.state.initiative.order).toEqual(['goblin-1', 'fighter-1', 'wizard-1']);
+    expect(loaded?.state.initiative).not.toHaveProperty('delaying');
+    expect(loaded?.migrations).toEqual([
+      { type: 'legacy-delayed-combatants', restoredCombatantIds: ['wizard-1'] }
+    ]);
   });
 
 });

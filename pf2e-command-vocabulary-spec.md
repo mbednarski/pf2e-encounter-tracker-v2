@@ -48,8 +48,6 @@ type CommandType =
   | "SET_INITIATIVE_ORDER"
   | "REORDER_COMBATANT"
   | "END_TURN"
-  | "DELAY"
-  | "RESUME_FROM_DELAY"
   // HP
   | "APPLY_DAMAGE"
   | "APPLY_HEALING"
@@ -111,8 +109,6 @@ Each command is legal in specific encounter phases. Dispatching a command in an 
 | SET_INITIATIVE_ORDER | ✓ | ✓ | — | — |
 | REORDER_COMBATANT | ✓ | ✓ | — | — |
 | END_TURN | — | ✓ | — | — |
-| DELAY | — | ✓ | — | — |
-| RESUME_FROM_DELAY | — | ✓ | — | — |
 | APPLY_DAMAGE | ✓ | ✓ | ✓ | — |
 | APPLY_HEALING | ✓ | ✓ | ✓ | — |
 | SET_TEMP_HP | ✓ | ✓ | ✓ | — |
@@ -212,7 +208,7 @@ interface ResetEncounterPayload {
 **State changes:**
 - `phase → PREPARING`
 - `round → 0`
-- `initiative → { order: [], currentIndex: -1, delaying: [] }`
+- `initiative → { order: [], currentIndex: -1 }`
 - All combatants: `currentHp → baseStats.hp`, `tempHp → 0`, `appliedEffects → []`, `reactionUsedThisRound → false`, `isAlive → true`
 - `pendingPrompts → []`
 - `combatLog → []`
@@ -266,7 +262,6 @@ interface RemoveCombatantPayload {
 **State changes:**
 - Remove from `combatants` record
 - Remove from `initiative.order` (if present)
-- Remove from `initiative.delaying` (if present)
 - For `AppliedEffect` instances on other combatants where `sourceId` is this combatant, clear `sourceId` and preserve `sourceLabel`
 - If removal shifts `initiative.currentIndex`, adjust pointer to keep the same combatant's turn active
 
@@ -320,7 +315,7 @@ interface SetInitiativeOrderPayload {
 
 #### REORDER_COMBATANT
 
-Moves a single combatant to a new position in the initiative order. Also used to insert a combatant into initiative (from not-in-order or from delaying).
+Moves a single combatant to a new position in the initiative order. Also used to insert a combatant that is not yet in the order.
 
 ```typescript
 interface ReorderCombatantPayload {
@@ -336,7 +331,6 @@ interface ReorderCombatantPayload {
 
 **State changes:**
 - Remove combatant from current position in `initiative.order` (if present)
-- Remove from `initiative.delaying` (if present)
 - Insert at `newIndex`
 - Adjust `initiative.currentIndex` to keep the active combatant stable
 
@@ -368,69 +362,6 @@ interface EndTurnPayload {
 - `{ type: "turn-ended", combatantId }`
 - Any `effect-removed` events from hard clock expirations
 - Any `prompt-generated` events (informational, for combat log)
-
-#### DELAY
-
-Current combatant delays their turn.
-
-```typescript
-interface DelayPayload {
-  // no fields — always applies to the current combatant
-}
-```
-
-**Validation:**
-- Phase must be ACTIVE
-- Current combatant must not have already acted this turn (not enforceable by domain — this is a GM judgment call, so no validation here)
-
-**State changes:**
-- Remove current combatant from `initiative.order`
-- Add to `initiative.delaying`
-- Advance `initiative.currentIndex` to next combatant (wrapping and incrementing round if needed)
-- Auto-reset reaction for the new current combatant
-- Emit turn-started for the new current combatant
-
-**Events:**
-- `{ type: "turn-ended", combatantId }`
-- `{ type: "combatant-delayed", combatantId }`
-- `{ type: "reaction-reset", combatantId: nextCombatant, cause: "auto" }`
-- `{ type: "turn-started", combatantId: nextCombatant, round }`
-- Start-of-turn effects processing for next combatant
-
-#### RESUME_FROM_DELAY
-
-A delaying combatant re-enters initiative at a specified position and immediately begins their turn.
-
-```typescript
-interface ResumeFromDelayPayload {
-  combatantId: CombatantId
-  insertIndex: number           // position in initiative.order
-}
-```
-
-**Validation:**
-- Phase must be ACTIVE
-- Combatant must be in `initiative.delaying`
-- `insertIndex` must be in range [0, order.length]
-- Cannot resume during another combatant's RESOLVING phase
-
-**State changes:**
-- End the currently active combatant's turn. `RESUME_FROM_DELAY` is self-contained in the reducer; the orchestrator must not dispatch a separate `END_TURN` first.
-- Remove from `initiative.delaying`
-- Insert into `initiative.order` at `insertIndex`
-- Set `initiative.currentIndex → insertIndex`
-- Auto-reset reaction for the resuming combatant
-- Process start-of-turn hard clock expirations
-- Generate start-of-turn prompts (if any → phase → RESOLVING)
-
-**Events:**
-- `{ type: "turn-ended", combatantId: interruptedCombatant }`
-- `{ type: "combatant-resumed-from-delay", combatantId, insertIndex }`
-- `{ type: "reaction-reset", combatantId, cause: "auto" }`
-- `{ type: "turn-started", combatantId, round }`
-- Start-of-turn effect events (if any)
-
----
 
 ### 4.4 HP & Damage
 
@@ -905,8 +836,6 @@ type DomainEvent =
   // Initiative
   | { type: "initiative-set"; order: string[] }
   | { type: "initiative-changed"; combatantId: string; newIndex: number }
-  | { type: "combatant-delayed"; combatantId: string }
-  | { type: "combatant-resumed-from-delay"; combatantId: string; insertIndex: number }
   // Turns
   | { type: "turn-started"; combatantId: string; round: number }
   | { type: "turn-ended"; combatantId: string }
@@ -971,7 +900,7 @@ Prompt generation only considers remaining non-hard-clock effect instances on th
 
 ### 8.1 Remove ADVANCE_TURN
 
-The command vocabulary collapses ADVANCE_TURN into END_TURN. The architecture spec §16.3 should list: `SET_INITIATIVE_ORDER`, `REORDER_COMBATANT`, `END_TURN`, `DELAY`, `RESUME_FROM_DELAY`. ADVANCE_TURN is removed.
+The command vocabulary collapses ADVANCE_TURN into END_TURN. The architecture spec §16.3 lists `SET_INITIATIVE_ORDER`, `REORDER_COMBATANT`, and `END_TURN`. ADVANCE_TURN is removed.
 
 ### 8.2 Add REVIVE Command
 
@@ -997,17 +926,17 @@ When damage reduces HP to 0, the domain emits `hp-reached-zero` but does NOT aut
 
 ## 9. Summary — Command Count
 
-36 commands total (ADVANCE_TURN removed, REVIVE added, SET_EFFECT_DURATION and spellcasting commands added):
+34 commands total (ADVANCE_TURN removed, REVIVE added, SET_EFFECT_DURATION and spellcasting commands added):
 
 | Category | Count | Commands |
 |---|---|---|
 | Encounter Lifecycle | 3 | START_ENCOUNTER, COMPLETE_ENCOUNTER, RESET_ENCOUNTER |
 | Combatant Management | 3 | ADD_COMBATANT, REMOVE_COMBATANT, RENAME_COMBATANT |
-| Initiative & Turns | 5 | SET_INITIATIVE_ORDER, REORDER_COMBATANT, END_TURN, DELAY, RESUME_FROM_DELAY |
+| Initiative & Turns | 3 | SET_INITIATIVE_ORDER, REORDER_COMBATANT, END_TURN |
 | HP | 4 | APPLY_DAMAGE, APPLY_HEALING, SET_TEMP_HP, SET_HP |
 | Effects | 5 | APPLY_EFFECT, REMOVE_EFFECT, SET_EFFECT_VALUE, MODIFY_EFFECT_VALUE, SET_EFFECT_DURATION |
 | Spellcasting | 10 | USE_SPELL_SLOT, RESTORE_SPELL_SLOT, USE_FOCUS_POINT, RESTORE_FOCUS_POINT, USE_INNATE_SPELL, RESTORE_INNATE_SPELL, SET_SPELL_SLOT_USAGE, SET_FOCUS_USAGE, SET_INNATE_USAGE, RESET_SPELL_BLOCK |
 | Turn Resolution | 1 | RESOLVE_PROMPT |
 | Combat State | 5 | MARK_REACTION_USED, RESET_REACTION, SET_NOTE, MARK_DEAD, REVIVE |
 
-Total: 36 commands. Domain events are canonical in `pf2e-domain-events-spec.md`.
+Total: 34 commands. Domain events are canonical in `pf2e-domain-events-spec.md`.

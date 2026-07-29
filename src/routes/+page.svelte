@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, Duration, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, Duration, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import TopBar from '../components/TopBar.svelte';
@@ -154,8 +154,20 @@
     return `${scope}-${feedbackCounter++}`;
   }
 
+  async function loadEncounterState(): Promise<EncounterState | null> {
+    const loaded = await loadActiveEncounter();
+    if (!loaded) return null;
+    if (loaded.migrations.some((migration) => migration.type === 'legacy-delayed-combatants')) {
+      appendFeedback(
+        nextFeedbackId('legacy-delay'),
+        'A legacy encounter contained delayed combatants. They were restored at the end of initiative; reorder them manually.'
+      );
+    }
+    return loaded.state;
+  }
+
   const persistence = createPersistenceController({
-    load: loadActiveEncounter,
+    load: loadEncounterState,
     save: saveActiveEncounter,
     clear: clearActiveEncounter,
     onRestoreFailed: () =>

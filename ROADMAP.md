@@ -29,7 +29,7 @@ Active work is grouped into three parallel tracks. Within each track items are d
 ## M2 Initiative and Combat State
 
 - [x] Implement `END_TURN`, round advancement, and reaction reset.
-- [x] Implement `DELAY` and `RESUME_FROM_DELAY`.
+- [x] Delay is intentionally manual. The GM represents it by reordering initiative; the tracker does not automate its timing or effect-boundary semantics.
 - [x] Implement `MARK_DEAD`, `REVIVE`, `MARK_REACTION_USED`, `RESET_REACTION`, and `SET_NOTE`.
 - [x] Add all-dead edge case handling.
 

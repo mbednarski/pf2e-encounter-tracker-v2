@@ -59,10 +59,6 @@ export function formatEvent(event: DomainEvent, options: FormatOptions): LogEntr
       if (parts.length === 0) return null;
       return entry(id, `Initiative — ${parts.join(', ')}.`, 'info');
     }
-    case 'combatant-delayed':
-      return entry(id, `${nameOf(state, event.combatantId)} is delaying.`, 'info');
-    case 'combatant-resumed-from-delay':
-      return entry(id, `${nameOf(state, event.combatantId)} resumed from delay.`, 'info');
     case 'turn-started':
       return entry(
         id,
