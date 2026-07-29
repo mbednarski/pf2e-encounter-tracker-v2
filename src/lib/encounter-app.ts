@@ -430,7 +430,9 @@ export function combatantCardActions(
 }
 
 function combatantName(state: EncounterState, combatantId: string): string {
-  return state.combatants[combatantId]?.name ?? combatantId;
+  // Duration labels can outlive their combatant (e.g. the caster was removed);
+  // a raw internal id would leak into the UI, so name the absence instead.
+  return state.combatants[combatantId]?.name ?? 'a departed combatant';
 }
 
 export interface ConditionWedgeCounts {

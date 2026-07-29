@@ -135,7 +135,16 @@
         break;
       case 'rounds': {
         const count = Math.max(1, Math.trunc(durationCountBuf));
-        next = { type: 'rounds', count };
+        // Editing the count keeps the auto-tick anchor, as long as the anchor
+        // combatant still exists (a stale anchor would fail validation).
+        const previous = view.duration;
+        const anchor =
+          previous.type === 'rounds' &&
+          previous.anchorId &&
+          otherCombatants.some((c) => c.id === previous.anchorId)
+            ? { anchorId: previous.anchorId, ...(previous.expiry ? { expiry: previous.expiry } : {}) }
+            : {};
+        next = { type: 'rounds', count, ...anchor };
         break;
       }
       case 'untilTurnEnd':
