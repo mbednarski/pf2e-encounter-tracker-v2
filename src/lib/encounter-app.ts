@@ -530,9 +530,12 @@ export function listSpellEffectOptionsFrom(
   importedEffects: readonly EffectDefinition[]
 ): ConditionOption[] {
   const seen = new Set<string>();
+  const superseded = supersededBuiltinIds(importedEffects);
   const definitions: EffectDefinition[] = [];
-  for (const definition of [...Object.values(effectLibrary), ...importedEffects]) {
-    if (definition.category !== 'spell' || seen.has(definition.id)) continue;
+  for (const definition of [...importedEffects, ...Object.values(effectLibrary)]) {
+    if (definition.category !== 'spell' || seen.has(definition.id) || superseded.has(definition.id)) {
+      continue;
+    }
     seen.add(definition.id);
     definitions.push(definition);
   }
@@ -551,15 +554,34 @@ export function buildSpellEffectIndex(
 ): Record<string, EffectDefinition[]> {
   const index: Record<string, EffectDefinition[]> = {};
   const seenIds = new Set<string>();
+  const superseded = supersededBuiltinIds(importedEffects);
   const add = (definition: EffectDefinition) => {
     if (definition.category !== 'spell' || seenIds.has(definition.id)) return;
     seenIds.add(definition.id);
     const slug = definition.sourceSpellSlug ?? definition.id;
     (index[slug] ??= []).push(definition);
   };
-  for (const definition of Object.values(effectLibrary)) add(definition);
   for (const definition of importedEffects) add(definition);
+  for (const definition of Object.values(effectLibrary)) {
+    if (!superseded.has(definition.id)) add(definition);
+  }
   return index;
+}
+
+/**
+ * Built-in spell effects whose spell is also covered by an imported effect
+ * (imported `sourceSpellSlug` equals the built-in's id). The imported Foundry
+ * data is richer, so the built-in is hidden from pickers to avoid duplicate
+ * same-name entries; it stays resolvable for already-applied instances.
+ */
+function supersededBuiltinIds(importedEffects: readonly EffectDefinition[]): Set<string> {
+  const ids = new Set<string>();
+  for (const definition of importedEffects) {
+    if (definition.category !== 'spell' || !definition.sourceSpellSlug) continue;
+    const builtin = effectLibrary[definition.sourceSpellSlug];
+    if (builtin?.category === 'spell') ids.add(builtin.id);
+  }
+  return ids;
 }
 
 /**

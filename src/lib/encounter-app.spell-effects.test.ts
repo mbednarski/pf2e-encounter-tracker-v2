@@ -92,6 +92,21 @@ describe('buildSpellEffectIndex', () => {
     // Conditions never appear.
     expect(index['frightened']).toBeUndefined();
   });
+
+  it('suppresses a built-in when an imported effect covers the same spell', () => {
+    const importedHaste = anthem({
+      id: 'spell-effect-haste',
+      name: 'Haste',
+      sourceSpellSlug: 'haste'
+    });
+    const index = buildSpellEffectIndex([importedHaste]);
+    expect(index['haste']?.map((e) => e.id)).toEqual(['spell-effect-haste']);
+
+    const options = listSpellEffectOptionsFrom([importedHaste]);
+    expect(options.filter((o) => o.name === 'Haste').map((o) => o.id)).toEqual([
+      'spell-effect-haste'
+    ]);
+  });
 });
 
 describe('defaultApplyDuration', () => {
