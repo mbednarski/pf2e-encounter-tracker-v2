@@ -125,6 +125,19 @@ describe('CombatantCard visible action routes', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Remove combatant' }));
     expect(onRequestRemove).toHaveBeenCalledWith('goblin-1');
   });
+
+  test('open overflow menu lifts the card via menu-open class so it stacks above siblings', async () => {
+    const { container } = render(CombatantCard, { props: baseProps() });
+    const article = container.querySelector('article.combatant-card');
+    expect(article?.classList.contains('menu-open')).toBe(false);
+
+    const toggle = screen.getByRole('button', { name: /More actions for Goblin Warrior/ });
+    await fireEvent.click(toggle);
+    expect(article?.classList.contains('menu-open')).toBe(true);
+
+    await fireEvent.click(toggle);
+    expect(article?.classList.contains('menu-open')).toBe(false);
+  });
 });
 
 describe('CombatantCard initiative control', () => {
