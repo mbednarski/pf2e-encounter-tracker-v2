@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { completedEncounter } from '../../domain/test-support';
-import { exportEncounterYaml, importEncounterYaml } from './encounter';
+import {
+  encounterExportFilename,
+  exportEncounterYaml,
+  importEncounterYaml
+} from './encounter';
 
 describe('encounter YAML', () => {
   test('round-trips encounter state and imports it into PREPARING', () => {
@@ -54,5 +58,13 @@ describe('encounter YAML', () => {
   test('rejects non-encounter documents', () => {
     const result = importEncounterYaml('kind: creature\nschemaVersion: 1\ndata: {}\n');
     expect(result.ok).toBe(false);
+  });
+
+  test.each([
+    ['Bridge at Dusk', 'bridge-at-dusk.encounter.yaml'],
+    ['  Żółty Smok!  ', 'zolty-smok.encounter.yaml'],
+    ['***', 'encounter.encounter.yaml']
+  ])('turns %j into a safe encounter download name', (name, expected) => {
+    expect(encounterExportFilename(name)).toBe(expected);
   });
 });

@@ -3,6 +3,7 @@
 
   export let onDiscard: () => Promise<boolean>;
   export let label = 'Discard Encounter…';
+  export let dialogTitle = 'Discard active encounter?';
   export let buttonClass = 'secondary';
 
   let confirmationOpen = false;
@@ -27,7 +28,7 @@
 
 {#if confirmationOpen}
   <Modal
-    title="Discard active encounter?"
+    title={dialogTitle}
     titleId="discard-encounter-title"
     descriptionId="discard-encounter-description"
     dismissible={!isDiscarding}

@@ -19,6 +19,18 @@ export function exportEncounterYaml(state: EncounterState): string {
   );
 }
 
+export function encounterExportFilename(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/ł/g, 'l')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${slug || 'encounter'}.encounter.yaml`;
+}
+
 export function importEncounterYaml(text: string): EncounterImportResult {
   const parsed = parseYamlEnvelopes(text);
   const issues = [...parsed.issues];

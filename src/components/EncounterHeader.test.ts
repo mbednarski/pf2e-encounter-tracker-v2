@@ -39,6 +39,7 @@ describe('EncounterHeader', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Export Encounter' }));
     expect(onPrepareRematch).toHaveBeenCalledOnce();
     expect(onExport).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: 'Start New Encounter…' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Start New Encounter…' }));
+    expect(screen.getByRole('dialog', { name: 'Start a new encounter?' })).toBeInTheDocument();
   });
 });

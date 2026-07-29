@@ -60,7 +60,11 @@
     {:else if phase === 'COMPLETED'}
       <Button variant="primary" onclick={onPrepareRematch}>Prepare Rematch</Button>
       <Button variant="secondary" onclick={onExport}>Export Encounter</Button>
-      <DiscardEncounterButton label="Start New Encounter…" onDiscard={onDiscard} />
+      <DiscardEncounterButton
+        label="Start New Encounter…"
+        dialogTitle="Start a new encounter?"
+        onDiscard={onDiscard}
+      />
     {/if}
   </div>
 </section>
