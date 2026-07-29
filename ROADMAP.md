@@ -70,6 +70,17 @@ Track B. Slice numbering follows the umbrella issues #15 (combat screen) and #16
 - [x] Slice 10 — conditions UI on combatant cards. (Issue #45.)
 - [ ] Manual static Cloudflare Pages deployment verification.
 
+## Table-Session UI Remediation
+
+The ordered implementation plan is `docs/superpowers/plans/2026-07-29-table-session-ui-remediation.md`.
+
+- [x] Task 1 — remove automated Delay/Resume semantics and migrate legacy saves.
+- [x] Task 2 — require confirmation before discarding an encounter.
+- [x] Task 3 — expose completion, read-only review, YAML export, rematch preparation, and safe new-encounter flows.
+- [ ] Task 4 — add bounded Undo/Redo history.
+- [ ] Tasks 5–7 — finish tablet hit areas, active-workspace prioritization, and action discoverability.
+- [ ] Tasks 8–11 — complete encounter YAML portability, onboarding, browser workflows, and release reconciliation.
+
 ## M6 Spellcasting (deferred)
 
 Tracking only. Captured in issue #49. Domain commands are stubbed in `src/domain/types.ts` but not wired in `applyCommand`.

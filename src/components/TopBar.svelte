@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { EncounterState } from '../domain';
+  import DiscardEncounterButton from './DiscardEncounterButton.svelte';
+  import Button from './ui/Button.svelte';
   import Chip from './ui/Chip.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
 
@@ -7,6 +9,10 @@
   export let phase: EncounterState['phase'];
   export let round: number;
   export let activeName: string | undefined;
+  export let onComplete: () => void = () => {};
+  export let onPrepareRematch: () => void = () => {};
+  export let onExport: () => void = () => {};
+  export let onReset: () => Promise<boolean> = async () => false;
 </script>
 
 <header class="topbar">
@@ -21,8 +27,25 @@
       <span class="topbar__round-value">{round}</span>
     </div>
     <span class="topbar__turn">
-      {activeName ? `${activeName}'s turn` : 'No active turn'}
+      {phase === 'COMPLETED'
+        ? 'Encounter complete'
+        : activeName
+          ? `${activeName}'s turn`
+          : 'No active turn'}
     </span>
+    {#if phase === 'ACTIVE'}
+      <Button variant="secondary" onclick={onComplete}>Complete Encounter</Button>
+    {:else if phase === 'COMPLETED'}
+      <div class="topbar__lifecycle" aria-label="Completed encounter actions">
+        <Button variant="primary" onclick={onPrepareRematch}>Prepare Rematch</Button>
+        <Button variant="secondary" onclick={onExport}>Export Encounter</Button>
+        <DiscardEncounterButton
+          {onReset}
+          triggerLabel="Start New Encounter…"
+          dialogTitle="Start a new encounter?"
+        />
+      </div>
+    {/if}
     <a class="topbar__settings" href="/settings">Settings</a>
   </div>
 </header>
@@ -87,6 +110,13 @@
     color: var(--color-ink-soft);
     font-size: var(--text-base);
     font-style: italic;
+  }
+
+  .topbar__lifecycle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .topbar__settings {

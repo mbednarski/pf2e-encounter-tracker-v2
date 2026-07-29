@@ -77,7 +77,13 @@
     savePartyMember
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { importCreatureYaml, importHazardYaml, importPartyMemberYaml } from '$lib/yaml';
+  import {
+    encounterExportFilename,
+    importCreatureYaml,
+    importHazardYaml,
+    importPartyMemberYaml,
+    serializeEncounterYaml
+  } from '$lib/yaml';
   import { importCreatureFoundryJson, importHazardFoundryJson } from '$lib/foundry';
   import {
     COMMAND_ID_PREFIX,
@@ -703,6 +709,28 @@
     runCommand(toCommand('START_ENCOUNTER', undefined, nextCommandId()));
   }
 
+  function completeEncounter() {
+    runCommand(toCommand('COMPLETE_ENCOUNTER', undefined, nextCommandId()));
+  }
+
+  function prepareRematch() {
+    const rosterOrder = [...encounter.initiative.order];
+    runCommand(toCommand('RESET_ENCOUNTER', undefined, nextCommandId()));
+    runCommand(
+      toCommand('SET_INITIATIVE_ORDER', { order: rosterOrder }, nextCommandId())
+    );
+  }
+
+  function exportEncounter() {
+    const contents = serializeEncounterYaml(encounter);
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/yaml;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = encounterExportFilename(encounter.name);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function setInitiativeScore(combatantId: string, value: number | null) {
     runCommand(
       toCommand('SET_INITIATIVE_SCORES', { scores: { [combatantId]: value } }, nextCommandId())
@@ -1037,10 +1065,51 @@
     phase={encounter.phase}
     round={encounter.round}
     activeName={activeCombatant?.name}
+    onComplete={completeEncounter}
+    onPrepareRematch={prepareRematch}
+    onExport={exportEncounter}
+    onReset={resetLocal}
   />
 
   <EncounterDifficultyMeter summary={xpSummary} />
 
+  {#if encounter.phase === 'COMPLETED'}
+    <section class="completed" aria-labelledby="completed-title">
+      <header class="completed__heading">
+        <div>
+          <h2 id="completed-title">Encounter complete</h2>
+          <p>
+            This result is read-only. Export it before reloading, prepare the same roster for a rematch, or intentionally start a new encounter.
+          </p>
+        </div>
+        <span>Finished in round {encounter.round}</span>
+      </header>
+      <div class="completed__roster" aria-label="Completed encounter roster">
+        {#each orderedCombatants as combatant (combatant.id)}
+          {@const effects = viewAppliedEffects(combatant, encounter)}
+          <article class="completed__combatant">
+            <div class="completed__combatant-heading">
+              <h3>{combatant.name}</h3>
+              <span>{combatant.isAlive ? 'Alive' : 'Dead'}</span>
+            </div>
+            <p>HP {combatant.currentHp} / {getAdjustedView(combatant).hp}{combatant.tempHp > 0 ? ` + ${combatant.tempHp} temporary` : ''}</p>
+            {#if effects.length > 0}
+              <ul aria-label={`${combatant.name} effects`}>
+                {#each effects as effect (effect.instanceId)}
+                  <li>
+                    {effect.name}{effect.value.kind === 'valued' ? ` ${effect.value.current}` : ''}
+                    <span>— {effect.durationLabel}</span>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="completed__muted">No active effects.</p>
+            {/if}
+          </article>
+        {/each}
+      </div>
+    </section>
+  {:else}
   <section class="workspace">
     <div class="workspace__library">
       <LibraryPane
@@ -1147,6 +1216,7 @@
       <CombatLogDrawer entries={drawerEntries} />
     </section>
   </section>
+  {/if}
 </main>
 
 {#if radialOpen && radialCombatant}
@@ -1211,6 +1281,87 @@
     max-width: 1440px;
     margin: 0 auto;
     align-items: start;
+  }
+
+  .completed {
+    display: grid;
+    gap: var(--space-4);
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: var(--space-4);
+    background: var(--color-panel);
+    border: var(--border-strong);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .completed__heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: var(--border-thin);
+  }
+
+  .completed__heading h2,
+  .completed__combatant h3,
+  .completed__heading p,
+  .completed__combatant p {
+    margin: 0;
+  }
+
+  .completed__heading h2,
+  .completed__combatant h3 {
+    font-family: var(--font-serif);
+  }
+
+  .completed__heading p {
+    max-width: 70ch;
+    margin-top: var(--space-1);
+    color: var(--color-ink-soft);
+  }
+
+  .completed__heading > span {
+    color: var(--color-ink-soft);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+
+  .completed__roster {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .completed__combatant {
+    display: grid;
+    align-content: start;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: var(--color-panel-2);
+    border: var(--border-thin);
+    border-left: 3px solid var(--color-rule-strong);
+  }
+
+  .completed__combatant-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .completed__combatant-heading > span,
+  .completed__muted,
+  .completed__combatant li span {
+    color: var(--color-ink-mute);
+  }
+
+  .completed__combatant ul {
+    display: grid;
+    gap: var(--space-1);
+    margin: 0;
+    padding-left: var(--space-4);
   }
 
   .workspace__library {
@@ -1334,6 +1485,10 @@
         'track'
         'details'
         'log';
+    }
+
+    .completed__heading {
+      flex-direction: column;
     }
   }
 </style>

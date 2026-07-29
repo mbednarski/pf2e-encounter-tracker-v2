@@ -5,6 +5,7 @@ import { validateHazard } from './hazard-validator';
 
 export type { ValidationIssue } from './envelope';
 export type { ParseOutcome } from './creature-validator';
+export { encounterExportFilename, serializeEncounterYaml } from './encounter-export';
 export {
   importPartyMemberYaml,
   type PartyMemberImportResult,

@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { describe, expect, test, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import TopBar from './TopBar.svelte';
 
 function baseProps(overrides: Record<string, unknown> = {}) {
@@ -50,5 +50,41 @@ describe('TopBar', () => {
     const { container } = render(TopBar, { props: baseProps() });
     const status = container.querySelector('[aria-label="Encounter status"]');
     expect(status).not.toBeNull();
+  });
+
+  test('offers completion only during ACTIVE and calls the lifecycle callback', async () => {
+    const onComplete = vi.fn();
+    const { rerender } = render(TopBar, {
+      props: baseProps({ phase: 'ACTIVE', onComplete })
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Complete Encounter' }));
+    expect(onComplete).toHaveBeenCalledOnce();
+
+    await rerender(baseProps({ phase: 'RESOLVING', onComplete }));
+    expect(screen.queryByRole('button', { name: 'Complete Encounter' })).not.toBeInTheDocument();
+  });
+
+  test('renders the completed encounter actions and forwards rematch and export', async () => {
+    const onPrepareRematch = vi.fn();
+    const onExport = vi.fn();
+    render(TopBar, {
+      props: baseProps({
+        phase: 'COMPLETED',
+        round: 4,
+        activeName: 'Goblin Warrior',
+        onPrepareRematch,
+        onExport
+      })
+    });
+
+    expect(screen.getByText('Encounter complete')).toBeInTheDocument();
+    expect(screen.queryByText("Goblin Warrior's turn")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Prepare Rematch' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Export Encounter' }));
+
+    expect(onPrepareRematch).toHaveBeenCalledOnce();
+    expect(onExport).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Start New Encounter…' })).toBeInTheDocument();
   });
 });

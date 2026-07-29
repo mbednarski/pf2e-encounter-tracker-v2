@@ -8,6 +8,7 @@
   export let disabled = false;
   export let title: string | undefined = undefined;
   export let ariaLabel: string | undefined = undefined;
+  export let modalDefault = false;
   export let onclick: ((event: MouseEvent) => void) | undefined = undefined;
 </script>
 
@@ -16,6 +17,7 @@
   {disabled}
   {title}
   aria-label={ariaLabel}
+  data-modal-default={modalDefault ? '' : undefined}
   class="btn btn--{variant} btn--{size}"
   {onclick}
 >
