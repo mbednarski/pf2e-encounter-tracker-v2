@@ -2797,3 +2797,201 @@ describe('SET_TEMPLATE_ADJUSTMENT', () => {
     expectRejected(result, 'SET_TEMPLATE_ADJUSTMENT', 'Combatant ghost not found');
   });
 });
+
+describe('anchored round durations', () => {
+  const anthemLibrary: EffectLibrary = {
+    'rallying-anthem': {
+      id: 'rallying-anthem',
+      name: 'Rallying Anthem',
+      category: 'spell',
+      hasValue: false,
+      modifiers: [
+        { stat: 'ac', bonusType: 'status', value: 1 },
+        { stat: 'allSaves', bonusType: 'status', value: 1 }
+      ]
+    }
+  };
+
+  function anthemState(count: number, expiry?: 'turnStart' | 'turnEnd') {
+    return activeEncounter({
+      combatants: {
+        'goblin-1': combatant('goblin-1'),
+        'fighter-1': combatant('fighter-1', {
+          appliedEffects: [
+            {
+              instanceId: 'anthem-1',
+              effectId: 'rallying-anthem',
+              sourceId: 'goblin-1',
+              duration: { type: 'rounds', count, anchorId: 'goblin-1', ...(expiry ? { expiry } : {}) }
+            }
+          ]
+        })
+      }
+    });
+  }
+
+  test('decrements anchored rounds at the anchor turn start and logs remaining rounds', () => {
+    // goblin-1 (anchor) is current at index 0; fighter-1 ends the cycle back to goblin-1.
+    const state = activeEncounter({
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, scores: {} },
+      combatants: anthemState(3).combatants
+    });
+
+    const result = applyCommand(state, command('END_TURN'), anthemLibrary);
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects).toEqual([
+      {
+        instanceId: 'anthem-1',
+        effectId: 'rallying-anthem',
+        sourceId: 'goblin-1',
+        duration: { type: 'rounds', count: 2, anchorId: 'goblin-1' }
+      }
+    ]);
+    expect(result.events).toContainEqual({
+      type: 'effect-duration-ticked',
+      combatantId: 'fighter-1',
+      effectId: 'rallying-anthem',
+      effectName: 'Rallying Anthem',
+      instanceId: 'anthem-1',
+      remainingRounds: 2
+    });
+    expectSerializable(result.newState);
+  });
+
+  test('expires an anchored effect on its last round at the anchor turn start', () => {
+    const state = activeEncounter({
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, scores: {} },
+      combatants: anthemState(1).combatants
+    });
+
+    const result = applyCommand(state, command('END_TURN'), anthemLibrary);
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects).toEqual([]);
+    expect(result.events).toContainEqual({
+      type: 'effect-removed',
+      combatantId: 'fighter-1',
+      effectId: 'rallying-anthem',
+      effectName: 'Rallying Anthem',
+      instanceId: 'anthem-1',
+      reason: 'expired'
+    });
+  });
+
+  test('does not tick when a non-anchor combatant turn starts', () => {
+    // fighter-1's turn starts next; the effect is anchored to goblin-1.
+    const state = anthemState(2);
+
+    const result = applyCommand(state, command('END_TURN'), anthemLibrary);
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects[0].duration).toEqual({
+      type: 'rounds',
+      count: 2,
+      anchorId: 'goblin-1'
+    });
+    expect(result.events.every((event) => event.type !== 'effect-duration-ticked')).toBe(true);
+  });
+
+  test('ticks turnEnd-anchored effects when the anchor ends their turn', () => {
+    // goblin-1 (anchor) is current and ends their turn.
+    const state = anthemState(2, 'turnEnd');
+
+    const result = applyCommand(state, command('END_TURN'), anthemLibrary);
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects[0].duration).toEqual({
+      type: 'rounds',
+      count: 1,
+      anchorId: 'goblin-1',
+      expiry: 'turnEnd'
+    });
+  });
+
+  test('expiry cascades to implied child effects', () => {
+    const libraryWithChild: EffectLibrary = {
+      ...anthemLibrary,
+      'rallying-anthem': {
+        ...anthemLibrary['rallying-anthem'],
+        impliedEffects: ['off-guard']
+      },
+      'off-guard': effectLibrary['off-guard']
+    };
+    const base = anthemState(1);
+    const fighter = base.combatants['fighter-1'];
+    const state = activeEncounter({
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, scores: {} },
+      combatants: {
+        ...base.combatants,
+        'fighter-1': {
+          ...fighter,
+          appliedEffects: [
+            ...fighter.appliedEffects,
+            {
+              instanceId: 'child-1',
+              effectId: 'off-guard',
+              parentInstanceId: 'anthem-1',
+              duration: { type: 'unlimited' }
+            }
+          ]
+        }
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), libraryWithChild);
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects).toEqual([]);
+    expect(result.events).toContainEqual({
+      type: 'effect-removed',
+      combatantId: 'fighter-1',
+      effectId: 'off-guard',
+      effectName: 'Off-Guard',
+      instanceId: 'child-1',
+      reason: 'cascade',
+      parentInstanceId: 'anthem-1'
+    });
+  });
+
+  test('manual (unanchored) round durations never tick', () => {
+    const base = anthemState(2);
+    const fighter = base.combatants['fighter-1'];
+    const state = activeEncounter({
+      initiative: { order: ['goblin-1', 'fighter-1'], currentIndex: 1, scores: {} },
+      combatants: {
+        ...base.combatants,
+        'fighter-1': {
+          ...fighter,
+          appliedEffects: [
+            {
+              instanceId: 'manual-1',
+              effectId: 'rallying-anthem',
+              duration: { type: 'rounds', count: 2 }
+            }
+          ]
+        }
+      }
+    });
+
+    const result = applyCommand(state, command('END_TURN'), anthemLibrary);
+
+    expect(result.newState.combatants['fighter-1'].appliedEffects[0].duration).toEqual({
+      type: 'rounds',
+      count: 2
+    });
+  });
+
+  test('rejects anchored round durations with a missing anchor combatant', () => {
+    const state = activeEncounter();
+    expectRejected(
+      applyCommand(
+        state,
+        command('APPLY_EFFECT', {
+          effectId: 'off-guard',
+          targetId: 'fighter-1',
+          duration: { type: 'rounds', count: 2, anchorId: 'missing-1' }
+        }),
+        effectLibrary
+      ),
+      'APPLY_EFFECT',
+      'APPLY_EFFECT duration is invalid',
+      state
+    );
+  });
+});

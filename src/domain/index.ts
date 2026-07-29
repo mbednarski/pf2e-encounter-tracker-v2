@@ -17,6 +17,7 @@ export {
 export type { AdjustedView } from './creatures/adjusted-view';
 export { effectLibrary } from './effects/library';
 export { deriveStats } from './effects/derivation';
+export { durationFromSpec } from './effects/duration';
 export {
   classifyDifficulty,
   computeEncounterXP,
@@ -61,6 +62,8 @@ export type {
   Duration,
   EffectCategory,
   EffectDefinition,
+  EffectDurationSpec,
+  EffectDurationUnit,
   EffectLibrary,
   EncounterPhase,
   EncounterState,
@@ -78,6 +81,7 @@ export type {
   PromptResolution,
   RemoveEffectPayload,
   ResolvePromptPayload,
+  RoundsExpiry,
   Sense,
   SenseAcuity,
   SetEffectDurationPayload,

@@ -261,10 +261,18 @@ export interface PartyMember {
   tags: string[];
 }
 
+export type RoundsExpiry = 'turnStart' | 'turnEnd';
+
 export type Duration =
   | { type: 'untilTurnEnd'; combatantId: CombatantId }
   | { type: 'untilTurnStart'; combatantId: CombatantId }
-  | { type: 'rounds'; count: number }
+  /**
+   * With `anchorId` set, the count decrements automatically at the anchor
+   * combatant's boundary (`expiry`, default 'turnStart') and the effect
+   * expires when it reaches 0 — PF2e spell durations tick down at the start
+   * of the caster's turn. Without `anchorId` the count is a manual label.
+   */
+  | { type: 'rounds'; count: number; anchorId?: CombatantId; expiry?: RoundsExpiry }
   | { type: 'unlimited' }
   | { type: 'conditional'; description: string };
 
@@ -587,6 +595,14 @@ export type DomainEvent =
       instanceId: string;
     }
   | {
+      type: 'effect-duration-ticked';
+      combatantId: CombatantId;
+      effectId: string;
+      effectName: string;
+      instanceId: string;
+      remainingRounds: number;
+    }
+  | {
       type: 'prompt-generated';
       promptId: string;
       boundary: PromptBoundary;
@@ -705,6 +721,20 @@ export type TurnBoundarySuggestion =
   | { type: 'promptResolution'; description: string }
   | { type: 'reminder'; description: string };
 
+export type EffectDurationUnit = 'rounds' | 'minutes' | 'hours' | 'days' | 'unlimited';
+
+/**
+ * Declarative default duration carried by spell-effect definitions (mapped
+ * from Foundry `system.duration`). Converted into a concrete `Duration` at
+ * apply time — see `durationFromSpec`.
+ */
+export interface EffectDurationSpec {
+  unit: EffectDurationUnit;
+  value?: number;
+  expiry?: RoundsExpiry;
+  sustained?: boolean;
+}
+
 export interface EffectDefinition {
   id: string;
   name: string;
@@ -718,6 +748,12 @@ export interface EffectDefinition {
   turnEndSuggestion?: TurnBoundarySuggestion;
   persistAfterEncounter?: boolean;
   traits?: string[];
+  /** Default duration applied when this effect is cast, unless overridden. */
+  defaultDuration?: EffectDurationSpec;
+  /** Spell rank / effect level (from Foundry `system.level`). Display-only. */
+  level?: number;
+  /** Slug of the spell that grants this effect, for spell-list matching. */
+  sourceSpellSlug?: string;
 }
 
 export type EffectLibrary = Record<string, EffectDefinition>;

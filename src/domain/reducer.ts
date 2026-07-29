@@ -18,6 +18,7 @@ import type {
   PromptBoundary,
   PromptResolution,
   RestoreSpellSlotPayload,
+  RoundsExpiry,
   TemplateAdjustment,
   TurnBoundarySuggestion,
   UseSpellSlotPayload
@@ -383,8 +384,13 @@ function advanceAfterTurnEnd(
     return endExpiry.result;
   }
 
-  const events: DomainEvent[] = [...initialEvents, ...endExpiry.events];
-  const stateAfterEndExpiry = endExpiry.state;
+  const endTick = tickAnchoredRoundsForBoundary(endExpiry.state, 'turnEnd', currentCombatantId, effectLibrary, commandType);
+  if (endTick.kind === 'rejected') {
+    return endTick.result;
+  }
+
+  const events: DomainEvent[] = [...initialEvents, ...endExpiry.events, ...endTick.events];
+  const stateAfterEndExpiry = endTick.state;
   const endPrompts = generatePromptsForBoundary(
     stateAfterEndExpiry,
     { type: 'turnEnd', ownerId: currentCombatantId },
@@ -473,10 +479,22 @@ function advanceToNextTurn(
     return startExpiry.result;
   }
 
+  const startTick = tickAnchoredRoundsForBoundary(
+    startExpiry.state,
+    'turnStart',
+    nextTurn.combatantId,
+    effectLibrary,
+    commandType
+  );
+  if (startTick.kind === 'rejected') {
+    return startTick.result;
+  }
+
   events.push(...startExpiry.events);
+  events.push(...startTick.events);
   events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
 
-  return finishTurnStartBoundary(startExpiry.state, nextTurn.combatantId, 'turnStart', effectLibrary, commandType, events);
+  return finishTurnStartBoundary(startTick.state, nextTurn.combatantId, 'turnStart', effectLibrary, commandType, events);
 }
 
 type PromptGenerationResult =
@@ -1148,6 +1166,122 @@ function expireEffectsForBoundary(
         };
       })
     );
+  }
+
+  return {
+    kind: 'expired',
+    state: events.length > 0 ? { ...state, combatants } : state,
+    events
+  };
+}
+
+/**
+ * Advances anchored round durations when the anchor combatant's boundary
+ * passes: each matching effect loses one round, and effects on their last
+ * round expire (with implied-effect cascade), mirroring how PF2e spell
+ * durations count down at the caster's turn.
+ */
+function tickAnchoredRoundsForBoundary(
+  state: EncounterState,
+  expiry: RoundsExpiry,
+  combatantId: CombatantId,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): BoundaryExpiryResult {
+  let combatants = state.combatants;
+  const events: DomainEvent[] = [];
+
+  for (const target of Object.values(state.combatants)) {
+    const removedIds: string[] = [];
+    const removedIdSet = new Set<string>();
+    const rootIdSet = new Set<string>();
+    const tickedInstanceIds = new Set<string>();
+
+    for (const effect of target.appliedEffects) {
+      if (removedIdSet.has(effect.instanceId)) {
+        continue;
+      }
+
+      const duration = effect.duration;
+      if (
+        duration.type !== 'rounds' ||
+        duration.anchorId !== combatantId ||
+        (duration.expiry ?? 'turnStart') !== expiry
+      ) {
+        continue;
+      }
+
+      if (duration.count <= 1) {
+        rootIdSet.add(effect.instanceId);
+        for (const removedId of collectEffectRemovalIds(target.appliedEffects, effect.instanceId)) {
+          if (!removedIdSet.has(removedId)) {
+            removedIdSet.add(removedId);
+            removedIds.push(removedId);
+          }
+        }
+      } else {
+        tickedInstanceIds.add(effect.instanceId);
+      }
+    }
+
+    if (removedIds.length === 0 && tickedInstanceIds.size === 0) {
+      continue;
+    }
+
+    const touchedEffects = target.appliedEffects.filter(
+      (effect) => removedIdSet.has(effect.instanceId) || tickedInstanceIds.has(effect.instanceId)
+    );
+    const missingDefinitionEffect = touchedEffects.find((effect) => !effectLibrary[effect.effectId]);
+    if (missingDefinitionEffect) {
+      return { kind: 'rejected', result: reject(state, commandType, `Effect ${missingDefinitionEffect.effectId} not found`) };
+    }
+
+    const removedEffects = removedIds
+      .map((removedId) => target.appliedEffects.find((effect) => effect.instanceId === removedId))
+      .filter((effect): effect is AppliedEffect => effect !== undefined);
+
+    combatants = {
+      ...combatants,
+      [target.id]: {
+        ...target,
+        appliedEffects: target.appliedEffects
+          .filter((effect) => !removedIdSet.has(effect.instanceId))
+          .map((effect) =>
+            tickedInstanceIds.has(effect.instanceId) && effect.duration.type === 'rounds'
+              ? { ...effect, duration: { ...effect.duration, count: effect.duration.count - 1 } }
+              : effect
+          )
+      }
+    };
+
+    events.push(
+      ...removedEffects.map((effect): DomainEvent => {
+        const definition = effectLibrary[effect.effectId];
+        return {
+          type: 'effect-removed',
+          combatantId: target.id,
+          effectId: effect.effectId,
+          effectName: definition.name,
+          instanceId: effect.instanceId,
+          reason: rootIdSet.has(effect.instanceId) ? 'expired' : 'cascade',
+          ...(effect.parentInstanceId ? { parentInstanceId: effect.parentInstanceId } : {})
+        };
+      })
+    );
+
+    for (const effect of target.appliedEffects) {
+      if (!tickedInstanceIds.has(effect.instanceId) || effect.duration.type !== 'rounds') {
+        continue;
+      }
+      events.push({
+        type: 'effect-duration-ticked',
+        combatantId: target.id,
+        effectId: effect.effectId,
+        effectName: effectLibrary[effect.effectId].name,
+        instanceId: effect.instanceId,
+        remainingRounds: effect.duration.count - 1
+      });
+    }
   }
 
   return {
@@ -1947,7 +2081,10 @@ function isValidDuration(state: EncounterState, duration: Duration): boolean {
     case 'unlimited':
       return true;
     case 'rounds':
-      return isPositive(duration.count);
+      return (
+        isPositive(duration.count) &&
+        (duration.anchorId === undefined || Boolean(state.combatants[duration.anchorId]))
+      );
     case 'conditional':
       return duration.description.trim().length > 0;
     case 'untilTurnEnd':

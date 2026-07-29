@@ -6,7 +6,8 @@ import {
   DB_NAME,
   HAZARD_LIBRARY_STORE,
   PARTY_MEMBER_STORE,
-  SETTINGS_STORE
+  SETTINGS_STORE,
+  SPELL_EFFECT_LIBRARY_STORE
 } from './db';
 
 // fake-indexeddb's deleteDB blocks until every open connection is closed,
@@ -58,7 +59,8 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
-        HAZARD_LIBRARY_STORE
+        HAZARD_LIBRARY_STORE,
+        SPELL_EFFECT_LIBRARY_STORE
       ].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
@@ -89,7 +91,8 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
-        HAZARD_LIBRARY_STORE
+        HAZARD_LIBRARY_STORE,
+        SPELL_EFFECT_LIBRARY_STORE
       ].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
@@ -124,12 +127,37 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
-        HAZARD_LIBRARY_STORE
+        HAZARD_LIBRARY_STORE,
+        SPELL_EFFECT_LIBRARY_STORE
       ].sort()
     );
     expect(await db.getAll(CREATURE_LIBRARY_STORE)).toEqual([{ id: 'goblin', name: 'Goblin' }]);
     expect(await db.getAll(PARTY_MEMBER_STORE)).toEqual([{ id: 'hero', name: 'Hero' }]);
     expect(await db.getAll(HAZARD_LIBRARY_STORE)).toEqual([]);
+  });
+
+  it('preserves prior records when upgrading from v5 to v6 and adds the spellEffectLibrary store', async () => {
+    const v5 = await openDB(DB_NAME, 5, {
+      upgrade(db) {
+        db.createObjectStore(ACTIVE_ENCOUNTER_STORE);
+        db.createObjectStore(SETTINGS_STORE);
+        db.createObjectStore(CREATURE_LIBRARY_STORE);
+        db.createObjectStore(PARTY_MEMBER_STORE);
+        db.createObjectStore(HAZARD_LIBRARY_STORE);
+      }
+    });
+    await v5.put(HAZARD_LIBRARY_STORE, { id: 'spike-trap', name: 'Spike Trap' }, 'spike-trap');
+    v5.close();
+
+    const { getDb } = await import('./db');
+    const db = await getDb()!;
+    openConnections.push(db);
+
+    expect(Array.from(db.objectStoreNames)).toContain(SPELL_EFFECT_LIBRARY_STORE);
+    expect(await db.getAll(HAZARD_LIBRARY_STORE)).toEqual([
+      { id: 'spike-trap', name: 'Spike Trap' }
+    ]);
+    expect(await db.getAll(SPELL_EFFECT_LIBRARY_STORE)).toEqual([]);
   });
 
   it('preserves prior activeEncounter + settings records when upgrading from v2 to v3', async () => {
@@ -154,7 +182,8 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
-        HAZARD_LIBRARY_STORE
+        HAZARD_LIBRARY_STORE,
+        SPELL_EFFECT_LIBRARY_STORE
       ].sort()
     );
     expect(await db.get(ACTIVE_ENCOUNTER_STORE, 'current')).toEqual({
@@ -174,7 +203,8 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
-        HAZARD_LIBRARY_STORE
+        HAZARD_LIBRARY_STORE,
+        SPELL_EFFECT_LIBRARY_STORE
       ].sort()
     );
   });

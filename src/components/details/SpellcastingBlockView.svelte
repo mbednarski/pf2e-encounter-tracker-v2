@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CombatantSpellcasting } from '../../domain';
+  import type { CombatantSpellcasting, EffectDefinition } from '../../domain';
   import { buildSpellcastingView } from '$lib/spellcasting/view';
   import { formatModifier } from '$lib/abilities/format-damage';
   import SpellRow from './SpellRow.svelte';
@@ -15,6 +15,12 @@
   export let onRestoreFocus: (blockId: string) => void;
   export let onUseInnate: (blockId: string, spellSlug: string) => void;
   export let onRestoreInnate: (blockId: string, spellSlug: string) => void;
+  export let spellEffectsBySlug: Record<string, EffectDefinition[]> = {};
+  export let onCastEffect: ((effects: EffectDefinition[]) => void) | undefined = undefined;
+
+  function effectsFor(spellSlug: string): EffectDefinition[] {
+    return spellEffectsBySlug[spellSlug] ?? [];
+  }
 
   $: view = buildSpellcastingView(block);
 
@@ -97,6 +103,8 @@
                   attackModifier={view.header.attackModifier !== undefined
                     ? view.header.attackModifier + attackBonus
                     : undefined}
+                  castableEffects={effectsFor(entry.spellSlug)}
+                  {onCastEffect}
                 />
               {/each}
             </ul>
@@ -143,6 +151,8 @@
                   attackModifier={view.header.attackModifier !== undefined
                     ? view.header.attackModifier + attackBonus
                     : undefined}
+                  castableEffects={effectsFor(entry.spellSlug)}
+                  {onCastEffect}
                 />
               {/each}
             </ul>
@@ -187,6 +197,8 @@
               attackModifier={view.header.attackModifier !== undefined
                 ? view.header.attackModifier + attackBonus
                 : undefined}
+              castableEffects={effectsFor(entry.spellSlug)}
+              {onCastEffect}
             />
           {/each}
         </ul>
@@ -244,7 +256,18 @@
       <span class="cantrips__label">Cantrips ({ordinal(view.cantrips[0].level)})</span>
       <ul class="spell-list">
         {#each view.cantrips as c (c.spellSlug)}
-          <li>{c.name}</li>
+          <li class="cantrip-row">
+            <span>{c.name}</span>
+            {#if effectsFor(c.spellSlug).length > 0 && onCastEffect}
+              <button
+                type="button"
+                class="cantrip-effect"
+                aria-label="Apply {c.name} effect to combatants"
+                title="Apply this spell's effect to combatants"
+                onclick={() => onCastEffect?.(effectsFor(c.spellSlug))}
+              >✦ Effect</button>
+            {/if}
+          </li>
         {/each}
       </ul>
     </div>
@@ -422,6 +445,30 @@
     font-weight: 700;
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
+  }
+
+  .cantrip-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+
+  .cantrip-effect {
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-amber, currentColor);
+    font: inherit;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    padding: 0 0.5em;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .cantrip-effect:hover,
+  .cantrip-effect:focus-visible {
+    background: var(--color-panel-2);
   }
 
   .block__stat.modified {

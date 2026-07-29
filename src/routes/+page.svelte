@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, Duration, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, Duration, EffectDefinition, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import EncounterHeader from '../components/EncounterHeader.svelte';
@@ -11,13 +11,17 @@
   import LibraryPane from '../components/LibraryPane.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import EffectModal from '../components/EffectModal.svelte';
+  import CastEffectModal from '../components/CastEffectModal.svelte';
   import Modal from '../components/ui/Modal.svelte';
   import RollBubble from '../components/RollBubble.svelte';
   import {
     appendInfoLog,
+    buildSpellEffectIndex,
     combatantCardActions,
+    combatantFaction,
     computeCombatantStats,
     currentCombatant,
+    defaultApplyDuration,
     dispatchEncounterCommand,
     formatModifierBreakdown,
     groupConditionsByCategory,
@@ -27,12 +31,13 @@
     listPersistentDamageOptions,
     listRecentConditionOptions,
     listRemovableEffects,
-    listSpellEffectOptions,
+    listSpellEffectOptionsFrom,
     makeCombatant,
     makeCreatureCombatant,
     makeHazardCombatant,
     makePartyMemberCombatant,
     newEncounterState,
+    registerLibraryEffects,
     toCommand,
     viewAppliedEffects,
     type ApplyConditionChoice,
@@ -73,6 +78,11 @@
     removeHazard
   } from '$lib/storage/hazard-library';
   import {
+    addSpellEffects,
+    loadSpellEffects,
+    removeSpellEffect
+  } from '$lib/storage/spell-effect-library';
+  import {
     addPartyMembers,
     loadPartyMembers,
     removePartyMember,
@@ -87,7 +97,13 @@
     importHazardYaml,
     importPartyMemberYaml
   } from '$lib/yaml';
-  import { importCreatureFoundryJson, importHazardFoundryJson } from '$lib/foundry';
+  import {
+    importCreatureFoundryJson,
+    importHazardFoundryJson,
+    importSpellEffectFoundryJson,
+    type SpellEffectImportResult
+  } from '$lib/foundry';
+  import { sampleSpellEffects } from '$lib/foundry/sample-spell-effects';
   import {
     COMMAND_ID_PREFIX,
     computeEncounterCounts,
@@ -101,7 +117,6 @@
   const conditionGroups = groupConditionsByCategory();
   const persistentOptions = listPersistentDamageOptions();
   const afflictionOptions = listAfflictionOptions();
-  const spellOptions = listSpellEffectOptions();
   const wedgeCounts = listConditionWedgeCounts();
 
   let radialOpen = false;
@@ -127,6 +142,21 @@
   let storedCreatures: Creature[] = [];
   let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
+  let storedSpellEffects: EffectDefinition[] = [];
+  let castModal: { casterId: string; effects: EffectDefinition[] } | null = null;
+
+  $: spellOptions = listSpellEffectOptionsFrom(storedSpellEffects);
+  $: spellEffectsBySlug = buildSpellEffectIndex(storedSpellEffects);
+  $: castModalCaster = castModal ? encounter.combatants[castModal.casterId] : undefined;
+  $: castTargets = castModal
+    ? Object.values(encounter.combatants).map((c) => ({
+        id: c.id,
+        name: c.name,
+        faction: combatantFaction(c),
+        isAlive: c.isAlive
+      }))
+    : [];
+  $: if (castModal && !castModalCaster) closeCastModal();
 
   $: availableCreatures = storedCreatures;
 
@@ -272,11 +302,12 @@
 
   onMount(async () => {
     hydrated = true;
-    const [restored, loadResult, hazardResult, partyResult] = await Promise.all([
+    const [restored, loadResult, hazardResult, partyResult, spellEffectResult] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
       loadHazards(),
-      loadPartyMembers()
+      loadPartyMembers(),
+      loadSpellEffects()
     ]);
     if (restored) {
       encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
@@ -328,6 +359,17 @@
         partyResult.reason === 'unavailable'
           ? 'Could not load your party members: storage is unavailable. Imports this session will not survive a reload.'
           : 'Could not load your party members from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
+      );
+    }
+    if (spellEffectResult.ok) {
+      storedSpellEffects = spellEffectResult.effects;
+      registerLibraryEffects(spellEffectResult.effects);
+    } else {
+      appendFeedback(
+        nextFeedbackId('spell-effect-load-fail'),
+        spellEffectResult.reason === 'unavailable'
+          ? 'Could not load your spell effects: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your spell effects from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
       );
     }
   });
@@ -523,22 +565,27 @@
       }
 
       if (isJson) {
-        // Route a Foundry actor JSON by its declared `type`. A parse failure
-        // falls through to the creature importer, which reports it as an issue.
-        let actorType: unknown;
+        // Route a Foundry JSON by its declared `type`. Arrays only occur for
+        // effect-pack exports, so they route to the spell-effect importer. A
+        // parse failure falls through to the creature importer, which reports
+        // it as an issue.
+        let parsedJson: unknown;
         try {
-          actorType = (JSON.parse(text) as { type?: unknown }).type;
+          parsedJson = JSON.parse(text);
         } catch {
-          actorType = undefined;
+          parsedJson = undefined;
         }
-        const did =
-          actorType === 'hazard'
+        const actorType = (parsedJson as { type?: unknown } | undefined)?.type;
+        const isEffectJson = Array.isArray(parsedJson) || actorType === 'effect';
+        const did = isEffectJson
+          ? await persistImportedSpellEffects(file, importSpellEffectFoundryJson(text))
+          : actorType === 'hazard'
             ? await persistImportedHazards(file, importHazardFoundryJson(text))
             : await persistImportedCreatures(file, importCreatureFoundryJson(text));
         if (!did) {
           appendFeedback(
             nextFeedbackId('import-empty'),
-            `"${file.name}" contained no importable creature or hazard.`
+            `"${file.name}" contained no importable creature, hazard, or spell effect.`
           );
         }
         continue;
@@ -563,6 +610,130 @@
           `"${file.name}" contained no creature or hazard documents.`
         );
       }
+    }
+  }
+
+  /**
+   * Persists imported spell effects and surfaces per-file feedback. Newly
+   * added effects register into the session effect library immediately so
+   * they can be applied without a reload.
+   */
+  async function persistImportedSpellEffects(
+    file: File,
+    result: SpellEffectImportResult
+  ): Promise<boolean> {
+    const { effects, issues } = result;
+    const persistResult = await addSpellEffects(effects);
+    if (!persistResult.ok) {
+      appendFeedback(
+        nextFeedbackId('se-import-persist-fail'),
+        persistResult.reason === 'unavailable'
+          ? `Could not save spell effects from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+          : `Could not save spell effects from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
+      );
+      return true;
+    }
+
+    for (const effect of persistResult.rejected) {
+      appendFeedback(
+        nextFeedbackId('se-import-dup'),
+        `Skipped "${effect.name}" from "${file.name}": id "${effect.id}" is already in your spell-effect library.`
+      );
+    }
+
+    if (persistResult.added.length > 0) {
+      storedSpellEffects = [...storedSpellEffects, ...persistResult.added];
+      registerLibraryEffects(persistResult.added);
+      appendFeedback(
+        nextFeedbackId('se-import-ok'),
+        `Imported ${persistResult.added.length} spell effect${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
+        'success'
+      );
+    }
+
+    for (const issue of issues) {
+      const where = issue.path ? ` at "${issue.path}"` : '';
+      appendFeedback(
+        nextFeedbackId('se-import-issue'),
+        `"${file.name}" doc ${issue.documentIndex + 1}${where}: ${issue.message}`
+      );
+    }
+
+    return persistResult.added.length > 0 || persistResult.rejected.length > 0 || issues.length > 0;
+  }
+
+  async function handleLoadSampleSpellEffects() {
+    const persistResult = await addSpellEffects(sampleSpellEffects());
+    if (!persistResult.ok) {
+      appendFeedback(
+        nextFeedbackId('se-sample-fail'),
+        persistResult.reason === 'unavailable'
+          ? 'Could not save starter spell effects: storage is unavailable.'
+          : 'Could not save starter spell effects: storage write failed.'
+      );
+      return;
+    }
+    if (persistResult.added.length > 0) {
+      storedSpellEffects = [...storedSpellEffects, ...persistResult.added];
+      registerLibraryEffects(persistResult.added);
+      appendFeedback(
+        nextFeedbackId('se-sample-ok'),
+        `Added ${persistResult.added.length} starter spell effect${persistResult.added.length === 1 ? '' : 's'}.`,
+        'success'
+      );
+    } else {
+      appendFeedback(
+        nextFeedbackId('se-sample-dup'),
+        'All starter spell effects are already in your library.',
+        'info'
+      );
+    }
+  }
+
+  async function handleRemoveSpellEffect(id: string) {
+    const inUseBy = Object.values(encounter.combatants).filter((c) =>
+      c.appliedEffects.some((effect) => effect.effectId === id)
+    );
+    if (inUseBy.length > 0) {
+      appendFeedback(
+        nextFeedbackId('se-remove-in-use'),
+        `Cannot remove this spell effect: it is applied to ${inUseBy.map((c) => c.name).join(', ')}. Remove it from those combatants first.`
+      );
+      return;
+    }
+    const result = await removeSpellEffect(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('se-remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove spell effect: storage is unavailable.'
+          : 'Could not remove spell effect: storage write failed.'
+      );
+      return;
+    }
+    storedSpellEffects = storedSpellEffects.filter((e) => e.id !== id);
+  }
+
+  function openCastEffectModal(casterId: string, effects: EffectDefinition[]) {
+    if (effects.length === 0) return;
+    castModal = { casterId, effects };
+  }
+
+  function closeCastModal() {
+    castModal = null;
+  }
+
+  function castEffectToTargets(effectId: string, targetIds: string[], duration: Duration) {
+    if (!castModal) return;
+    const casterId = castModal.casterId;
+    for (const targetId of targetIds) {
+      runCommand(
+        toCommand(
+          'APPLY_EFFECT',
+          { effectId, targetId, sourceId: casterId, duration },
+          nextCommandId()
+        )
+      );
     }
   }
 
@@ -910,7 +1081,10 @@
           effectId: choice.effectId,
           targetId: combatantId,
           value: choice.kind === 'valued' ? choice.value : undefined,
-          duration: { type: 'unlimited' },
+          // Spell effects default to their own duration, anchored to the
+          // target (there is no caster in this flow); everything else is
+          // unlimited until the GM edits it.
+          duration: defaultApplyDuration(choice.effectId, combatantId),
           note: choice.note
         },
         nextCommandId()
@@ -1265,6 +1439,10 @@
         onRemoveOneFromHazardsCount={handleRemoveOneFromHazardsCount}
         onImportHazardFiles={handleImportLibraryFiles}
         onRemoveHazard={handleRemoveHazard}
+        spellEffects={storedSpellEffects}
+        onImportSpellEffectFiles={handleImportLibraryFiles}
+        onLoadSampleSpellEffects={handleLoadSampleSpellEffects}
+        onRemoveSpellEffect={handleRemoveSpellEffect}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}
         onSavePartyMember={handleSavePartyMember}
@@ -1369,6 +1547,8 @@
         onRestoreFocusPoint={restoreFocusPoint}
         onUseInnateSpell={useInnateSpell}
         onRestoreInnateSpell={restoreInnateSpell}
+        {spellEffectsBySlug}
+        onCastSpellEffect={openCastEffectModal}
         onSetAdjustment={(combatantId, adjustment) =>
           runCommand(
             toCommand('SET_TEMPLATE_ADJUSTMENT', { combatantId, adjustment }, nextCommandId())
@@ -1461,6 +1641,17 @@
     badge={bubble.badge}
   />
 {/each}
+
+{#if castModal && castModalCaster}
+  <CastEffectModal
+    casterId={castModal.casterId}
+    casterName={castModalCaster.name}
+    effects={castModal.effects}
+    combatants={castTargets}
+    onCast={castEffectToTargets}
+    onClose={closeCastModal}
+  />
+{/if}
 
 {#if effectModal && effectModalCombatant}
   <EffectModal
