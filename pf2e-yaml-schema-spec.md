@@ -79,6 +79,15 @@ YAML keys use the same camelCase property names as the TypeScript interfaces. ID
 
 The LLM parser may emit `creature` and `effect-definition` documents together when a statblock includes afflictions.
 
+### 4.1 Encounter Import
+
+- Encounter files use `kind: encounter`, `schemaVersion: 1`, and place the full `EncounterState` under `data`.
+- The entire document is validated before the route replaces the current encounter.
+- Initiative IDs must resolve to imported combatants, duplicate order entries are rejected, and validation issues include field paths.
+- Every imported encounter enters `PREPARING`, with `round: 0`, `currentIndex: -1`, no pending prompts, and no turn-resolution continuation. Combatant state, initiative order/scores, HP, effects, notes, and template adjustments are preserved.
+- Replacing a non-empty encounter requires confirmation. Invalid input leaves the current encounter untouched.
+- Encounter schema versions other than 1 are rejected until an explicit migration is added.
+
 ---
 
 ## 5. Export Rules
@@ -88,6 +97,7 @@ The LLM parser may emit `creature` and `effect-definition` documents together wh
 - Runtime-only UI state is not exported unless it is part of `EncounterState`.
 - API keys and settings are never exported.
 - Undo history is never exported.
+- Encounter export is available during `PREPARING` and `COMPLETED`; undo/redo history is not part of `EncounterState` and is therefore excluded.
 
 ---
 
@@ -98,6 +108,8 @@ The LLM parser may emit `creature` and `effect-definition` documents together wh
 3. **Effect definition round-trip** - condition, persistent damage, and affliction definitions preserve suggestions, modifiers, traits, and affliction data.
 4. **Multi-document import** - creature plus affliction effect definitions returns all valid documents and per-document validation issues.
 5. **Sensitive data exclusion** - settings and API keys never appear in exported YAML.
+6. **Encounter round-trip** - name, combatants, initiative, HP, effects, notes, and template adjustments survive export/import; the imported phase is PREPARING.
+7. **Atomic encounter validation** - invalid paths are reported and the current encounter is not replaced.
 
 ---
 

@@ -349,6 +349,10 @@ export interface LogEntry {
   id: string;
   message: string;
   tone: LogEntryTone;
+  /** Present for reducer-derived entries so encounter history can retain and mark their audit trail. */
+  commandId?: string;
+  /** True when the originating command is currently undone in the in-memory history branch. */
+  undone?: boolean;
 }
 
 export interface EncounterState {

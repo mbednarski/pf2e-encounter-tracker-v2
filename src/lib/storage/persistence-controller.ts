@@ -50,9 +50,7 @@ export function createPersistenceController(
       }
     },
     persist(state: EncounterState) {
-      void enqueue(() => (state.phase === 'COMPLETED' ? options.clear() : options.save(state))).catch(
-        notifyPersistFailure
-      );
+      void enqueue(() => options.save(state)).catch(notifyPersistFailure);
     },
     async reset() {
       try {

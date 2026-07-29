@@ -141,4 +141,11 @@
     text-decoration-style: dotted;
     text-underline-offset: 2px;
   }
+
+  @media (pointer: coarse), (max-width: 1024px) {
+    .stat-roll {
+      min-height: var(--tap-target-min);
+      justify-content: center;
+    }
+  }
 </style>

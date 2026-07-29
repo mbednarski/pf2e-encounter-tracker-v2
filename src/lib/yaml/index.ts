@@ -10,6 +10,12 @@ export {
   type PartyMemberImportResult,
   type PartyMemberSkippedDocument
 } from './party-member-import';
+export {
+  ENCOUNTER_SCHEMA_VERSION,
+  exportEncounterYaml,
+  importEncounterYaml,
+  type EncounterImportResult
+} from './encounter';
 
 export interface SkippedDocument {
   documentIndex: number;

@@ -123,6 +123,9 @@
   --space-7: 32px;
   --space-8: 48px;
 
+  /* Minimum physical-table hit area for frequent controls. */
+  --tap-target-min: 44px;
+
   /* Borders */
   --border-thin: 1px solid var(--color-rule);
   --border-strong: 1px solid var(--color-rule-strong);

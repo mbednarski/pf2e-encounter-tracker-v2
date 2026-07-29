@@ -1,6 +1,6 @@
 # Table-Session UI Remediation Implementation Plan
 
-> **Status:** Approved for implementation.
+> **Status:** Completed on 2026-07-29.
 >
 > **Fresh-session entry point:** Start with the pre-flight section, then implement tasks in order. Do not re-audit the whole product before Task 1; the evidence and decisions needed for this work are recorded here.
 
@@ -16,6 +16,22 @@
 - `pf2e-party-members-spec.md`
 - `pf2e-yaml-schema-spec.md`
 - `ROADMAP.md`
+
+## Completion record
+
+All eleven tasks and the final validation gate were completed on
+`codex/table-session-ui-remediation`.
+
+- Svelte/TypeScript: zero diagnostics.
+- Vitest: 81 files passed; 1,133 tests passed and 1 skipped.
+- Playwright: nine workflows passed across 1440×900 desktop, 1024×768 touch,
+  and 768×1024 touch projects.
+- Dependency audit: zero known vulnerabilities at moderate severity or higher.
+- Static production build and `git diff --check`: passed.
+
+The checklist below is retained as the approved implementation inventory; the
+completion status and current release criteria are canonical here and in
+`ROADMAP.md`.
 
 ---
 

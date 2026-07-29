@@ -26,7 +26,6 @@ export async function loadActiveEncounter(): Promise<ActiveEncounterLoadResult |
   const db = await promise;
   const stored = (await db.get(ACTIVE_ENCOUNTER_STORE, KEY)) as EncounterState | undefined;
   if (!stored) return null;
-  if (stored.phase === 'COMPLETED') return null;
   const migrations: ActiveEncounterMigration[] = [];
   const legacyInitiative = stored.initiative as EncounterState['initiative'] & {
     delaying?: unknown;

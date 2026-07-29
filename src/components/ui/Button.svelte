@@ -102,9 +102,9 @@
 
   /* Touch devices get comfortable hit areas without changing the
      pointer-device density. */
-  @media (pointer: coarse) {
+  @media (pointer: coarse), (max-width: 1024px) {
     .btn {
-      min-height: 44px;
+      min-height: var(--tap-target-min);
     }
   }
 </style>
