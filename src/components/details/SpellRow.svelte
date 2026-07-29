@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SpellListEntry } from '../../domain';
+  import type { EffectDefinition, SpellListEntry } from '../../domain';
   import { ensureSpellIndex, resolveAtLevel } from '$lib/spell-index';
   import type { SpellIndexEntry, SpellIndexState } from '$lib/spell-index';
   import ActionGlyph from '../ui/ActionGlyph.svelte';
@@ -7,6 +7,8 @@
   export let entry: SpellListEntry;
   export let dc: number;
   export let attackModifier: number | undefined = undefined;
+  export let castableEffects: EffectDefinition[] = [];
+  export let onCastEffect: ((effects: EffectDefinition[]) => void) | undefined = undefined;
 
   let expanded = false;
   let indexState: SpellIndexState = { status: 'idle' };
@@ -45,15 +47,26 @@
 </script>
 
 <li class="spell-row" class:expanded>
-  <button
-    type="button"
-    class="spell-row__toggle"
-    aria-expanded={expanded}
-    onclick={toggleExpand}
-  >
-    <span class="spell-row__caret">{expanded ? '▾' : '▸'}</span>
-    <span class="spell-row__name">{entry.name}{countSuffix}</span>
-  </button>
+  <div class="spell-row__head">
+    <button
+      type="button"
+      class="spell-row__toggle"
+      aria-expanded={expanded}
+      onclick={toggleExpand}
+    >
+      <span class="spell-row__caret">{expanded ? '▾' : '▸'}</span>
+      <span class="spell-row__name">{entry.name}{countSuffix}</span>
+    </button>
+    {#if castableEffects.length > 0 && onCastEffect}
+      <button
+        type="button"
+        class="spell-row__effect"
+        aria-label="Apply {entry.name} effect to combatants"
+        title="Apply this spell's effect to combatants"
+        onclick={() => onCastEffect?.(castableEffects)}
+      >✦ Effect</button>
+    {/if}
+  </div>
 
   {#if expanded}
     {#if indexState.status === 'loading'}
@@ -127,6 +140,23 @@
 
 <style>
   .spell-row { display: flex; flex-direction: column; }
+  .spell-row__head { display: flex; align-items: baseline; gap: 0.5rem; }
+  .spell-row__effect {
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-amber, currentColor);
+    font: inherit;
+    font-size: 0.75em;
+    font-weight: 600;
+    padding: 0 0.5em;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .spell-row__effect:hover,
+  .spell-row__effect:focus-visible {
+    background: var(--color-panel-2, rgb(0 0 0 / 6%));
+  }
   .spell-row__toggle {
     display: flex; gap: 0.25rem; align-items: baseline;
     background: none; border: 0; padding: 0; color: inherit;

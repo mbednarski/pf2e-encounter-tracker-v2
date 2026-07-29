@@ -1,31 +1,43 @@
 <script lang="ts">
-  import type { Creature, Hazard } from '../domain';
+  import type { Creature, EffectDefinition, Hazard } from '../domain';
   import Button from './ui/Button.svelte';
   import IconButton from './ui/IconButton.svelte';
 
   export let creatures: Creature[];
   export let hazards: Hazard[] = [];
+  export let spellEffects: EffectDefinition[] = [];
   export let onRemove: (creatureId: string) => void;
   export let onRemoveHazard: (hazardId: string) => void = () => {};
+  export let onRemoveSpellEffect: (effectId: string) => void = () => {};
   export let onClose: () => void;
 
-  type EntryKind = 'creature' | 'hazard';
+  type EntryKind = 'creature' | 'hazard' | 'spellEffect';
   interface LibraryEntry {
     id: string;
     name: string;
-    level: number;
+    level: number | undefined;
     traits: string[];
   }
 
-  // `creature` and `hazard` ids share no namespace, so a pending removal must
+  // Library ids share no namespace across kinds, so a pending removal must
   // track which library the id belongs to.
   let pendingRemove: { kind: EntryKind; id: string } | null = null;
 
   $: sections = [
     { kind: 'creature' as EntryKind, label: 'Creatures', entries: creatures as LibraryEntry[] },
-    { kind: 'hazard' as EntryKind, label: 'Hazards', entries: hazards as LibraryEntry[] }
+    { kind: 'hazard' as EntryKind, label: 'Hazards', entries: hazards as LibraryEntry[] },
+    {
+      kind: 'spellEffect' as EntryKind,
+      label: 'Spell Effects',
+      entries: spellEffects.map((effect) => ({
+        id: effect.id,
+        name: effect.name,
+        level: effect.level,
+        traits: effect.traits ?? []
+      }))
+    }
   ];
-  $: isEmpty = creatures.length === 0 && hazards.length === 0;
+  $: isEmpty = creatures.length === 0 && hazards.length === 0 && spellEffects.length === 0;
 
   function startRemove(kind: EntryKind, id: string) {
     pendingRemove = { kind, id };
@@ -38,7 +50,8 @@
   function confirmRemove(kind: EntryKind, id: string) {
     pendingRemove = null;
     if (kind === 'creature') onRemove(id);
-    else onRemoveHazard(id);
+    else if (kind === 'hazard') onRemoveHazard(id);
+    else onRemoveSpellEffect(id);
   }
 
   function handleBackdropClick(event: MouseEvent) {
@@ -79,7 +92,7 @@
             <ul class="rows">
               {#each section.entries as entry (entry.id)}
                 <li class="row">
-                  <span class="row__level" aria-label="Level {entry.level}">{entry.level}</span>
+                  <span class="row__level" aria-label={entry.level !== undefined ? `Level ${entry.level}` : 'No level'}>{entry.level ?? '✦'}</span>
                   <span class="row__body">
                     <span class="row__name">{entry.name}</span>
                     {#if entry.traits.length > 0}

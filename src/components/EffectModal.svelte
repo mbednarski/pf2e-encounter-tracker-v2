@@ -51,6 +51,7 @@
 
   let activeTab: EffectModalTab = initialTab;
   let conditionSearch = '';
+  let effectSearch = '';
   let valuePickerForId: string | null = null;
   let valuePickerValue = 1;
   let valuePickerSource: 'conditions' | 'afflictions' = 'conditions';
@@ -65,6 +66,11 @@
   let returnFocusTo: HTMLElement | null = null;
 
   $: filteredConditionGroups = filterGroups(conditionGroups, conditionSearch);
+  $: filteredEffectOptions = effectSearch.trim()
+    ? effectOptions.filter((option) =>
+        option.name.toLowerCase().includes(effectSearch.trim().toLowerCase())
+      )
+    : effectOptions;
 
   function filterGroups(groups: ConditionGroup[], search: string): ConditionGroup[] {
     const trimmed = search.trim().toLowerCase();
@@ -457,20 +463,38 @@
         {/if}
       {:else if activeTab === 'effects'}
         {#if effectOptions.length === 0}
-          <p class="empty">No spell effects defined yet.</p>
+          <p class="empty">No spell effects defined yet. Import Foundry spell-effect JSON from the library pane.</p>
         {:else}
-          <div class="chip-row">
-            {#each effectOptions as option (option.id)}
-              <button
-                type="button"
-                class="chip"
-                data-option-id={option.id}
-                onclick={() => applyFromList(option, 'effects')}
-              >
-                {option.name}
-              </button>
-            {/each}
+          <div class="search-row">
+            <input
+              type="search"
+              class="search"
+              placeholder="Type to filter spell effects…"
+              aria-label="Filter spell effects"
+              bind:value={effectSearch}
+            />
           </div>
+          {#if filteredEffectOptions.length === 0}
+            <p class="empty">No spell effects match your search.</p>
+          {:else}
+            <div class="chip-row">
+              {#each filteredEffectOptions as option (option.id)}
+                <button
+                  type="button"
+                  class="chip effect-chip"
+                  data-option-id={option.id}
+                  title={option.description ?? option.name}
+                  onclick={() => applyFromList(option, 'effects')}
+                >
+                  <span>{option.name}</span>
+                  {#if option.durationHint}
+                    <span class="effect-duration">{option.durationHint}</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+            <p class="hint">Applied with the effect's default duration, counting down on this combatant's turn. Use a spell list's ✦ Effect button to anchor the duration to the caster instead.</p>
+          {/if}
         {/if}
       {/if}
     </div>
@@ -805,6 +829,21 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .effect-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .effect-duration {
+    font-size: 10px;
+    color: var(--color-ink-mute);
+  }
+
+  .chip:hover .effect-duration {
+    color: inherit;
   }
 
   .value-picker {

@@ -1,12 +1,14 @@
-import type { Creature, Hazard } from '../../domain';
+import type { Creature, EffectDefinition, Hazard } from '../../domain';
 import { validateCreature } from '../yaml/creature-validator';
 import { validateHazard } from '../yaml/hazard-validator';
-import type { CreatureImportResult, HazardImportResult } from '../yaml';
+import type { CreatureImportResult, HazardImportResult, ValidationIssue } from '../yaml';
 import { mapFoundryNpcToCreature } from './mapper';
 import { mapFoundryHazardToHazard } from './hazard-mapper';
+import { mapFoundryEffectToDefinition } from './effect-mapper';
 
 export { mapFoundryNpcToCreature, slugifyName } from './mapper';
 export { mapFoundryHazardToHazard } from './hazard-mapper';
+export { mapFoundryEffectToDefinition } from './effect-mapper';
 export { stripFoundryMarkup } from './text';
 export type { MapResult } from './shared';
 
@@ -108,4 +110,51 @@ export function importHazardFoundryJson(text: string): HazardImportResult {
 
   const hazards: Hazard[] = [validation.value];
   return { hazards, issues: [...warningIssues, ...validation.issues], skipped: [] };
+}
+
+export interface SpellEffectImportResult {
+  effects: EffectDefinition[];
+  issues: ValidationIssue[];
+}
+
+/**
+ * Imports Foundry pf2e `effect` item JSON (a single document or an array of
+ * documents, so a whole pack export can be dropped in at once) and maps each
+ * to a domain `EffectDefinition`. Mapper warnings surface as `Note:` issues;
+ * documents that fail to map surface as issues under their array index.
+ */
+export function importSpellEffectFoundryJson(text: string): SpellEffectImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    return {
+      effects: [],
+      issues: [
+        {
+          documentIndex: 0,
+          path: '',
+          message: `JSON parse error: ${err instanceof Error ? err.message : String(err)}`
+        }
+      ]
+    };
+  }
+
+  const docs = Array.isArray(parsed) ? parsed : [parsed];
+  const effects: EffectDefinition[] = [];
+  const issues: ValidationIssue[] = [];
+
+  docs.forEach((doc, documentIndex) => {
+    const mapped = mapFoundryEffectToDefinition(doc);
+    if (!mapped.ok) {
+      issues.push({ documentIndex, path: '', message: mapped.error });
+      return;
+    }
+    issues.push(
+      ...mapped.warnings.map((message) => ({ documentIndex, path: '', message: `Note: ${message}` }))
+    );
+    effects.push(mapped.value);
+  });
+
+  return { effects, issues };
 }

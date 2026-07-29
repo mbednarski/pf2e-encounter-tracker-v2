@@ -107,6 +107,14 @@ export function formatEvent(event: DomainEvent, options: FormatOptions): LogEntr
         `${nameOf(state, event.combatantId)} ${event.effectName} duration changed.`,
         'info'
       );
+    case 'effect-duration-ticked':
+      return entry(
+        id,
+        `${nameOf(state, event.combatantId)} ${event.effectName}: ${event.remainingRounds} ${
+          event.remainingRounds === 1 ? 'round' : 'rounds'
+        } left.`,
+        'info'
+      );
     case 'prompt-generated':
       return entry(
         id,

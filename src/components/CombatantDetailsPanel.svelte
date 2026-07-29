@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Ability, Attack, CombatantState, ComputedStats, TemplateAdjustment } from '../domain';
+  import type { Ability, Attack, CombatantState, ComputedStats, EffectDefinition, TemplateAdjustment } from '../domain';
   import { adjustedAbility, adjustedAttack, adjustedSpellBlock, getAdjustedView } from '../domain';
   import { templateLabel } from '$lib/template-label';
   import { formatModifier } from '$lib/abilities/format-damage';
@@ -49,6 +49,8 @@
   export let onUseInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onRestoreInnateSpell: (combatantId: string, blockId: string, spellSlug: string) => void = () => {};
   export let onSetAdjustment: (combatantId: string, adjustment: TemplateAdjustment) => void = () => {};
+  export let spellEffectsBySlug: Record<string, EffectDefinition[]> = {};
+  export let onCastSpellEffect: (combatantId: string, effects: EffectDefinition[]) => void = () => {};
 
   const ADJUSTMENT_OPTIONS: TemplateAdjustment[] = ['weak', 'normal', 'elite'];
   const ADJUSTMENT_LABEL: Record<TemplateAdjustment, string> = {
@@ -304,6 +306,8 @@
               onRestoreFocus={(blockId) => onRestoreFocusPoint(combatant.id, blockId)}
               onUseInnate={(blockId, slug) => onUseInnateSpell(combatant.id, blockId, slug)}
               onRestoreInnate={(blockId, slug) => onRestoreInnateSpell(combatant.id, blockId, slug)}
+              {spellEffectsBySlug}
+              onCastEffect={(effects) => onCastSpellEffect(combatant.id, effects)}
             />
           {/each}
         </div>

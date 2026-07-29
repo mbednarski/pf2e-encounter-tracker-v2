@@ -4,6 +4,7 @@ import {
   createCombatantFromHazard,
   createCombatantFromPartyMember,
   deriveStats,
+  durationFromSpec,
   effectLibrary,
   getAdjustedView
 } from '../domain';
@@ -19,12 +20,45 @@ import type {
   DomainEvent,
   Duration,
   EffectDefinition,
+  EffectLibrary,
   EncounterState,
   Hazard,
   LogEntry,
   PartyMember
 } from '../domain';
 import { formatEvents } from './combat-log/format';
+
+/**
+ * Runtime-imported effect definitions (the IndexedDB spell-effect library)
+ * merged over the built-in library. Built-ins win on id collisions so imports
+ * can never shadow core conditions. The registry only grows within a session:
+ * deleting an effect from the stored library must not strand instances already
+ * applied in the active encounter, whose reducer paths reject on missing
+ * definitions.
+ */
+let registeredEffects: Record<string, EffectDefinition> = {};
+let mergedEffectLibrary: EffectLibrary = effectLibrary;
+
+export function registerLibraryEffects(effects: readonly EffectDefinition[]): void {
+  if (effects.length === 0) return;
+  for (const effect of effects) {
+    registeredEffects[effect.id] = effect;
+  }
+  mergedEffectLibrary = { ...registeredEffects, ...effectLibrary };
+}
+
+export function activeEffectLibrary(): EffectLibrary {
+  return mergedEffectLibrary;
+}
+
+export function getEffectDefinition(effectId: string): EffectDefinition | undefined {
+  return mergedEffectLibrary[effectId];
+}
+
+export function __resetEffectRegistryForTests(): void {
+  registeredEffects = {};
+  mergedEffectLibrary = effectLibrary;
+}
 
 /** Maximum number of log entries retained on EncounterState.combatLog. Older entries are dropped. */
 export const COMBAT_LOG_CAP = 200;
@@ -156,7 +190,7 @@ export function toCommand<T extends CommandType>(
 }
 
 export function dispatchEncounterCommand(state: EncounterState, command: Command): DispatchResult {
-  const result = applyCommand(state, command, effectLibrary);
+  const result = applyCommand(state, command, mergedEffectLibrary);
   const rejected = result.events.some((event) => event.type === 'command-rejected');
   const entries = formatEvents(result.events, {
     commandId: command.id,
@@ -241,6 +275,8 @@ export interface ConditionOption {
   name: string;
   value: ConditionOptionValue;
   description?: string;
+  /** Human label for a spell effect's default duration, e.g. "1 round". */
+  durationHint?: string;
 }
 
 export type AppliedEffectValue =
@@ -274,7 +310,7 @@ export type EffectModalTab =
   | 'effects';
 
 export function listConditionDefinitions(): EffectDefinition[] {
-  return Object.values(effectLibrary)
+  return Object.values(mergedEffectLibrary)
     .filter((definition) => definition.category === 'condition')
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -318,8 +354,12 @@ export function formatDuration(duration: Duration, state: EncounterState): strin
   switch (duration.type) {
     case 'unlimited':
       return 'unlimited';
-    case 'rounds':
-      return duration.count === 1 ? '1 round' : `${duration.count} rounds`;
+    case 'rounds': {
+      const base = duration.count === 1 ? '1 round' : `${duration.count} rounds`;
+      return duration.anchorId
+        ? `${base} (ticks on ${combatantName(state, duration.anchorId)}'s turn)`
+        : base;
+    }
     case 'untilTurnEnd':
       return `until end of ${combatantName(state, duration.combatantId)}'s turn`;
     case 'untilTurnStart':
@@ -341,11 +381,11 @@ function toAppliedEffectView(
   combatant: CombatantState,
   state: EncounterState
 ): AppliedEffectView {
-  const definition = effectLibrary[effect.effectId];
+  const definition = mergedEffectLibrary[effect.effectId];
   const parent = effect.parentInstanceId
     ? combatant.appliedEffects.find((candidate) => candidate.instanceId === effect.parentInstanceId)
     : undefined;
-  const parentDefinition = parent ? effectLibrary[parent.effectId] : undefined;
+  const parentDefinition = parent ? mergedEffectLibrary[parent.effectId] : undefined;
 
   const value: AppliedEffectValue = definition?.hasValue
     ? { kind: 'valued', current: effect.value ?? 1, maxValue: definition.maxValue }
@@ -404,7 +444,7 @@ export type ConditionWedgeCategory = keyof ConditionWedgeCounts;
 
 export function listConditionWedgeCounts(): ConditionWedgeCounts {
   const counts: ConditionWedgeCounts = { conditions: 0, persistent: 0, spells: 0, afflictions: 0 };
-  for (const definition of Object.values(effectLibrary)) {
+  for (const definition of Object.values(mergedEffectLibrary)) {
     switch (definition.category) {
       case 'condition':
         counts.conditions++;
@@ -426,7 +466,7 @@ export function listConditionWedgeCounts(): ConditionWedgeCounts {
 export function listRecentConditionOptions(state: EncounterState): ConditionOption[] {
   const options: ConditionOption[] = [];
   for (const effectId of state.recentEffectIds) {
-    const definition = effectLibrary[effectId];
+    const definition = mergedEffectLibrary[effectId];
     if (!definition) continue;
     options.push({
       id: definition.id,
@@ -447,12 +487,22 @@ function definitionToOption(definition: EffectDefinition): ConditionOption {
     value: definition.hasValue
       ? { kind: 'valued', defaultValue: 1, maxValue: definition.maxValue }
       : { kind: 'unvalued' },
-    description: definition.description
+    description: definition.description,
+    durationHint: durationSpecLabel(definition.defaultDuration)
   };
 }
 
+function durationSpecLabel(
+  spec: EffectDefinition['defaultDuration']
+): string | undefined {
+  if (!spec || spec.unit === 'unlimited') return undefined;
+  const value = spec.value ?? 1;
+  const unit = value === 1 ? spec.unit.replace(/s$/, '') : spec.unit;
+  return `${value} ${unit}${spec.sustained ? ', sustained' : ''}`;
+}
+
 function listOptionsByCategory(category: EffectDefinition['category']): ConditionOption[] {
-  return Object.values(effectLibrary)
+  return Object.values(mergedEffectLibrary)
     .filter((definition) => definition.category === category)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(definitionToOption);
@@ -468,6 +518,60 @@ export function listAfflictionOptions(): ConditionOption[] {
 
 export function listSpellEffectOptions(): ConditionOption[] {
   return listOptionsByCategory('spell');
+}
+
+/**
+ * Spell-effect options built from the built-in library plus an explicit list
+ * of imported effects. Unlike `listSpellEffectOptions` (which reads the
+ * session registry and never forgets), this reflects deletions from the
+ * stored library, so pass the live stored list from UI call sites.
+ */
+export function listSpellEffectOptionsFrom(
+  importedEffects: readonly EffectDefinition[]
+): ConditionOption[] {
+  const seen = new Set<string>();
+  const definitions: EffectDefinition[] = [];
+  for (const definition of [...Object.values(effectLibrary), ...importedEffects]) {
+    if (definition.category !== 'spell' || seen.has(definition.id)) continue;
+    seen.add(definition.id);
+    definitions.push(definition);
+  }
+  return definitions.sort((a, b) => a.name.localeCompare(b.name)).map(definitionToOption);
+}
+
+/**
+ * Indexes spell-effect definitions by the slug of the spell that grants them,
+ * for spell-list matching in the details panel. Built-in spell effects use
+ * their own id as the slug; imported Foundry effects carry `sourceSpellSlug`.
+ * Takes the imported effects explicitly (rather than reading the registry) so
+ * Svelte call sites recompute when the stored library changes.
+ */
+export function buildSpellEffectIndex(
+  importedEffects: readonly EffectDefinition[]
+): Record<string, EffectDefinition[]> {
+  const index: Record<string, EffectDefinition[]> = {};
+  const seenIds = new Set<string>();
+  const add = (definition: EffectDefinition) => {
+    if (definition.category !== 'spell' || seenIds.has(definition.id)) return;
+    seenIds.add(definition.id);
+    const slug = definition.sourceSpellSlug ?? definition.id;
+    (index[slug] ??= []).push(definition);
+  };
+  for (const definition of Object.values(effectLibrary)) add(definition);
+  for (const definition of importedEffects) add(definition);
+  return index;
+}
+
+/**
+ * The concrete duration an effect should get when applied. Spell effects use
+ * their default duration anchored to the caster (or the target itself when
+ * applied outside a cast flow); everything else keeps the legacy unlimited
+ * default.
+ */
+export function defaultApplyDuration(effectId: string, anchorId: string): Duration {
+  const definition = mergedEffectLibrary[effectId];
+  if (!definition?.defaultDuration) return { type: 'unlimited' };
+  return durationFromSpec(definition.defaultDuration, anchorId);
 }
 
 export interface ConditionGroup {
@@ -556,7 +660,7 @@ export function listRemovableEffects(
   return combatant.appliedEffects
     .filter((effect) => !effect.parentInstanceId)
     .map((effect) => {
-      const definition = effectLibrary[effect.effectId];
+      const definition = mergedEffectLibrary[effect.effectId];
       const valueLabel =
         definition?.hasValue && typeof effect.value === 'number' ? String(effect.value) : undefined;
       return {
@@ -571,7 +675,7 @@ export function listRemovableEffects(
 }
 
 export function computeCombatantStats(combatant: CombatantState): ComputedStats {
-  return deriveStats(getAdjustedView(combatant), combatant.appliedEffects, effectLibrary);
+  return deriveStats(getAdjustedView(combatant), combatant.appliedEffects, mergedEffectLibrary);
 }
 
 function signed(value: number): string {
