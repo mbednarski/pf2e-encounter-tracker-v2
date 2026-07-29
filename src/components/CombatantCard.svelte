@@ -297,6 +297,7 @@
   class:selected-card={isSelected}
   class:selectable={Boolean(onSelect)}
   class:dimmed={visualState !== 'alive'}
+  class:menu-open={overflowOpen}
   data-visual-state={visualState}
   data-hp-tone={hpTone}
   data-faction={faction}
@@ -714,6 +715,13 @@
 
   .combatant-card.selectable {
     cursor: pointer;
+  }
+
+  /* The open overflow menu must paint above later-sibling cards; .dimmed's
+     opacity creates a stacking context that traps the menu's z-index, so the
+     owning card itself has to be lifted. */
+  .combatant-card.menu-open {
+    z-index: 10;
   }
 
   .combatant-card.dimmed {
