@@ -1,6 +1,6 @@
 <script lang="ts">
   import { type ManualCombatantInput } from '$lib/encounter-app';
-  import Modal from './ui/Modal.svelte';
+  import DiscardEncounterButton from './DiscardEncounterButton.svelte';
 
   export let canStart: boolean;
   export let onAddManual: (input: Omit<ManualCombatantInput, 'id'>) => void;
@@ -15,14 +15,14 @@
   let manualWill = 5;
   let manualPerception = 7;
   let manualSpeed = 25;
-  let discardConfirmationOpen = false;
-  let isDiscarding = false;
+  let customOpen = false;
 
   function numberOrDefault(value: number, fallback: number) {
     return Number.isFinite(value) ? Math.trunc(value) : fallback;
   }
 
-  function submitManual() {
+  function submitManual(event?: SubmitEvent) {
+    event?.preventDefault();
     onAddManual({
       name: manualName.trim() || 'Combatant',
       maxHp: numberOrDefault(manualHp, 1),
@@ -33,21 +33,9 @@
       perception: numberOrDefault(manualPerception, 0),
       speed: numberOrDefault(manualSpeed, 25)
     });
+    customOpen = false;
   }
 
-  function closeDiscardConfirmation() {
-    if (!isDiscarding) discardConfirmationOpen = false;
-  }
-
-  async function confirmDiscard() {
-    if (isDiscarding) return;
-    isDiscarding = true;
-    try {
-      if (await onReset()) discardConfirmationOpen = false;
-    } finally {
-      isDiscarding = false;
-    }
-  }
 </script>
 
 <aside class="panel setup-panel" aria-labelledby="setup-title">
@@ -55,9 +43,9 @@
     <h2 id="setup-title">Encounter Controls</h2>
   </div>
 
-  <details class="custom-combatant">
+  <details class="custom-combatant" bind:open={customOpen}>
     <summary>Custom Combatant</summary>
-    <form class="manual-form" onsubmit={(event) => { event.preventDefault(); submitManual(); }}>
+    <form class="manual-form" onsubmit={submitManual}>
       <label>Name<input bind:value={manualName} autocomplete="off" /></label>
       <div class="stat-grid">
         <label>HP<input type="number" min="1" bind:value={manualHp} /></label>
@@ -74,29 +62,9 @@
 
   <div class="control-row">
     <button type="button" disabled={!canStart} onclick={onStart}>Start Encounter</button>
-    <button type="button" class="secondary" onclick={() => (discardConfirmationOpen = true)}>Discard Encounter…</button>
+    <DiscardEncounterButton onDiscard={onReset} />
   </div>
 </aside>
-
-{#if discardConfirmationOpen}
-  <Modal
-    title="Discard active encounter?"
-    titleId="discard-encounter-title"
-    descriptionId="discard-encounter-description"
-    dismissible={!isDiscarding}
-    onClose={closeDiscardConfirmation}
-  >
-    <p id="discard-encounter-description">
-      This removes the active encounter and combat log from this device. Your creature, hazard, and party libraries remain.
-    </p>
-    <svelte:fragment slot="footer">
-      <button type="button" class="secondary" disabled={isDiscarding} data-modal-default onclick={closeDiscardConfirmation}>Keep Encounter</button>
-      <button type="button" class="destructive" disabled={isDiscarding} onclick={confirmDiscard}>
-        {isDiscarding ? 'Discarding…' : 'Discard Encounter'}
-      </button>
-    </svelte:fragment>
-  </Modal>
-{/if}
 
 <style>
   .panel {
@@ -177,29 +145,6 @@
   button:disabled {
     cursor: not-allowed;
     opacity: 0.45;
-  }
-
-  button.secondary {
-    border: var(--border-strong);
-    color: var(--color-ink);
-    background: transparent;
-  }
-
-  button.secondary:hover:not(:disabled) {
-    background: var(--color-panel-2);
-    color: var(--color-ink);
-  }
-
-  button.destructive {
-    border-color: var(--color-red);
-    background: transparent;
-    color: var(--color-red);
-  }
-
-  button.destructive:hover:not(:disabled) {
-    border-color: var(--color-red);
-    background: var(--color-red);
-    color: var(--color-panel);
   }
 
   .stat-grid {

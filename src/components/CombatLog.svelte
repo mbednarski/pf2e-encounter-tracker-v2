@@ -12,8 +12,9 @@
   {:else}
     <ol class="entries">
       {#each ordered as entry (entry.id)}
-        <li class="entry entry--{entry.tone}">
+        <li class="entry entry--{entry.tone}" class:entry--undone={entry.undone}>
           <span class="entry__message">{entry.message}</span>
+          {#if entry.undone}<span class="entry__status">Undone</span>{/if}
         </li>
       {/each}
     </ol>
@@ -48,6 +49,22 @@
     padding: var(--space-2) 0;
     border-bottom: 1px dashed var(--color-rule);
     line-height: var(--leading-snug);
+  }
+
+  .entry--undone {
+    opacity: 0.5;
+  }
+
+  .entry--undone .entry__message {
+    text-decoration: line-through;
+  }
+
+  .entry__status {
+    color: var(--color-ink-mute);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
   }
 
   .entry:last-child {

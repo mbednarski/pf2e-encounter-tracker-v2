@@ -36,15 +36,16 @@ describe('createPersistenceController', () => {
       expect(deps.clear).not.toHaveBeenCalled();
     });
 
-    it('clears COMPLETED states instead of saving', async () => {
+    it('saves COMPLETED states for read-only review after reload', async () => {
       const deps = makeDeps();
       const controller = createPersistenceController(deps);
+      const state = completedEncounter();
 
-      controller.persist(completedEncounter());
+      controller.persist(state);
       await flush();
 
-      expect(deps.clear).toHaveBeenCalledOnce();
-      expect(deps.save).not.toHaveBeenCalled();
+      expect(deps.save).toHaveBeenCalledWith(state);
+      expect(deps.clear).not.toHaveBeenCalled();
     });
 
     it('saves PREPARING states (not just ACTIVE)', async () => {
@@ -73,10 +74,10 @@ describe('createPersistenceController', () => {
       expect(onPersistFailed).toHaveBeenCalledOnce();
     });
 
-    it('fires onPersistFailed when COMPLETED clear rejects', async () => {
+    it('fires onPersistFailed when a COMPLETED save rejects', async () => {
       const onPersistFailed = vi.fn();
       const deps = makeDeps({
-        clear: vi.fn().mockRejectedValue(new Error('blocked'))
+        save: vi.fn().mockRejectedValue(new Error('blocked'))
       });
       const controller = createPersistenceController({ ...deps, onPersistFailed });
 

@@ -54,9 +54,10 @@ describe('active encounter storage', () => {
     expect(await loadActiveEncounter()).toEqual({ state, migrations: [] });
   });
 
-  it('does not auto-resume COMPLETED encounters', async () => {
-    await saveActiveEncounter(completedEncounter());
-    expect(await loadActiveEncounter()).toBeNull();
+  it('restores COMPLETED encounters for read-only review', async () => {
+    const state = completedEncounter();
+    await saveActiveEncounter(state);
+    expect(await loadActiveEncounter()).toEqual({ state, migrations: [] });
   });
 
   it('clearActiveEncounter removes the record', async () => {

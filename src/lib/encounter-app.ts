@@ -157,10 +157,12 @@ export function toCommand<T extends CommandType>(
 
 export function dispatchEncounterCommand(state: EncounterState, command: Command): DispatchResult {
   const result = applyCommand(state, command, effectLibrary);
-  return appendLogEntries(result.newState, result.events, formatEvents(result.events, {
+  const rejected = result.events.some((event) => event.type === 'command-rejected');
+  const entries = formatEvents(result.events, {
     commandId: command.id,
     state: result.newState
-  }));
+  }).map((entry) => (rejected ? entry : { ...entry, commandId: command.id }));
+  return appendLogEntries(result.newState, result.events, entries);
 }
 
 function appendLogEntries(

@@ -79,17 +79,11 @@
     opacity: 0.5;
   }
 
-  /* Touch devices: extend the hit area to 44px with an invisible overlay
-     so the visible square stays at --icon-btn-size. */
-  @media (pointer: coarse) {
+  /* Real, non-overlapping tablet hit boxes. */
+  @media (pointer: coarse), (max-width: 1024px) {
     .icon-btn {
-      position: relative;
-    }
-
-    .icon-btn::after {
-      content: '';
-      position: absolute;
-      inset: calc((var(--icon-btn-size) - 44px) / 2);
+      width: max(var(--icon-btn-size), var(--tap-target-min));
+      height: max(var(--icon-btn-size), var(--tap-target-min));
     }
   }
 </style>

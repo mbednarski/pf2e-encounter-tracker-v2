@@ -29,3 +29,29 @@ describe('encounter discard flow', () => {
     await expect(loadActiveEncounter()).resolves.toBeNull();
   });
 });
+
+describe('encounter history shortcuts', () => {
+  test('Ctrl+Z is ignored while editing a number field', async () => {
+    await saveActiveEncounter(activeEncounter({ name: 'Shortcut guard' }));
+    render(Page);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Shortcut guard' })).toBeInTheDocument());
+
+    await fireEvent.click(screen.getAllByRole('button', { name: /HP 20 of 20/ })[0]);
+    const input = screen.getAllByLabelText(/Edit HP/)[0];
+    await fireEvent.keyDown(input, { key: 'z', ctrlKey: true });
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  test('Ctrl+Z and Ctrl+Shift+Z undo and redo accepted encounter commands', async () => {
+    await saveActiveEncounter(activeEncounter({ name: 'Shortcut action' }));
+    render(Page);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Shortcut action' })).toBeInTheDocument());
+
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Reaction used' })[0]);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeEnabled();
+    await fireEvent.keyDown(window, { key: 'z', ctrlKey: true, shiftKey: true });
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+  });
+});

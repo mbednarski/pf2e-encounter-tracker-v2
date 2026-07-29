@@ -3,6 +3,7 @@
   import type { Command, CombatantState, Creature, Duration, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
+  import EncounterHeader from '../components/EncounterHeader.svelte';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -10,6 +11,7 @@
   import LibraryPane from '../components/LibraryPane.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import EffectModal from '../components/EffectModal.svelte';
+  import Modal from '../components/ui/Modal.svelte';
   import RollBubble from '../components/RollBubble.svelte';
   import {
     appendInfoLog,
@@ -77,7 +79,13 @@
     savePartyMember
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { importCreatureYaml, importHazardYaml, importPartyMemberYaml } from '$lib/yaml';
+  import {
+    exportEncounterYaml,
+    importCreatureYaml,
+    importEncounterYaml,
+    importHazardYaml,
+    importPartyMemberYaml
+  } from '$lib/yaml';
   import { importCreatureFoundryJson, importHazardFoundryJson } from '$lib/foundry';
   import {
     COMMAND_ID_PREFIX,
@@ -86,6 +94,7 @@
     nextCombatantCounterFor,
     nextCommandCounterFor
   } from '$lib/page-helpers';
+  import { createEncounterHistory } from '$lib/history/encounter-history';
 
   const conditionOptions = listConditionOptions();
   const conditionGroups = groupConditionsByCategory();
@@ -99,6 +108,12 @@
   let radialCombatantId: string | null = null;
 
   let effectModal: { combatantId: string; tab: EffectModalTab } | null = null;
+  let removeConfirmation: { combatantId: string; name: string } | null = null;
+  let libraryOpen = true;
+  let logOpen = true;
+  let encounterImportInput: HTMLInputElement | null = null;
+  let pendingEncounterImport: { state: EncounterState; fileName: string } | null = null;
+  let hydrated = false;
 
   let encounter = newEncounterState();
   let feedback: FeedbackEntry[] = [];
@@ -106,6 +121,8 @@
   let combatantCounter = 1;
   let feedbackCounter = 1;
   let selection: Selection = emptySelection;
+  const encounterHistory = createEncounterHistory();
+  let historyVersion = 0;
   let storedCreatures: Creature[] = [];
   let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
@@ -126,6 +143,10 @@
   $: selection = reconcileWithCombatants(selection, combatantIdSet);
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
+  $: canUndo = historyVersion >= 0 && encounterHistory.canUndo;
+  $: canRedo = historyVersion >= 0 && encounterHistory.canRedo;
+  $: undoLabel = historyVersion >= 0 ? encounterHistory.undoLabel : undefined;
+  $: redoLabel = historyVersion >= 0 ? encounterHistory.redoLabel : undefined;
 
   $: radialCombatant = radialCombatantId ? encounter.combatants[radialCombatantId] : undefined;
   $: radialRecentOptions = radialCombatant ? listRecentConditionOptions(encounter) : [];
@@ -188,9 +209,52 @@
   });
 
   function runCommand(command: Command) {
-    const result = dispatchEncounterCommand(encounter, command);
+    const before = encounter;
+    const result = dispatchEncounterCommand(before, command);
+    const rejected = result.events.some((event) => event.type === 'command-rejected');
+    if (!rejected && result.state !== before) {
+      encounterHistory.record(before, result.state, command);
+      historyVersion += 1;
+    }
     encounter = result.state;
+    if (before.phase !== 'ACTIVE' && result.state.phase === 'ACTIVE') {
+      libraryOpen = false;
+      logOpen = false;
+    }
     persistence.persist(result.state);
+  }
+
+  function undoEncounter() {
+    const step = encounterHistory.undo(encounter);
+    if (!step) return;
+    encounter = step.state;
+    historyVersion += 1;
+    persistence.persist(encounter);
+  }
+
+  function redoEncounter() {
+    const step = encounterHistory.redo(encounter);
+    if (!step) return;
+    encounter = step.state;
+    historyVersion += 1;
+    persistence.persist(encounter);
+  }
+
+  function isEditingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+      target.matches('input, textarea, select') ||
+      target.isContentEditable ||
+      Boolean(target.closest('[contenteditable="true"]'))
+    );
+  }
+
+  function handleHistoryShortcut(event: KeyboardEvent) {
+    if (isEditingTarget(event.target) || !(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() !== 'z') return;
+    event.preventDefault();
+    if (event.shiftKey) redoEncounter();
+    else undoEncounter();
   }
 
   $: drawerEntries = mergeDrawerEntries(encounter.combatLog, feedback);
@@ -206,6 +270,7 @@
   }
 
   onMount(async () => {
+    hydrated = true;
     const [restored, loadResult, hazardResult, partyResult] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
@@ -216,6 +281,15 @@
       encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
       commandCounter = nextCommandCounterFor(encounter.combatLog);
       combatantCounter = nextCombatantCounterFor(encounter.combatants);
+      if (encounter.phase === 'ACTIVE' || encounter.phase === 'RESOLVING') {
+        libraryOpen = false;
+      }
+    }
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 1024px), (pointer: coarse)').matches
+    ) {
+      logOpen = false;
     }
     if (loadResult.ok) {
       storedCreatures = loadResult.creatures;
@@ -703,6 +777,79 @@
     runCommand(toCommand('START_ENCOUNTER', undefined, nextCommandId()));
   }
 
+  function completeEncounter() {
+    if (encounter.phase !== 'ACTIVE' || encounter.pendingPrompts.length > 0) return;
+    runCommand(toCommand('COMPLETE_ENCOUNTER', undefined, nextCommandId()));
+  }
+
+  function prepareRematch() {
+    if (encounter.phase !== 'COMPLETED') return;
+    runCommand(toCommand('RESET_ENCOUNTER', undefined, nextCommandId()));
+  }
+
+  function exportEncounter() {
+    const yaml = exportEncounterYaml(encounter);
+    const blob = new Blob([yaml], { type: 'application/yaml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const slug = encounter.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'encounter';
+    anchor.href = url;
+    anchor.download = `${slug}.encounter.yaml`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    appendFeedback(nextFeedbackId('encounter-export'), `Exported ${encounter.name}.`, 'success');
+  }
+
+  function openEncounterImport() {
+    encounterImportInput?.click();
+  }
+
+  async function handleEncounterImport(files: File[]) {
+    const file = files[0];
+    if (!file) return;
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (err) {
+      appendFeedback(
+        nextFeedbackId('encounter-import-read'),
+        `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+      );
+      return;
+    }
+    const result = importEncounterYaml(text);
+    if (!result.ok) {
+      for (const issue of result.issues) {
+        const path = issue.path ? ` at ${issue.path}` : '';
+        appendFeedback(
+          nextFeedbackId('encounter-import-invalid'),
+          `"${file.name}"${path}: ${issue.message}`
+        );
+      }
+      return;
+    }
+    const hasCurrentEncounter =
+      Object.keys(encounter.combatants).length > 0 || encounter.combatLog.length > 0;
+    if (hasCurrentEncounter) {
+      pendingEncounterImport = { state: result.state, fileName: file.name };
+      return;
+    }
+    acceptEncounterImport(result.state, file.name);
+  }
+
+  function acceptEncounterImport(state: EncounterState, fileName: string) {
+    encounter = state;
+    commandCounter = nextCommandCounterFor(encounter.combatLog);
+    combatantCounter = nextCombatantCounterFor(encounter.combatants);
+    selection = emptySelection;
+    encounterHistory.clear();
+    historyVersion += 1;
+    libraryOpen = true;
+    pendingEncounterImport = null;
+    persistence.persist(encounter);
+    appendFeedback(nextFeedbackId('encounter-import-ok'), `Imported encounter from "${fileName}".`, 'success');
+  }
+
   function setInitiativeScore(combatantId: string, value: number | null) {
     runCommand(
       toCommand('SET_INITIATIVE_SCORES', { scores: { [combatantId]: value } }, nextCommandId())
@@ -840,10 +987,22 @@
   function radialRemoveCombatant() {
     const id = radialCombatantId;
     if (!id) return;
-    const name = encounter.combatants[id]?.name ?? 'combatant';
-    runCommand(toCommand('REMOVE_COMBATANT', { combatantId: id }, nextCommandId()));
-    appendFeedback(nextFeedbackId('radial-remove'), `Removed ${name} from the encounter.`, 'success');
+    requestRemoveCombatant(id);
     closeRadial();
+  }
+
+  function requestRemoveCombatant(combatantId: string) {
+    const combatant = encounter.combatants[combatantId];
+    if (!combatant) return;
+    removeConfirmation = { combatantId, name: combatant.name };
+  }
+
+  function confirmRemoveCombatant() {
+    if (!removeConfirmation) return;
+    const { combatantId, name } = removeConfirmation;
+    runCommand(toCommand('REMOVE_COMBATANT', { combatantId }, nextCommandId()));
+    appendFeedback(nextFeedbackId('remove-combatant'), `Removed ${name} from the encounter.`, 'success');
+    removeConfirmation = null;
   }
 
   function modifyConditionValue(combatantId: string, instanceId: string, delta: number) {
@@ -1019,6 +1178,14 @@
     selection = pickCombatant(selection, id);
   }
 
+  function followActiveDetails() {
+    selection = { id: activeCombatant?.id, pinned: false };
+  }
+
+  function closeDetails() {
+    selection = { id: undefined, pinned: true };
+  }
+
   async function resetLocal(): Promise<boolean> {
     if (!(await persistence.reset())) return false;
     encounter = newEncounterState();
@@ -1027,11 +1194,15 @@
     combatantCounter = 1;
     feedbackCounter = 1;
     selection = emptySelection;
+    encounterHistory.clear();
+    historyVersion += 1;
     return true;
   }
 </script>
 
-<main class="shell">
+<svelte:window onkeydown={handleHistoryShortcut} />
+
+<main class="shell" data-hydrated={hydrated}>
   <TopBar
     name={encounter.name}
     phase={encounter.phase}
@@ -1039,10 +1210,42 @@
     activeName={activeCombatant?.name}
   />
 
+  <div class="shell__header">
+    <EncounterHeader
+      phase={encounter.phase}
+      pendingPromptCount={encounter.pendingPrompts.length}
+      onComplete={completeEncounter}
+      onPrepareRematch={prepareRematch}
+      onExport={exportEncounter}
+      onImport={openEncounterImport}
+      canExport={Object.keys(encounter.combatants).length > 0}
+      onDiscard={resetLocal}
+      {canUndo}
+      {canRedo}
+      {undoLabel}
+      {redoLabel}
+      onUndo={undoEncounter}
+      onRedo={redoEncounter}
+    />
+  </div>
+
   <EncounterDifficultyMeter summary={xpSummary} />
 
-  <section class="workspace">
+  <section class="workspace" class:workspace--library-closed={!libraryOpen}>
+    {#if !libraryOpen}
+      <button
+        type="button"
+        class="library-reopen"
+        onclick={() => (libraryOpen = true)}
+      >Library / Add Reinforcement</button>
+    {/if}
+    {#if libraryOpen}
     <div class="workspace__library">
+      {#if encounter.phase === 'ACTIVE' || encounter.phase === 'RESOLVING'}
+        <button type="button" class="library-collapse" onclick={() => (libraryOpen = false)}>
+          Collapse library
+        </button>
+      {/if}
       <LibraryPane
         {canStart}
         creatures={availableCreatures}
@@ -1067,8 +1270,28 @@
         onReset={resetLocal}
       />
     </div>
+    {/if}
 
     <section class="workspace__track" aria-label="Combatants">
+      {#if encounter.phase === 'PREPARING' && orderedCombatants.length === 0 && unorderedCombatants.length === 0}
+        <div class="first-run" aria-labelledby="first-run-title">
+          <h2 id="first-run-title">Build your first encounter</h2>
+          <p>Import prepared creatures from tracker YAML or Foundry actor JSON, create a quick custom combatant, or restore a complete encounter YAML file.</p>
+          <div class="first-run__actions">
+            <button type="button" onclick={() => (libraryOpen = true)}>Import Creatures</button>
+            <button type="button" onclick={() => (libraryOpen = true)}>Create Custom Combatant</button>
+            <button type="button" onclick={openEncounterImport}>Import Encounter</button>
+          </div>
+          <p class="first-run__note">Add party members for encounter-difficulty calculation. Library management remains available in the left pane.</p>
+        </div>
+      {/if}
+      {#if encounter.phase === 'COMPLETED'}
+        <div class="completed-notice" role="status">
+          <strong>Encounter completed.</strong>
+          This is a read-only review of the final table state. Prepare a rematch to reset combatants
+          and return to setup.
+        </div>
+      {/if}
       {#if unorderedCombatants.length > 0}
         <div class="not-yet-rolled" aria-label="Not yet rolled">
           <h3>Not yet rolled</h3>
@@ -1109,6 +1332,9 @@
             onMove={moveCombatant}
             onSelect={selectCombatant}
             onRequestRadial={openRadial}
+            onManageEffects={(id) => openEffectModal(id, 'applied')}
+            onRequestRemove={requestRemoveCombatant}
+            showShortcutHint={index === 0}
             initiativeScore={encounter.initiative.scores[combatant.id]}
             onSetInitiative={setInitiativeScore}
             isFirst={index === 0}
@@ -1126,6 +1352,10 @@
     <aside class="workspace__details">
       <CombatantDetailsPanel
         combatant={selectedCombatant}
+        pinned={selection.pinned}
+        readOnly={encounter.phase === 'COMPLETED'}
+        onFollowActive={followActiveDetails}
+        onClose={closeDetails}
         onSetNote={setNote}
         onRollAttack={rollAttackFor}
         onRollDamage={rollDamageFor}
@@ -1144,10 +1374,23 @@
     </aside>
 
     <section class="workspace__log">
-      <CombatLogDrawer entries={drawerEntries} />
+      <CombatLogDrawer entries={drawerEntries} bind:open={logOpen} />
     </section>
   </section>
 </main>
+
+<input
+  bind:this={encounterImportInput}
+  class="visually-hidden"
+  type="file"
+  accept=".yaml,.yml,application/yaml,text/yaml"
+  aria-label="Choose encounter YAML"
+  onchange={(event) => {
+    const input = event.currentTarget;
+    void handleEncounterImport(Array.from(input.files ?? []));
+    input.value = '';
+  }}
+/>
 
 {#if radialOpen && radialCombatant}
   <RadialConditionMenu
@@ -1163,6 +1406,46 @@
     onRemove={radialRemoveCombatant}
     onClose={closeRadial}
   />
+{/if}
+
+{#if removeConfirmation}
+  <Modal
+    title={`Remove ${removeConfirmation.name}?`}
+    titleId="remove-combatant-title"
+    descriptionId="remove-combatant-description"
+    onClose={() => (removeConfirmation = null)}
+  >
+    <p id="remove-combatant-description">
+      Remove this combatant from the encounter and initiative order? You can undo this action during
+      this session.
+    </p>
+    <svelte:fragment slot="footer">
+      <button type="button" data-modal-default onclick={() => (removeConfirmation = null)}>Keep Combatant</button>
+      <button type="button" class="modal-destructive" onclick={confirmRemoveCombatant}>Remove Combatant</button>
+    </svelte:fragment>
+  </Modal>
+{/if}
+
+{#if pendingEncounterImport}
+  <Modal
+    title="Replace current encounter?"
+    titleId="replace-encounter-title"
+    descriptionId="replace-encounter-description"
+    onClose={() => (pendingEncounterImport = null)}
+  >
+    <p id="replace-encounter-description">
+      Importing “{pendingEncounterImport.fileName}” replaces the current encounter and combat log.
+      Your creature, hazard, and party libraries remain.
+    </p>
+    <svelte:fragment slot="footer">
+      <button type="button" data-modal-default onclick={() => (pendingEncounterImport = null)}>Keep Current</button>
+      <button
+        type="button"
+        class="modal-destructive"
+        onclick={() => acceptEncounterImport(pendingEncounterImport!.state, pendingEncounterImport!.fileName)}
+      >Replace Encounter</button>
+    </svelte:fragment>
+  </Modal>
 {/if}
 
 {#each bubbles as bubble (bubble.id)}
@@ -1213,8 +1496,53 @@
     align-items: start;
   }
 
+  .shell__header {
+    max-width: 1440px;
+    margin: 0 auto var(--space-3);
+  }
+
   .workspace__library {
     grid-area: library;
+  }
+
+  .workspace--library-closed {
+    grid-template-columns: minmax(460px, 1fr) minmax(300px, 380px);
+    grid-template-areas:
+      'track details'
+      'log   log';
+  }
+
+  .library-reopen {
+    position: fixed;
+    left: var(--space-2);
+    top: 50%;
+    z-index: 10;
+    min-height: var(--tap-target-min);
+    padding: var(--space-2);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 700;
+    writing-mode: vertical-rl;
+    cursor: pointer;
+  }
+
+  .library-collapse {
+    width: 100%;
+    min-height: 38px;
+    margin-bottom: var(--space-2);
+    border: var(--border-strong);
+    background: var(--color-panel);
+    color: var(--color-ink);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  :global(.modal-destructive) {
+    border-color: var(--color-red);
+    background: var(--color-red);
+    color: var(--color-panel-up);
   }
 
   .workspace__track {
@@ -1239,6 +1567,64 @@
   .cards {
     display: grid;
     gap: 10px;
+  }
+
+  .completed-notice {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-green);
+    background: var(--color-green-soft);
+    color: var(--color-ink);
+  }
+
+  .first-run {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    border: 1px dashed var(--color-rule-strong);
+    background: var(--color-panel);
+    text-align: center;
+  }
+
+  .first-run h2,
+  .first-run p {
+    margin: 0;
+  }
+
+  .first-run h2 {
+    font-family: var(--font-serif);
+    font-size: var(--text-xl);
+  }
+
+  .first-run__actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .first-run__actions button {
+    min-height: var(--tap-target-min);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .first-run__note {
+    color: var(--color-ink-soft);
+    font-size: var(--text-sm);
+  }
+
+  .visually-hidden {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .initiative-bar {
@@ -1319,6 +1705,14 @@
       position: static;
       max-height: none;
       overflow: visible;
+    }
+
+    .workspace--library-closed {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'track'
+        'details'
+        'log';
     }
   }
 

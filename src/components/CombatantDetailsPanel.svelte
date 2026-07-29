@@ -21,6 +21,10 @@
   type SaveKey = 'fortitude' | 'reflex' | 'will';
 
   export let combatant: CombatantState | undefined;
+  export let pinned = false;
+  export let readOnly = false;
+  export let onFollowActive: () => void = () => {};
+  export let onClose: () => void = () => {};
   export let onSetNote: (combatantId: string, note: string | null) => void;
   export let onRollAttack: (
     combatantId: string,
@@ -111,6 +115,14 @@
   {#if !combatant}
     <p class="empty-state">Select a combatant to see details.</p>
   {:else}
+    <div class="details__mode">
+      <span>{pinned ? 'Pinned details' : 'Following active turn'}</span>
+      <div>
+        {#if pinned}<button type="button" onclick={onFollowActive}>Follow active turn</button>{/if}
+        <button type="button" aria-label="Close combatant details" onclick={onClose}>Close</button>
+      </div>
+    </div>
+    <div inert={readOnly ? true : undefined} class:details__readonly={readOnly}>
     <header class="details__header">
       <div class="details__title">
         <h2>{combatant.name}</h2>
@@ -305,6 +317,7 @@
         onCommit={(note) => onSetNote(combatant.id, note)}
       />
     </section>
+    </div>
   {/if}
 </aside>
 
@@ -327,6 +340,47 @@
     color: var(--color-ink-mute);
     font-size: var(--text-base);
     font-style: italic;
+  }
+
+  .details__mode {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-height: var(--tap-target-min);
+    padding: var(--space-1) var(--space-3);
+    border-bottom: var(--border-thin);
+    background: var(--color-panel-up);
+    color: var(--color-ink-soft);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+  }
+
+  .details__mode > div {
+    display: flex;
+    gap: var(--space-1);
+  }
+
+  .details__mode button {
+    min-height: 32px;
+    border: var(--border-strong);
+    background: transparent;
+    color: var(--color-ink);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .details__readonly {
+    opacity: 0.82;
+  }
+
+  @media (pointer: coarse), (max-width: 1024px) {
+    .details__mode button,
+    .details__adjustment-opt {
+      min-height: var(--tap-target-min);
+    }
   }
 
   .details__header {

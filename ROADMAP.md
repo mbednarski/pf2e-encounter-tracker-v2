@@ -47,11 +47,11 @@ Track A. Order: effect handlers first, then derived stacking, then prompts.
 
 Track C. Order: encounter persistence first so other persistence work can reuse the storage helper.
 
-- [ ] Add IndexedDB persistence for active encounter state. (Issue #13.)
-- [ ] Add YAML envelope import/export. (Issue #14.)
-- [ ] Add creature import validation. (Issue #14 covers schema; per-document validation is part of that slice.)
-- [ ] Add settings storage for user-owned parser API keys. (Issue #47. Depends on #13.)
-- [ ] Replace hardcoded creature library with import-driven storage. (Issue #48. Depends on #14.)
+- [x] Add IndexedDB persistence for active encounter state, including PREPARING, ACTIVE, RESOLVING, and COMPLETED recovery. (Issue #13.)
+- [x] Add YAML envelope parsing and validated encounter import/export. (Issue #14.)
+- [x] Add creature, hazard, party-member, and encounter import validation with field-path issues.
+- [x] Add settings storage for user-owned parser API keys. (Issue #47.)
+- [x] Replace the hardcoded creature library with import-driven IndexedDB storage. (Issue #48.)
 
 ## M5 Combat UI
 
@@ -64,20 +64,30 @@ Track B. Slice numbering follows the umbrella issues #15 (combat screen) and #16
 - [x] Slice 4 — combatant notes UI inside details panel. (Issue #40.)
 - [x] Slice 5 — per-card HP delta controls. (Issue #39.)
 - [x] Slice 6 — dead/unconscious visual state. (Issue #43.)
-- [ ] Slice 7 — tablet-first responsive layout pass. (Issue #44.)
-- [ ] Slice 8 — append-only combat log component. (Issue #41.)
-- [ ] Slice 9 — prompt resolution panel. (Issue #46. Depends on #12.)
+- [x] Slice 7 — tablet-first responsive layout, 44px touch targets, and active-workspace collapse behavior. (Issue #44.)
+- [x] Slice 8 — append-only combat log component with undone-entry audit markers. (Issue #41.)
+- [x] Slice 9 — prompt resolution panel. (Issue #46. Depends on #12.)
 - [x] Slice 10 — conditions UI on combatant cards. (Issue #45.)
 - [ ] Manual static Cloudflare Pages deployment verification.
 
-## M6 Spellcasting (deferred)
+## M6 Spellcasting
 
-Tracking only. Captured in issue #49. Domain commands are stubbed in `src/domain/types.ts` but not wired in `applyCommand`.
+Usage tracking and the encounter details UI are implemented. Direct bulk/set/reset editing remains deferred.
 
-- [ ] Wire `USE_SPELL_SLOT`, `RESTORE_SPELL_SLOT`, `SET_SPELL_SLOT_USAGE`, and `RESET_SPELL_BLOCK`.
-- [ ] Wire `USE_FOCUS_POINT`, `RESTORE_FOCUS_POINT`, `SET_FOCUS_USAGE`.
-- [ ] Wire `USE_INNATE_SPELL`, `RESTORE_INNATE_SPELL`, `SET_INNATE_USAGE`.
-- [ ] Add spellcasting block UI on combatant cards.
+- [x] Wire `USE_SPELL_SLOT` and `RESTORE_SPELL_SLOT`; defer `SET_SPELL_SLOT_USAGE` and `RESET_SPELL_BLOCK`.
+- [x] Wire `USE_FOCUS_POINT` and `RESTORE_FOCUS_POINT`; defer `SET_FOCUS_USAGE`.
+- [x] Wire `USE_INNATE_SPELL` and `RESTORE_INNATE_SPELL`; defer `SET_INNATE_USAGE`.
+- [x] Add spellcasting block UI in combatant details.
+
+## Table-Session UI Milestone
+
+- [x] Delay is manual and legacy delayed combatants migrate without silent loss.
+- [x] Discard is confirmed; completion, read-only review, rematch, and start-new are distinct.
+- [x] Fifty-frame undo/redo covers accepted encounter commands and retains a readable audit trail.
+- [x] Tablet layouts prioritize combat, expose reinforcement/library access, and use 44px frequent-action targets.
+- [x] Effects and removal have visible routes; card and pinned-details semantics are keyboard-readable.
+- [x] Encounter YAML supports preparation, archival, transfer, validation, and confirmed replacement.
+- [x] First-run guidance and real-browser desktop/landscape/portrait workflows protect the primary table loop.
 
 ## M7 Complex Hazards
 
