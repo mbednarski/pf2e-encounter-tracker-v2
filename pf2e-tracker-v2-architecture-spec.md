@@ -234,7 +234,6 @@ This is the single entry point for all state mutations. It is a pure function. T
 interface InitiativeState {
   order: CombatantId[]          // sorted sequence of combatant IDs
   currentIndex: number          // pointer into order — whose turn it is
-  delaying: CombatantId[]       // combatants currently delaying
 }
 ```
 
@@ -242,7 +241,7 @@ interface InitiativeState {
 
 - Initiative is a manually-orderable list. The GM sets initial order (typically by rolling), and can drag-reorder at any time.
 - **Turn advancement:** `END_TURN` triggers turn-end processing and then moves `currentIndex` forward. When it wraps past the end, `round` increments.
-- **Delay:** Combatant is moved from `order` to `delaying`. Pointer advances to next combatant. When the delaying combatant re-enters, they are inserted at the chosen position in `order`.
+- **Delay:** The GM represents Delay manually by reordering initiative. The tracker does not automate its timing or effect-boundary semantics.
 - **Ready:** Not an initiative mutation. The combatant's turn is spent normally; they gain a "readied action" effect (reminder-only).
 - **Death/removal:** Combatant can be marked dead but remains in order (greyed out, skipped). Alternatively removed entirely. GM's choice.
 - **Joining mid-combat:** New combatant inserted at the appropriate position in `order`.
@@ -623,7 +622,7 @@ The complete command vocabulary is canonical in `pf2e-command-vocabulary-spec.md
 `ADD_COMBATANT`, `REMOVE_COMBATANT`, `RENAME_COMBATANT`
 
 ### 16.3 Initiative
-`SET_INITIATIVE_ORDER`, `REORDER_COMBATANT`, `END_TURN`, `DELAY`, `RESUME_FROM_DELAY`
+`SET_INITIATIVE_ORDER`, `REORDER_COMBATANT`, `END_TURN`
 
 ### 16.4 HP & Damage
 `APPLY_DAMAGE`, `APPLY_HEALING`, `SET_TEMP_HP`, `SET_HP`

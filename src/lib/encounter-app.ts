@@ -71,7 +71,6 @@ export function newEncounterState(): EncounterState {
     initiative: {
       order: [],
       currentIndex: -1,
-      delaying: [],
       scores: {}
     },
     combatants: {},

@@ -35,8 +35,6 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   SET_INITIATIVE_SCORES: ['PREPARING'],
   REORDER_COMBATANT: ['PREPARING', 'ACTIVE'],
   END_TURN: ['ACTIVE'],
-  DELAY: ['ACTIVE'],
-  RESUME_FROM_DELAY: ['ACTIVE'],
   APPLY_DAMAGE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   APPLY_HEALING: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   SET_TEMP_HP: ['PREPARING', 'ACTIVE', 'RESOLVING'],
@@ -84,10 +82,6 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
       return startEncounter(state, effectLibrary);
     case 'END_TURN':
       return endTurn(state, effectLibrary);
-    case 'DELAY':
-      return delayTurn(state, effectLibrary);
-    case 'RESUME_FROM_DELAY':
-      return resumeFromDelay(state, command.payload.combatantId, command.payload.insertIndex, effectLibrary);
     case 'COMPLETE_ENCOUNTER':
       return completeEncounter(state);
     case 'RESET_ENCOUNTER':
@@ -199,7 +193,6 @@ function removeCombatant(state: EncounterState, combatantId: CombatantId): Comma
 
   const removedIndex = state.initiative.order.indexOf(combatantId);
   const newOrder = state.initiative.order.filter((id) => id !== combatantId);
-  const newDelaying = state.initiative.delaying.filter((id) => id !== combatantId);
 
   let newCurrentIndex = state.initiative.currentIndex;
   if (state.phase === 'ACTIVE' && removedIndex !== -1) {
@@ -216,7 +209,6 @@ function removeCombatant(state: EncounterState, combatantId: CombatantId): Comma
     initiative: {
       ...state.initiative,
       order: newOrder,
-      delaying: newDelaying,
       currentIndex: newCurrentIndex
     }
   };
@@ -732,91 +724,6 @@ function findNextLiveTurnFrom(
   return undefined;
 }
 
-function delayTurn(state: EncounterState, effectLibrary: EffectLibrary): CommandResult {
-  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
-  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
-    return reject(state, 'DELAY', 'DELAY requires a valid current combatant');
-  }
-
-  const nextOrder = state.initiative.order.filter((combatantId) => combatantId !== currentCombatantId);
-  const stateWithDelay: EncounterState = {
-    ...state,
-    initiative: {
-      ...state.initiative,
-      order: nextOrder,
-      delaying: [...state.initiative.delaying, currentCombatantId]
-    }
-  };
-  return advanceAfterTurnEnd(
-    stateWithDelay,
-    currentCombatantId,
-    [
-      { type: 'turn-ended', combatantId: currentCombatantId },
-      { type: 'combatant-delayed', combatantId: currentCombatantId }
-    ],
-    effectLibrary,
-    'DELAY',
-    state.initiative.currentIndex
-  );
-}
-
-function resumeFromDelay(
-  state: EncounterState,
-  combatantId: CombatantId,
-  insertIndex: number,
-  effectLibrary: EffectLibrary
-): CommandResult {
-  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
-  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
-    return reject(state, 'RESUME_FROM_DELAY', 'RESUME_FROM_DELAY requires a valid current combatant');
-  }
-
-  const resumingCombatant = state.combatants[combatantId];
-  if (!resumingCombatant) {
-    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} not found`);
-  }
-
-  if (!state.initiative.delaying.includes(combatantId)) {
-    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} is not delaying`);
-  }
-
-  if (!resumingCombatant.isAlive) {
-    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} is not alive`);
-  }
-
-  if (!Number.isInteger(insertIndex) || insertIndex < 0 || insertIndex > state.initiative.order.length) {
-    return reject(
-      state,
-      'RESUME_FROM_DELAY',
-      `RESUME_FROM_DELAY insertIndex must be between 0 and ${state.initiative.order.length}`
-    );
-  }
-
-  const nextOrder = [...state.initiative.order];
-  nextOrder.splice(insertIndex, 0, combatantId);
-
-  const stateWithResume: EncounterState = {
-    ...state,
-    initiative: {
-      ...state.initiative,
-      order: nextOrder,
-      delaying: state.initiative.delaying.filter((delayingCombatantId) => delayingCombatantId !== combatantId)
-    }
-  };
-
-  return advanceAfterTurnEnd(
-    stateWithResume,
-    currentCombatantId,
-    [
-      { type: 'turn-ended', combatantId: currentCombatantId },
-      { type: 'combatant-resumed-from-delay', combatantId, insertIndex }
-    ],
-    effectLibrary,
-    'RESUME_FROM_DELAY',
-    insertIndex
-  );
-}
-
 function resetEncounter(state: EncounterState): CommandResult {
   const resetCombatants = Object.fromEntries(
     Object.entries(state.combatants).map(([combatantId, combatant]) => [
@@ -837,7 +744,7 @@ function resetEncounter(state: EncounterState): CommandResult {
       ...state,
       phase: 'PREPARING',
       round: 0,
-      initiative: { order: [], currentIndex: -1, delaying: [], scores: {} },
+      initiative: { order: [], currentIndex: -1, scores: {} },
       combatants: resetCombatants,
       pendingPrompts: [],
       combatLog: [],

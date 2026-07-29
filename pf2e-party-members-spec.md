@@ -444,7 +444,6 @@ REMOVE_COMBATANT, APPLY_DAMAGE, APPLY_EFFECT, etc. all work identically regardle
 
 - A combatant with `masterId` must reference an existing combatant in the same encounter
 - A combatant with `masterId` cannot be placed in `initiative.order` — SET_INITIATIVE_ORDER and REORDER_COMBATANT reject minion IDs
-- DELAY and RESUME_FROM_DELAY reject minion IDs — minions can't delay independently
 
 ---
 
@@ -516,7 +515,7 @@ Sync-back must complete before the next encounter can pull party data. The orche
 
 - Turn boundary processing includes minions of the current combatant
 - REMOVE_COMBATANT cascades to minions
-- SET_INITIATIVE_ORDER / REORDER_COMBATANT / DELAY / RESUME_FROM_DELAY reject minion combatant IDs
+- SET_INITIATIVE_ORDER / REORDER_COMBATANT reject minion combatant IDs
 - Hard clock expirations process minion effects anchored to master
 
 ### 10.6 Built-in Effects — persistAfterEncounter Flag

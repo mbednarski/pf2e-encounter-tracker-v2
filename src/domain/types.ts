@@ -5,7 +5,6 @@ export type EncounterPhase = 'PREPARING' | 'ACTIVE' | 'RESOLVING' | 'COMPLETED';
 export interface InitiativeState {
   order: CombatantId[];
   currentIndex: number;
-  delaying: CombatantId[];
   scores: Record<CombatantId, number>;
 }
 
@@ -461,8 +460,6 @@ export type Command =
   | BaseCommand<'SET_INITIATIVE_SCORES', { scores: Record<CombatantId, number | null> }>
   | BaseCommand<'REORDER_COMBATANT', { combatantId: CombatantId; newIndex: number }>
   | BaseCommand<'END_TURN', Record<string, never>>
-  | BaseCommand<'DELAY', Record<string, never>>
-  | BaseCommand<'RESUME_FROM_DELAY', { combatantId: CombatantId; insertIndex: number }>
   | BaseCommand<'APPLY_DAMAGE', { combatantId: CombatantId; amount: number; damageType?: string }>
   | BaseCommand<'APPLY_HEALING', { combatantId: CombatantId; amount: number }>
   | BaseCommand<'SET_TEMP_HP', { combatantId: CombatantId; amount: number }>
@@ -504,8 +501,6 @@ export type CommandType =
   | 'SET_INITIATIVE_SCORES'
   | 'REORDER_COMBATANT'
   | 'END_TURN'
-  | 'DELAY'
-  | 'RESUME_FROM_DELAY'
   | 'APPLY_DAMAGE'
   | 'APPLY_HEALING'
   | 'SET_TEMP_HP'
@@ -546,8 +541,6 @@ export type DomainEvent =
   | { type: 'initiative-set'; order: CombatantId[] }
   | { type: 'initiative-changed'; combatantId: CombatantId; newIndex: number }
   | { type: 'initiative-scores-changed'; scores: Record<CombatantId, number | null>; order: CombatantId[] }
-  | { type: 'combatant-delayed'; combatantId: CombatantId }
-  | { type: 'combatant-resumed-from-delay'; combatantId: CombatantId; insertIndex: number }
   | { type: 'turn-started'; combatantId: CombatantId; round: number }
   | { type: 'turn-ended'; combatantId: CombatantId }
   | { type: 'combatant-died'; combatantId: CombatantId; cause: 'marked-dead' | 'dying-threshold' }
