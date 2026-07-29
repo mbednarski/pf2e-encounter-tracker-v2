@@ -11,6 +11,7 @@ export {
   type PartyMemberSkippedDocument
 } from './party-member-import';
 export {
+  encounterExportFilename,
   ENCOUNTER_SCHEMA_VERSION,
   exportEncounterYaml,
   importEncounterYaml,

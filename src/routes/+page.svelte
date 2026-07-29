@@ -80,6 +80,7 @@
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
   import {
+    encounterExportFilename,
     exportEncounterYaml,
     importCreatureYaml,
     importEncounterYaml,
@@ -784,7 +785,10 @@
 
   function prepareRematch() {
     if (encounter.phase !== 'COMPLETED') return;
+    const rosterOrder = [...encounter.initiative.order];
     runCommand(toCommand('RESET_ENCOUNTER', undefined, nextCommandId()));
+    runCommand(toCommand('SET_INITIATIVE_ORDER', { order: rosterOrder }, nextCommandId()));
+    libraryOpen = true;
   }
 
   function exportEncounter() {
@@ -792,9 +796,8 @@
     const blob = new Blob([yaml], { type: 'application/yaml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    const slug = encounter.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'encounter';
     anchor.href = url;
-    anchor.download = `${slug}.encounter.yaml`;
+    anchor.download = encounterExportFilename(encounter.name);
     anchor.click();
     URL.revokeObjectURL(url);
     appendFeedback(nextFeedbackId('encounter-export'), `Exported ${encounter.name}.`, 'success');
