@@ -31,7 +31,7 @@
   export let onSavePartyMember: (partyMember: PartyMember) => void;
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
-  export let onReset: () => void;
+  export let onReset: () => Promise<boolean>;
 
   let manageOpen = false;
 

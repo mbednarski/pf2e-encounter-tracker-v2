@@ -179,6 +179,11 @@
       appendFeedback(
         nextFeedbackId('persist-fail'),
         'Auto-save is unavailable. Your encounter will not survive a reload. (Common causes: private-browsing mode, full storage, or another tab using a newer version.)'
+      ),
+    onClearFailed: () =>
+      appendFeedback(
+        nextFeedbackId('discard-fail'),
+        'Could not discard the saved encounter. Your current encounter is still open; try again before reloading.'
       )
   });
 
@@ -1014,14 +1019,15 @@
     selection = pickCombatant(selection, id);
   }
 
-  function resetLocal() {
+  async function resetLocal(): Promise<boolean> {
+    if (!(await persistence.reset())) return false;
     encounter = newEncounterState();
     feedback = [];
     commandCounter = 1;
     combatantCounter = 1;
     feedbackCounter = 1;
     selection = emptySelection;
-    persistence.reset();
+    return true;
   }
 </script>
 
