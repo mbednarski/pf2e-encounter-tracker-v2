@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import type { AppliedEffect, CombatantState, PartyMember } from '../domain';
+import type { AppliedEffect, CombatantState, Companion, PartyMember } from '../domain';
 import { effectLibrary } from '../domain/effects/library';
 import { combatant } from '../domain/test-support';
-import { syncPartyMembersAfterEncounter } from './party-sync';
+import { syncCompanionsAfterEncounter, syncPartyMembersAfterEncounter } from './party-sync';
 
 function member(overrides: Partial<PartyMember> = {}): PartyMember {
   return {
@@ -78,5 +78,58 @@ describe('syncPartyMembersAfterEncounter', () => {
       effectLibrary
     );
     expect(stored.persistentEffects).toEqual([]);
+  });
+});
+
+function companionRecord(overrides: Partial<Companion> = {}): Companion {
+  return {
+    id: 'fang',
+    name: 'Fang',
+    type: 'animal-companion',
+    masterId: 'lyra',
+    level: 5,
+    ac: 21,
+    fortitude: 11,
+    reflex: 12,
+    will: 9,
+    perception: 10,
+    hp: 60,
+    speed: { land: 35 },
+    attacks: [],
+    persistentEffects: [],
+    tags: [],
+    ...overrides
+  };
+}
+
+describe('syncCompanionsAfterEncounter', () => {
+  test('writes surviving effects back to the matching companion record', () => {
+    const updated = syncCompanionsAfterEncounter(
+      {
+        'fang-1': combatant('fang-1', {
+          sourceType: 'companion',
+          sourceId: 'fang',
+          appliedEffects: [wounded]
+        })
+      },
+      [companionRecord()],
+      effectLibrary
+    );
+
+    expect(updated).toHaveLength(1);
+    expect(updated[0].persistentEffects.map((e) => e.effectId)).toEqual(['wounded']);
+  });
+
+  test('ignores party-member combatants and unknown companion ids', () => {
+    const updated = syncCompanionsAfterEncounter(
+      {
+        'pc-1': combatant('pc-1', { sourceType: 'partyMember', sourceId: 'lyra', appliedEffects: [wounded] }),
+        'ghost-1': combatant('ghost-1', { sourceType: 'companion', sourceId: 'deleted', appliedEffects: [wounded] })
+      },
+      [companionRecord()],
+      effectLibrary
+    );
+
+    expect(updated).toEqual([]);
   });
 });

@@ -1,18 +1,15 @@
 import type { AppliedEffect, Duration, PartyMember } from '../../domain';
 import type { ValidationIssue } from './envelope';
+// Reuse the creature validator's IssueBag: the class carries a private field,
+// so TypeScript treats separately declared copies as incompatible nominal
+// types and helpers could not be shared across validator modules.
+import { IssueBag } from './creature-validator';
+
+export { IssueBag };
 
 export type ParseOutcome<T> =
   | { ok: true; value: T; issues: ValidationIssue[] }
   | { ok: false; issues: ValidationIssue[] };
-
-class IssueBag {
-  readonly issues: ValidationIssue[] = [];
-  constructor(private readonly documentIndex: number) {}
-
-  add(path: string, message: string): void {
-    this.issues.push({ documentIndex: this.documentIndex, path, message });
-  }
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -22,7 +19,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === 'string');
 }
 
-function requireNumber(bag: IssueBag, path: string, value: unknown): number | null {
+export function requireNumber(bag: IssueBag, path: string, value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     bag.add(path, 'must be a finite number');
     return null;
@@ -30,7 +27,7 @@ function requireNumber(bag: IssueBag, path: string, value: unknown): number | nu
   return value;
 }
 
-function requireNonNegativeNumber(bag: IssueBag, path: string, value: unknown): number | null {
+export function requireNonNegativeNumber(bag: IssueBag, path: string, value: unknown): number | null {
   const n = requireNumber(bag, path, value);
   if (n === null) return null;
   if (n < 0) {
@@ -40,7 +37,7 @@ function requireNonNegativeNumber(bag: IssueBag, path: string, value: unknown): 
   return n;
 }
 
-function requireString(bag: IssueBag, path: string, value: unknown): string | null {
+export function requireString(bag: IssueBag, path: string, value: unknown): string | null {
   if (typeof value !== 'string') {
     bag.add(path, 'must be a string');
     return null;
@@ -48,7 +45,7 @@ function requireString(bag: IssueBag, path: string, value: unknown): string | nu
   return value;
 }
 
-function requireNonEmptyString(bag: IssueBag, path: string, value: unknown): string | null {
+export function requireNonEmptyString(bag: IssueBag, path: string, value: unknown): string | null {
   const s = requireString(bag, path, value);
   if (s === null) return null;
   if (s.trim() === '') {
@@ -58,7 +55,7 @@ function requireNonEmptyString(bag: IssueBag, path: string, value: unknown): str
   return s;
 }
 
-function requireStringArray(bag: IssueBag, path: string, value: unknown): string[] | null {
+export function requireStringArray(bag: IssueBag, path: string, value: unknown): string[] | null {
   if (!isStringArray(value)) {
     bag.add(path, 'must be an array of strings');
     return null;
@@ -66,7 +63,7 @@ function requireStringArray(bag: IssueBag, path: string, value: unknown): string
   return value;
 }
 
-function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | null {
+export function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | null {
   if (!Array.isArray(value)) {
     bag.add(path, 'must be an array');
     return null;
@@ -74,7 +71,7 @@ function requireArray(bag: IssueBag, path: string, value: unknown): unknown[] | 
   return value;
 }
 
-function requireObject(bag: IssueBag, path: string, value: unknown): Record<string, unknown> | null {
+export function requireObject(bag: IssueBag, path: string, value: unknown): Record<string, unknown> | null {
   if (!isPlainObject(value)) {
     bag.add(path, 'must be a mapping (object)');
     return null;
@@ -82,7 +79,7 @@ function requireObject(bag: IssueBag, path: string, value: unknown): Record<stri
   return value;
 }
 
-function validateRecordOfNumbers(
+export function validateRecordOfNumbers(
   bag: IssueBag,
   path: string,
   value: unknown
@@ -102,7 +99,7 @@ function validateRecordOfNumbers(
   return ok ? out : null;
 }
 
-function validateTypedValueArray(
+export function validateTypedValueArray(
   bag: IssueBag,
   path: string,
   raw: unknown
@@ -155,7 +152,7 @@ function validateDuration(bag: IssueBag, path: string, raw: unknown): Duration |
   }
 }
 
-function validatePersistentEffect(bag: IssueBag, path: string, raw: unknown): AppliedEffect | null {
+export function validatePersistentEffect(bag: IssueBag, path: string, raw: unknown): AppliedEffect | null {
   const obj = requireObject(bag, path, raw);
   if (!obj) return null;
   let ok = true;

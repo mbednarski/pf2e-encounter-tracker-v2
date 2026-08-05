@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Creature, EffectDefinition, Hazard, PartyMember } from '../domain';
+  import type { Companion, Creature, EffectDefinition, Hazard, PartyMember } from '../domain';
   import type {
     ConditionOption,
     ManualCombatantInput,
@@ -31,8 +31,10 @@
   export let onImportSpellEffectFiles: ((files: File[]) => void) | undefined = undefined;
   export let onLoadSampleSpellEffects: (() => void) | undefined = undefined;
   export let onRemoveSpellEffect: (id: string) => void = () => {};
+  export let companions: Companion[] = [];
   export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
   export let onRemovePartyMember: (id: string) => void;
+  export let onRemoveCompanion: (id: string) => void = () => {};
   export let onSavePartyMember: (partyMember: PartyMember) => void;
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
@@ -77,9 +79,11 @@
   />
   <PartySection
     {partyMembers}
+    {companions}
     {conditionOptions}
     {onAddPartyMemberToEncounter}
     {onRemovePartyMember}
+    {onRemoveCompanion}
     {onSavePartyMember}
     {onImportPartyMemberYamlFiles}
   />
