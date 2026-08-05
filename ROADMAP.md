@@ -101,7 +101,8 @@ Usage tracking and the encounter details UI are implemented. Direct bulk/set/res
 Issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entities.
 
 - [x] Persistent-effect sync-back on encounter completion (spec §4.5): Wounded/Doomed/afflictions written back to the stored record and carried into the next encounter.
-- [ ] Companions and minion combatants (`masterId` turn-boundary processing, initiative exclusion, removal cascade).
+- [x] Companion domain model and minion combat rules: `Companion` type, combatant factory, `masterId` validation, initiative exclusion, removal cascade, and turn-boundary processing at the master's turn (spec §2.3, §4.4, §8.4, §9.1).
+- [ ] Companion storage/import and UI grouping under the master's card.
 - [ ] Parties and one-click "Add Party" encounter setup.
 
 ## Deferred milestones

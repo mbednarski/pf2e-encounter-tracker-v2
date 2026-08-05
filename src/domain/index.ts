@@ -1,6 +1,6 @@
 export { applyCommand } from './reducer';
 export { createCombatantFromCreature } from './creatures/clone';
-export { createCombatantFromPartyMember } from './party/factory';
+export { createCombatantFromPartyMember, createCombatantFromCompanion } from './party/factory';
 export { extractPersistentEffects } from './party/sync';
 export { createCombatantFromHazard } from './hazards/factory';
 export { applyEliteWeak, adjustedLevel } from './creatures/templates';

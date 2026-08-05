@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import type { PartyMember } from '../types';
+import type { Companion, PartyMember } from '../types';
 import { expectSerializable } from '../test-support';
-import { createCombatantFromPartyMember } from './factory';
+import { createCombatantFromCompanion, createCombatantFromPartyMember } from './factory';
 
 function partyMember(overrides: Partial<PartyMember> = {}): PartyMember {
   return {
@@ -192,5 +192,100 @@ describe('createCombatantFromPartyMember', () => {
       combatantId: 'lyra-1'
     });
     expectSerializable(combatant);
+  });
+});
+
+function companion(overrides: Partial<Companion> = {}): Companion {
+  return {
+    id: 'fang',
+    name: 'Fang',
+    type: 'animal-companion',
+    masterId: 'lyra',
+    level: 5,
+    ac: 21,
+    fortitude: 11,
+    reflex: 12,
+    will: 9,
+    perception: 10,
+    hp: 60,
+    speed: { land: 35 },
+    attacks: [],
+    persistentEffects: [],
+    tags: [],
+    ...overrides
+  };
+}
+
+describe('createCombatantFromCompanion', () => {
+  test('produces a minion combatant wired to the master combatant id', () => {
+    const result = createCombatantFromCompanion({
+      companion: companion(),
+      combatantId: 'fang-1',
+      masterCombatantId: 'lyra-1'
+    });
+
+    expect(result).toMatchObject({
+      id: 'fang-1',
+      sourceId: 'fang',
+      sourceType: 'companion',
+      name: 'Fang',
+      masterId: 'lyra-1',
+      currentHp: 60,
+      isAlive: true,
+      baseSnapshot: expect.objectContaining({ level: 5, ac: 21, speed: 35 })
+    });
+    expectSerializable(result);
+  });
+
+  test('omits masterId for a companion fighting without its master (spec §9.2)', () => {
+    const result = createCombatantFromCompanion({
+      companion: companion(),
+      combatantId: 'fang-1'
+    });
+
+    expect(result.masterId).toBeUndefined();
+  });
+
+  test('expands persistent effects onto the combatant', () => {
+    const result = createCombatantFromCompanion({
+      companion: companion({
+        persistentEffects: [
+          { instanceId: 'w-1', effectId: 'wounded', value: 1, duration: { type: 'unlimited' } }
+        ]
+      }),
+      combatantId: 'fang-1',
+      masterCombatantId: 'lyra-1'
+    });
+
+    expect(result.appliedEffects).toEqual([
+      {
+        instanceId: 'w-1',
+        effectId: 'wounded',
+        value: 1,
+        sourceId: 'fang-1',
+        duration: { type: 'unlimited' }
+      }
+    ]);
+  });
+
+  test('deep-clones attacks so combatant mutation cannot reach the record', () => {
+    const source = companion({
+      attacks: [
+        {
+          name: 'Jaws',
+          type: 'melee',
+          modifier: 13,
+          traits: ['finesse'],
+          damage: [{ dice: 2, dieSize: 6, bonus: 5, type: 'piercing' }]
+        }
+      ]
+    });
+    const result = createCombatantFromCompanion({
+      companion: source,
+      combatantId: 'fang-1',
+      masterCombatantId: 'lyra-1'
+    });
+    result.attacks[0].name = 'Mutated';
+    expect(source.attacks[0].name).toBe('Jaws');
   });
 });

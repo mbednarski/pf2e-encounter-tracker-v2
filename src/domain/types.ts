@@ -261,6 +261,48 @@ export interface PartyMember {
   tags: string[];
 }
 
+export type CompanionType = 'animal-companion' | 'familiar' | 'eidolon' | 'other';
+
+/**
+ * Persistent companion record (party-members spec §3.2): animal companions,
+ * familiars, and eidolons the GM runs alongside a party member. Unlike the
+ * thin PartyMember statblock, companions carry a full combat statblock.
+ * Ability lists use the same passive/reactive/active split as Creature so
+ * combatant cloning and display reuse the creature machinery unchanged.
+ */
+export interface Companion {
+  id: string;
+  name: string;
+  type: CompanionType;
+  /** References PartyMember.id — the persistent record, not a combatant id. */
+  masterId: string;
+
+  level: number;
+  traits?: string[];
+  size?: CreatureSize;
+  ac: number;
+  fortitude: number;
+  reflex: number;
+  will: number;
+  perception: number;
+  hp: number;
+  speed: Record<string, number>;
+  attacks: Attack[];
+  skills?: Record<string, number>;
+  passiveAbilities?: Ability[];
+  reactiveAbilities?: Ability[];
+  activeAbilities?: Ability[];
+  resistances?: { type: string; value: number }[];
+  weaknesses?: { type: string; value: number }[];
+  /** Flat string[] for the same reason as PartyMember.immunities. */
+  immunities?: string[];
+
+  persistentEffects: AppliedEffect[];
+
+  notes?: string;
+  tags: string[];
+}
+
 export type RoundsExpiry = 'turnStart' | 'turnEnd';
 
 export type Duration =
