@@ -121,6 +121,24 @@
     clearLongPress();
   }
 
+  function isInnerInteractive(target: EventTarget | null, card: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    const hit = target.closest(
+      'button, a, input, select, textarea, summary, [role="button"], [contenteditable="true"]'
+    );
+    return hit !== null && hit !== card;
+  }
+
+  function handleArticleClick(event: MouseEvent) {
+    if (!onSelect) return;
+    if (isInnerInteractive(event.target, event.currentTarget)) return;
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
+    onSelect(combatant.id);
+  }
+
   let initiativeDraft: number | null = null;
   let lastSyncedScore: number | undefined = undefined;
   $: if (initiativeScore !== lastSyncedScore) {
@@ -292,15 +310,25 @@
   $: willAriaLabel = `Roll ${combatant.name} Will save (${formatModifier(computed.will.final)})`;
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
+<!-- Pointer-only conveniences: the name button below is the accessible
+     selection control, so the card body stays free of button semantics. -->
 <article
   class:current-card={isCurrent}
   class:selected-card={isSelected}
   class:selectable={Boolean(onSelect)}
   class:dimmed={visualState !== 'alive'}
+  class:menu-open={overflowOpen}
   data-visual-state={visualState}
   data-hp-tone={hpTone}
   data-faction={faction}
   class="combatant-card"
+  oncontextmenu={handleContextMenu}
+  onpointerdown={handleArticlePointerDown}
+  onpointermove={handleArticlePointerMove}
+  onpointerup={handleArticlePointerEnd}
+  onpointercancel={handleArticlePointerEnd}
+  onclick={handleArticleClick}
 >
   <div class="card-heading">
     <div class="card-title">
@@ -315,15 +343,7 @@
           class="card-name-button"
           aria-pressed={isSelected}
           title={isSelected ? `${combatant.name} is selected` : `Show details for ${combatant.name}; right-click or hold for quick effects`}
-          oncontextmenu={handleContextMenu}
-          onpointerdown={handleArticlePointerDown}
-          onpointermove={handleArticlePointerMove}
-          onpointerup={handleArticlePointerEnd}
-          onpointercancel={handleArticlePointerEnd}
-          onclick={() => {
-            if (longPressFired) longPressFired = false;
-            else onSelect?.(combatant.id);
-          }}
+          onclick={() => onSelect?.(combatant.id)}
         >{combatant.name}</button>
       </h2>
       {#if combatant.templateAdjustment}
@@ -714,6 +734,13 @@
 
   .combatant-card.selectable {
     cursor: pointer;
+  }
+
+  /* The open overflow menu must paint above later-sibling cards; .dimmed's
+     opacity creates a stacking context that traps the menu's z-index, so the
+     owning card itself has to be lifted. */
+  .combatant-card.menu-open {
+    z-index: 10;
   }
 
   .combatant-card.dimmed {
