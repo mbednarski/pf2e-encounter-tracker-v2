@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, Duration, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Creature, Duration, EffectDefinition, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
+  import EncounterHeader from '../components/EncounterHeader.svelte';
   import TopBar from '../components/TopBar.svelte';
   import CombatLogDrawer from '../components/CombatLogDrawer.svelte';
   import CombatantCard from '../components/CombatantCard.svelte';
@@ -10,12 +11,17 @@
   import LibraryPane from '../components/LibraryPane.svelte';
   import RadialConditionMenu from '../components/RadialConditionMenu.svelte';
   import EffectModal from '../components/EffectModal.svelte';
+  import CastEffectModal from '../components/CastEffectModal.svelte';
+  import Modal from '../components/ui/Modal.svelte';
   import RollBubble from '../components/RollBubble.svelte';
   import {
     appendInfoLog,
+    buildSpellEffectIndex,
     combatantCardActions,
+    combatantFaction,
     computeCombatantStats,
     currentCombatant,
+    defaultApplyDuration,
     dispatchEncounterCommand,
     formatModifierBreakdown,
     groupConditionsByCategory,
@@ -25,12 +31,13 @@
     listPersistentDamageOptions,
     listRecentConditionOptions,
     listRemovableEffects,
-    listSpellEffectOptions,
+    listSpellEffectOptionsFrom,
     makeCombatant,
     makeCreatureCombatant,
     makeHazardCombatant,
     makePartyMemberCombatant,
     newEncounterState,
+    registerLibraryEffects,
     toCommand,
     viewAppliedEffects,
     type ApplyConditionChoice,
@@ -71,14 +78,32 @@
     removeHazard
   } from '$lib/storage/hazard-library';
   import {
+    addSpellEffects,
+    loadSpellEffects,
+    removeSpellEffect
+  } from '$lib/storage/spell-effect-library';
+  import {
     addPartyMembers,
     loadPartyMembers,
     removePartyMember,
     savePartyMember
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { importCreatureYaml, importHazardYaml, importPartyMemberYaml } from '$lib/yaml';
-  import { importCreatureFoundryJson, importHazardFoundryJson } from '$lib/foundry';
+  import {
+    encounterExportFilename,
+    exportEncounterYaml,
+    importCreatureYaml,
+    importEncounterYaml,
+    importHazardYaml,
+    importPartyMemberYaml
+  } from '$lib/yaml';
+  import {
+    importCreatureFoundryJson,
+    importHazardFoundryJson,
+    importSpellEffectFoundryJson,
+    type SpellEffectImportResult
+  } from '$lib/foundry';
+  import { sampleSpellEffects } from '$lib/foundry/sample-spell-effects';
   import {
     COMMAND_ID_PREFIX,
     computeEncounterCounts,
@@ -86,12 +111,12 @@
     nextCombatantCounterFor,
     nextCommandCounterFor
   } from '$lib/page-helpers';
+  import { createEncounterHistory } from '$lib/history/encounter-history';
 
   const conditionOptions = listConditionOptions();
   const conditionGroups = groupConditionsByCategory();
   const persistentOptions = listPersistentDamageOptions();
   const afflictionOptions = listAfflictionOptions();
-  const spellOptions = listSpellEffectOptions();
   const wedgeCounts = listConditionWedgeCounts();
 
   let radialOpen = false;
@@ -99,6 +124,12 @@
   let radialCombatantId: string | null = null;
 
   let effectModal: { combatantId: string; tab: EffectModalTab } | null = null;
+  let removeConfirmation: { combatantId: string; name: string } | null = null;
+  let libraryOpen = true;
+  let logOpen = true;
+  let encounterImportInput: HTMLInputElement | null = null;
+  let pendingEncounterImport: { state: EncounterState; fileName: string } | null = null;
+  let hydrated = false;
 
   let encounter = newEncounterState();
   let feedback: FeedbackEntry[] = [];
@@ -106,9 +137,26 @@
   let combatantCounter = 1;
   let feedbackCounter = 1;
   let selection: Selection = emptySelection;
+  const encounterHistory = createEncounterHistory();
+  let historyVersion = 0;
   let storedCreatures: Creature[] = [];
   let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
+  let storedSpellEffects: EffectDefinition[] = [];
+  let castModal: { casterId: string; effects: EffectDefinition[] } | null = null;
+
+  $: spellOptions = listSpellEffectOptionsFrom(storedSpellEffects);
+  $: spellEffectsBySlug = buildSpellEffectIndex(storedSpellEffects);
+  $: castModalCaster = castModal ? encounter.combatants[castModal.casterId] : undefined;
+  $: castTargets = castModal
+    ? Object.values(encounter.combatants).map((c) => ({
+        id: c.id,
+        name: c.name,
+        faction: combatantFaction(c),
+        isAlive: c.isAlive
+      }))
+    : [];
+  $: if (castModal && !castModalCaster) closeCastModal();
 
   $: availableCreatures = storedCreatures;
 
@@ -126,6 +174,10 @@
   $: selection = reconcileWithCombatants(selection, combatantIdSet);
   $: selection = followActive(selection, activeCombatant?.id);
   $: selectedCombatant = selection.id ? encounter.combatants[selection.id] : undefined;
+  $: canUndo = historyVersion >= 0 && encounterHistory.canUndo;
+  $: canRedo = historyVersion >= 0 && encounterHistory.canRedo;
+  $: undoLabel = historyVersion >= 0 ? encounterHistory.undoLabel : undefined;
+  $: redoLabel = historyVersion >= 0 ? encounterHistory.redoLabel : undefined;
 
   $: radialCombatant = radialCombatantId ? encounter.combatants[radialCombatantId] : undefined;
   $: radialRecentOptions = radialCombatant ? listRecentConditionOptions(encounter) : [];
@@ -154,8 +206,20 @@
     return `${scope}-${feedbackCounter++}`;
   }
 
+  async function loadEncounterState(): Promise<EncounterState | null> {
+    const loaded = await loadActiveEncounter();
+    if (!loaded) return null;
+    if (loaded.migrations.some((migration) => migration.type === 'legacy-delayed-combatants')) {
+      appendFeedback(
+        nextFeedbackId('legacy-delay'),
+        'A legacy encounter contained delayed combatants. They were restored at the end of initiative; reorder them manually.'
+      );
+    }
+    return loaded.state;
+  }
+
   const persistence = createPersistenceController({
-    load: loadActiveEncounter,
+    load: loadEncounterState,
     save: saveActiveEncounter,
     clear: clearActiveEncounter,
     onRestoreFailed: () =>
@@ -167,13 +231,61 @@
       appendFeedback(
         nextFeedbackId('persist-fail'),
         'Auto-save is unavailable. Your encounter will not survive a reload. (Common causes: private-browsing mode, full storage, or another tab using a newer version.)'
+      ),
+    onClearFailed: () =>
+      appendFeedback(
+        nextFeedbackId('discard-fail'),
+        'Could not discard the saved encounter. Your current encounter is still open; try again before reloading.'
       )
   });
 
   function runCommand(command: Command) {
-    const result = dispatchEncounterCommand(encounter, command);
+    const before = encounter;
+    const result = dispatchEncounterCommand(before, command);
+    const rejected = result.events.some((event) => event.type === 'command-rejected');
+    if (!rejected && result.state !== before) {
+      encounterHistory.record(before, result.state, command);
+      historyVersion += 1;
+    }
     encounter = result.state;
+    if (before.phase !== 'ACTIVE' && result.state.phase === 'ACTIVE') {
+      libraryOpen = false;
+      logOpen = false;
+    }
     persistence.persist(result.state);
+  }
+
+  function undoEncounter() {
+    const step = encounterHistory.undo(encounter);
+    if (!step) return;
+    encounter = step.state;
+    historyVersion += 1;
+    persistence.persist(encounter);
+  }
+
+  function redoEncounter() {
+    const step = encounterHistory.redo(encounter);
+    if (!step) return;
+    encounter = step.state;
+    historyVersion += 1;
+    persistence.persist(encounter);
+  }
+
+  function isEditingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+      target.matches('input, textarea, select') ||
+      target.isContentEditable ||
+      Boolean(target.closest('[contenteditable="true"]'))
+    );
+  }
+
+  function handleHistoryShortcut(event: KeyboardEvent) {
+    if (isEditingTarget(event.target) || !(event.ctrlKey || event.metaKey)) return;
+    if (event.key.toLowerCase() !== 'z') return;
+    event.preventDefault();
+    if (event.shiftKey) redoEncounter();
+    else undoEncounter();
   }
 
   $: drawerEntries = mergeDrawerEntries(encounter.combatLog, feedback);
@@ -189,16 +301,27 @@
   }
 
   onMount(async () => {
-    const [restored, loadResult, hazardResult, partyResult] = await Promise.all([
+    hydrated = true;
+    const [restored, loadResult, hazardResult, partyResult, spellEffectResult] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
       loadHazards(),
-      loadPartyMembers()
+      loadPartyMembers(),
+      loadSpellEffects()
     ]);
     if (restored) {
       encounter = { ...restored, combatLog: dedupeLogById(restored.combatLog) };
       commandCounter = nextCommandCounterFor(encounter.combatLog);
       combatantCounter = nextCombatantCounterFor(encounter.combatants);
+      if (encounter.phase === 'ACTIVE' || encounter.phase === 'RESOLVING') {
+        libraryOpen = false;
+      }
+    }
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 1024px), (pointer: coarse)').matches
+    ) {
+      logOpen = false;
     }
     if (loadResult.ok) {
       storedCreatures = loadResult.creatures;
@@ -236,6 +359,17 @@
         partyResult.reason === 'unavailable'
           ? 'Could not load your party members: storage is unavailable. Imports this session will not survive a reload.'
           : 'Could not load your party members from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
+      );
+    }
+    if (spellEffectResult.ok) {
+      storedSpellEffects = spellEffectResult.effects;
+      registerLibraryEffects(spellEffectResult.effects);
+    } else {
+      appendFeedback(
+        nextFeedbackId('spell-effect-load-fail'),
+        spellEffectResult.reason === 'unavailable'
+          ? 'Could not load your spell effects: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your spell effects from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
       );
     }
   });
@@ -431,22 +565,27 @@
       }
 
       if (isJson) {
-        // Route a Foundry actor JSON by its declared `type`. A parse failure
-        // falls through to the creature importer, which reports it as an issue.
-        let actorType: unknown;
+        // Route a Foundry JSON by its declared `type`. Arrays only occur for
+        // effect-pack exports, so they route to the spell-effect importer. A
+        // parse failure falls through to the creature importer, which reports
+        // it as an issue.
+        let parsedJson: unknown;
         try {
-          actorType = (JSON.parse(text) as { type?: unknown }).type;
+          parsedJson = JSON.parse(text);
         } catch {
-          actorType = undefined;
+          parsedJson = undefined;
         }
-        const did =
-          actorType === 'hazard'
+        const actorType = (parsedJson as { type?: unknown } | undefined)?.type;
+        const isEffectJson = Array.isArray(parsedJson) || actorType === 'effect';
+        const did = isEffectJson
+          ? await persistImportedSpellEffects(file, importSpellEffectFoundryJson(text))
+          : actorType === 'hazard'
             ? await persistImportedHazards(file, importHazardFoundryJson(text))
             : await persistImportedCreatures(file, importCreatureFoundryJson(text));
         if (!did) {
           appendFeedback(
             nextFeedbackId('import-empty'),
-            `"${file.name}" contained no importable creature or hazard.`
+            `"${file.name}" contained no importable creature, hazard, or spell effect.`
           );
         }
         continue;
@@ -471,6 +610,130 @@
           `"${file.name}" contained no creature or hazard documents.`
         );
       }
+    }
+  }
+
+  /**
+   * Persists imported spell effects and surfaces per-file feedback. Newly
+   * added effects register into the session effect library immediately so
+   * they can be applied without a reload.
+   */
+  async function persistImportedSpellEffects(
+    file: File,
+    result: SpellEffectImportResult
+  ): Promise<boolean> {
+    const { effects, issues } = result;
+    const persistResult = await addSpellEffects(effects);
+    if (!persistResult.ok) {
+      appendFeedback(
+        nextFeedbackId('se-import-persist-fail'),
+        persistResult.reason === 'unavailable'
+          ? `Could not save spell effects from "${file.name}": storage is unavailable (common causes: private-browsing mode or browser policy).`
+          : `Could not save spell effects from "${file.name}": storage write failed. Common causes: full storage, or another tab using a newer version.`
+      );
+      return true;
+    }
+
+    for (const effect of persistResult.rejected) {
+      appendFeedback(
+        nextFeedbackId('se-import-dup'),
+        `Skipped "${effect.name}" from "${file.name}": id "${effect.id}" is already in your spell-effect library.`
+      );
+    }
+
+    if (persistResult.added.length > 0) {
+      storedSpellEffects = [...storedSpellEffects, ...persistResult.added];
+      registerLibraryEffects(persistResult.added);
+      appendFeedback(
+        nextFeedbackId('se-import-ok'),
+        `Imported ${persistResult.added.length} spell effect${persistResult.added.length === 1 ? '' : 's'} from "${file.name}".`,
+        'success'
+      );
+    }
+
+    for (const issue of issues) {
+      const where = issue.path ? ` at "${issue.path}"` : '';
+      appendFeedback(
+        nextFeedbackId('se-import-issue'),
+        `"${file.name}" doc ${issue.documentIndex + 1}${where}: ${issue.message}`
+      );
+    }
+
+    return persistResult.added.length > 0 || persistResult.rejected.length > 0 || issues.length > 0;
+  }
+
+  async function handleLoadSampleSpellEffects() {
+    const persistResult = await addSpellEffects(sampleSpellEffects());
+    if (!persistResult.ok) {
+      appendFeedback(
+        nextFeedbackId('se-sample-fail'),
+        persistResult.reason === 'unavailable'
+          ? 'Could not save starter spell effects: storage is unavailable.'
+          : 'Could not save starter spell effects: storage write failed.'
+      );
+      return;
+    }
+    if (persistResult.added.length > 0) {
+      storedSpellEffects = [...storedSpellEffects, ...persistResult.added];
+      registerLibraryEffects(persistResult.added);
+      appendFeedback(
+        nextFeedbackId('se-sample-ok'),
+        `Added ${persistResult.added.length} starter spell effect${persistResult.added.length === 1 ? '' : 's'}.`,
+        'success'
+      );
+    } else {
+      appendFeedback(
+        nextFeedbackId('se-sample-dup'),
+        'All starter spell effects are already in your library.',
+        'info'
+      );
+    }
+  }
+
+  async function handleRemoveSpellEffect(id: string) {
+    const inUseBy = Object.values(encounter.combatants).filter((c) =>
+      c.appliedEffects.some((effect) => effect.effectId === id)
+    );
+    if (inUseBy.length > 0) {
+      appendFeedback(
+        nextFeedbackId('se-remove-in-use'),
+        `Cannot remove this spell effect: it is applied to ${inUseBy.map((c) => c.name).join(', ')}. Remove it from those combatants first.`
+      );
+      return;
+    }
+    const result = await removeSpellEffect(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('se-remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove spell effect: storage is unavailable.'
+          : 'Could not remove spell effect: storage write failed.'
+      );
+      return;
+    }
+    storedSpellEffects = storedSpellEffects.filter((e) => e.id !== id);
+  }
+
+  function openCastEffectModal(casterId: string, effects: EffectDefinition[]) {
+    if (effects.length === 0) return;
+    castModal = { casterId, effects };
+  }
+
+  function closeCastModal() {
+    castModal = null;
+  }
+
+  function castEffectToTargets(effectId: string, targetIds: string[], duration: Duration) {
+    if (!castModal) return;
+    const casterId = castModal.casterId;
+    for (const targetId of targetIds) {
+      runCommand(
+        toCommand(
+          'APPLY_EFFECT',
+          { effectId, targetId, sourceId: casterId, duration },
+          nextCommandId()
+        )
+      );
     }
   }
 
@@ -686,6 +949,81 @@
     runCommand(toCommand('START_ENCOUNTER', undefined, nextCommandId()));
   }
 
+  function completeEncounter() {
+    if (encounter.phase !== 'ACTIVE' || encounter.pendingPrompts.length > 0) return;
+    runCommand(toCommand('COMPLETE_ENCOUNTER', undefined, nextCommandId()));
+  }
+
+  function prepareRematch() {
+    if (encounter.phase !== 'COMPLETED') return;
+    const rosterOrder = [...encounter.initiative.order];
+    runCommand(toCommand('RESET_ENCOUNTER', undefined, nextCommandId()));
+    runCommand(toCommand('SET_INITIATIVE_ORDER', { order: rosterOrder }, nextCommandId()));
+    libraryOpen = true;
+  }
+
+  function exportEncounter() {
+    const yaml = exportEncounterYaml(encounter);
+    const blob = new Blob([yaml], { type: 'application/yaml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = encounterExportFilename(encounter.name);
+    anchor.click();
+    URL.revokeObjectURL(url);
+    appendFeedback(nextFeedbackId('encounter-export'), `Exported ${encounter.name}.`, 'success');
+  }
+
+  function openEncounterImport() {
+    encounterImportInput?.click();
+  }
+
+  async function handleEncounterImport(files: File[]) {
+    const file = files[0];
+    if (!file) return;
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (err) {
+      appendFeedback(
+        nextFeedbackId('encounter-import-read'),
+        `Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`
+      );
+      return;
+    }
+    const result = importEncounterYaml(text);
+    if (!result.ok) {
+      for (const issue of result.issues) {
+        const path = issue.path ? ` at ${issue.path}` : '';
+        appendFeedback(
+          nextFeedbackId('encounter-import-invalid'),
+          `"${file.name}"${path}: ${issue.message}`
+        );
+      }
+      return;
+    }
+    const hasCurrentEncounter =
+      Object.keys(encounter.combatants).length > 0 || encounter.combatLog.length > 0;
+    if (hasCurrentEncounter) {
+      pendingEncounterImport = { state: result.state, fileName: file.name };
+      return;
+    }
+    acceptEncounterImport(result.state, file.name);
+  }
+
+  function acceptEncounterImport(state: EncounterState, fileName: string) {
+    encounter = state;
+    commandCounter = nextCommandCounterFor(encounter.combatLog);
+    combatantCounter = nextCombatantCounterFor(encounter.combatants);
+    selection = emptySelection;
+    encounterHistory.clear();
+    historyVersion += 1;
+    libraryOpen = true;
+    pendingEncounterImport = null;
+    persistence.persist(encounter);
+    appendFeedback(nextFeedbackId('encounter-import-ok'), `Imported encounter from "${fileName}".`, 'success');
+  }
+
   function setInitiativeScore(combatantId: string, value: number | null) {
     runCommand(
       toCommand('SET_INITIATIVE_SCORES', { scores: { [combatantId]: value } }, nextCommandId())
@@ -743,7 +1081,10 @@
           effectId: choice.effectId,
           targetId: combatantId,
           value: choice.kind === 'valued' ? choice.value : undefined,
-          duration: { type: 'unlimited' },
+          // Spell effects default to their own duration, anchored to the
+          // target (there is no caster in this flow); everything else is
+          // unlimited until the GM edits it.
+          duration: defaultApplyDuration(choice.effectId, combatantId),
           note: choice.note
         },
         nextCommandId()
@@ -823,10 +1164,22 @@
   function radialRemoveCombatant() {
     const id = radialCombatantId;
     if (!id) return;
-    const name = encounter.combatants[id]?.name ?? 'combatant';
-    runCommand(toCommand('REMOVE_COMBATANT', { combatantId: id }, nextCommandId()));
-    appendFeedback(nextFeedbackId('radial-remove'), `Removed ${name} from the encounter.`, 'success');
+    requestRemoveCombatant(id);
     closeRadial();
+  }
+
+  function requestRemoveCombatant(combatantId: string) {
+    const combatant = encounter.combatants[combatantId];
+    if (!combatant) return;
+    removeConfirmation = { combatantId, name: combatant.name };
+  }
+
+  function confirmRemoveCombatant() {
+    if (!removeConfirmation) return;
+    const { combatantId, name } = removeConfirmation;
+    runCommand(toCommand('REMOVE_COMBATANT', { combatantId }, nextCommandId()));
+    appendFeedback(nextFeedbackId('remove-combatant'), `Removed ${name} from the encounter.`, 'success');
+    removeConfirmation = null;
   }
 
   function modifyConditionValue(combatantId: string, instanceId: string, delta: number) {
@@ -1002,18 +1355,31 @@
     selection = pickCombatant(selection, id);
   }
 
-  function resetLocal() {
+  function followActiveDetails() {
+    selection = { id: activeCombatant?.id, pinned: false };
+  }
+
+  function closeDetails() {
+    selection = { id: undefined, pinned: true };
+  }
+
+  async function resetLocal(): Promise<boolean> {
+    if (!(await persistence.reset())) return false;
     encounter = newEncounterState();
     feedback = [];
     commandCounter = 1;
     combatantCounter = 1;
     feedbackCounter = 1;
     selection = emptySelection;
-    persistence.reset();
+    encounterHistory.clear();
+    historyVersion += 1;
+    return true;
   }
 </script>
 
-<main class="shell">
+<svelte:window onkeydown={handleHistoryShortcut} />
+
+<main class="shell" data-hydrated={hydrated}>
   <TopBar
     name={encounter.name}
     phase={encounter.phase}
@@ -1021,10 +1387,42 @@
     activeName={activeCombatant?.name}
   />
 
+  <div class="shell__header">
+    <EncounterHeader
+      phase={encounter.phase}
+      pendingPromptCount={encounter.pendingPrompts.length}
+      onComplete={completeEncounter}
+      onPrepareRematch={prepareRematch}
+      onExport={exportEncounter}
+      onImport={openEncounterImport}
+      canExport={Object.keys(encounter.combatants).length > 0}
+      onDiscard={resetLocal}
+      {canUndo}
+      {canRedo}
+      {undoLabel}
+      {redoLabel}
+      onUndo={undoEncounter}
+      onRedo={redoEncounter}
+    />
+  </div>
+
   <EncounterDifficultyMeter summary={xpSummary} />
 
-  <section class="workspace">
+  <section class="workspace" class:workspace--library-closed={!libraryOpen}>
+    {#if !libraryOpen}
+      <button
+        type="button"
+        class="library-reopen"
+        onclick={() => (libraryOpen = true)}
+      >Library / Add Reinforcement</button>
+    {/if}
+    {#if libraryOpen}
     <div class="workspace__library">
+      {#if encounter.phase === 'ACTIVE' || encounter.phase === 'RESOLVING'}
+        <button type="button" class="library-collapse" onclick={() => (libraryOpen = false)}>
+          Collapse library
+        </button>
+      {/if}
       <LibraryPane
         {canStart}
         creatures={availableCreatures}
@@ -1041,6 +1439,10 @@
         onRemoveOneFromHazardsCount={handleRemoveOneFromHazardsCount}
         onImportHazardFiles={handleImportLibraryFiles}
         onRemoveHazard={handleRemoveHazard}
+        spellEffects={storedSpellEffects}
+        onImportSpellEffectFiles={handleImportLibraryFiles}
+        onLoadSampleSpellEffects={handleLoadSampleSpellEffects}
+        onRemoveSpellEffect={handleRemoveSpellEffect}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}
         onSavePartyMember={handleSavePartyMember}
@@ -1049,8 +1451,28 @@
         onReset={resetLocal}
       />
     </div>
+    {/if}
 
     <section class="workspace__track" aria-label="Combatants">
+      {#if encounter.phase === 'PREPARING' && orderedCombatants.length === 0 && unorderedCombatants.length === 0}
+        <div class="first-run" aria-labelledby="first-run-title">
+          <h2 id="first-run-title">Build your first encounter</h2>
+          <p>Import prepared creatures from tracker YAML or Foundry actor JSON, create a quick custom combatant, or restore a complete encounter YAML file.</p>
+          <div class="first-run__actions">
+            <button type="button" onclick={() => (libraryOpen = true)}>Import Creatures</button>
+            <button type="button" onclick={() => (libraryOpen = true)}>Create Custom Combatant</button>
+            <button type="button" onclick={openEncounterImport}>Import Encounter</button>
+          </div>
+          <p class="first-run__note">Add party members for encounter-difficulty calculation. Library management remains available in the left pane.</p>
+        </div>
+      {/if}
+      {#if encounter.phase === 'COMPLETED'}
+        <div class="completed-notice" role="status">
+          <strong>Encounter completed.</strong>
+          This is a read-only review of the final table state. Prepare a rematch to reset combatants
+          and return to setup.
+        </div>
+      {/if}
       {#if unorderedCombatants.length > 0}
         <div class="not-yet-rolled" aria-label="Not yet rolled">
           <h3>Not yet rolled</h3>
@@ -1091,6 +1513,9 @@
             onMove={moveCombatant}
             onSelect={selectCombatant}
             onRequestRadial={openRadial}
+            onManageEffects={(id) => openEffectModal(id, 'applied')}
+            onRequestRemove={requestRemoveCombatant}
+            showShortcutHint={index === 0}
             initiativeScore={encounter.initiative.scores[combatant.id]}
             onSetInitiative={setInitiativeScore}
             isFirst={index === 0}
@@ -1108,6 +1533,10 @@
     <aside class="workspace__details">
       <CombatantDetailsPanel
         combatant={selectedCombatant}
+        pinned={selection.pinned}
+        readOnly={encounter.phase === 'COMPLETED'}
+        onFollowActive={followActiveDetails}
+        onClose={closeDetails}
         onSetNote={setNote}
         onRollAttack={rollAttackFor}
         onRollDamage={rollDamageFor}
@@ -1118,6 +1547,8 @@
         onRestoreFocusPoint={restoreFocusPoint}
         onUseInnateSpell={useInnateSpell}
         onRestoreInnateSpell={restoreInnateSpell}
+        {spellEffectsBySlug}
+        onCastSpellEffect={openCastEffectModal}
         onSetAdjustment={(combatantId, adjustment) =>
           runCommand(
             toCommand('SET_TEMPLATE_ADJUSTMENT', { combatantId, adjustment }, nextCommandId())
@@ -1126,10 +1557,23 @@
     </aside>
 
     <section class="workspace__log">
-      <CombatLogDrawer entries={drawerEntries} />
+      <CombatLogDrawer entries={drawerEntries} bind:open={logOpen} />
     </section>
   </section>
 </main>
+
+<input
+  bind:this={encounterImportInput}
+  class="visually-hidden"
+  type="file"
+  accept=".yaml,.yml,application/yaml,text/yaml"
+  aria-label="Choose encounter YAML"
+  onchange={(event) => {
+    const input = event.currentTarget;
+    void handleEncounterImport(Array.from(input.files ?? []));
+    input.value = '';
+  }}
+/>
 
 {#if radialOpen && radialCombatant}
   <RadialConditionMenu
@@ -1147,6 +1591,46 @@
   />
 {/if}
 
+{#if removeConfirmation}
+  <Modal
+    title={`Remove ${removeConfirmation.name}?`}
+    titleId="remove-combatant-title"
+    descriptionId="remove-combatant-description"
+    onClose={() => (removeConfirmation = null)}
+  >
+    <p id="remove-combatant-description">
+      Remove this combatant from the encounter and initiative order? You can undo this action during
+      this session.
+    </p>
+    <svelte:fragment slot="footer">
+      <button type="button" data-modal-default onclick={() => (removeConfirmation = null)}>Keep Combatant</button>
+      <button type="button" class="modal-destructive" onclick={confirmRemoveCombatant}>Remove Combatant</button>
+    </svelte:fragment>
+  </Modal>
+{/if}
+
+{#if pendingEncounterImport}
+  <Modal
+    title="Replace current encounter?"
+    titleId="replace-encounter-title"
+    descriptionId="replace-encounter-description"
+    onClose={() => (pendingEncounterImport = null)}
+  >
+    <p id="replace-encounter-description">
+      Importing “{pendingEncounterImport.fileName}” replaces the current encounter and combat log.
+      Your creature, hazard, and party libraries remain.
+    </p>
+    <svelte:fragment slot="footer">
+      <button type="button" data-modal-default onclick={() => (pendingEncounterImport = null)}>Keep Current</button>
+      <button
+        type="button"
+        class="modal-destructive"
+        onclick={() => acceptEncounterImport(pendingEncounterImport!.state, pendingEncounterImport!.fileName)}
+      >Replace Encounter</button>
+    </svelte:fragment>
+  </Modal>
+{/if}
+
 {#each bubbles as bubble (bubble.id)}
   <RollBubble
     x={bubble.x}
@@ -1157,6 +1641,17 @@
     badge={bubble.badge}
   />
 {/each}
+
+{#if castModal && castModalCaster}
+  <CastEffectModal
+    casterId={castModal.casterId}
+    casterName={castModalCaster.name}
+    effects={castModal.effects}
+    combatants={castTargets}
+    onCast={castEffectToTargets}
+    onClose={closeCastModal}
+  />
+{/if}
 
 {#if effectModal && effectModalCombatant}
   <EffectModal
@@ -1195,8 +1690,53 @@
     align-items: start;
   }
 
+  .shell__header {
+    max-width: 1440px;
+    margin: 0 auto var(--space-3);
+  }
+
   .workspace__library {
     grid-area: library;
+  }
+
+  .workspace--library-closed {
+    grid-template-columns: minmax(460px, 1fr) minmax(300px, 380px);
+    grid-template-areas:
+      'track details'
+      'log   log';
+  }
+
+  .library-reopen {
+    position: fixed;
+    left: var(--space-2);
+    top: 50%;
+    z-index: 10;
+    min-height: var(--tap-target-min);
+    padding: var(--space-2);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 700;
+    writing-mode: vertical-rl;
+    cursor: pointer;
+  }
+
+  .library-collapse {
+    width: 100%;
+    min-height: 38px;
+    margin-bottom: var(--space-2);
+    border: var(--border-strong);
+    background: var(--color-panel);
+    color: var(--color-ink);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  :global(.modal-destructive) {
+    border-color: var(--color-red);
+    background: var(--color-red);
+    color: var(--color-panel-up);
   }
 
   .workspace__track {
@@ -1223,37 +1763,99 @@
     gap: 10px;
   }
 
+  .completed-notice {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-green);
+    background: var(--color-green-soft);
+    color: var(--color-ink);
+  }
+
+  .first-run {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    border: 1px dashed var(--color-rule-strong);
+    background: var(--color-panel);
+    text-align: center;
+  }
+
+  .first-run h2,
+  .first-run p {
+    margin: 0;
+  }
+
+  .first-run h2 {
+    font-family: var(--font-serif);
+    font-size: var(--text-xl);
+  }
+
+  .first-run__actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .first-run__actions button {
+    min-height: var(--tap-target-min);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .first-run__note {
+    color: var(--color-ink-soft);
+    font-size: var(--text-sm);
+  }
+
+  .visually-hidden {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .initiative-bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
     padding: 8px 12px;
-    background: var(--color-panel, #fbfcfa);
-    border: 1px solid var(--color-rule, #cfd6d1);
-    border-radius: 8px;
+    background: var(--color-panel);
+    border: var(--border-thin);
+    border-radius: var(--radius-card);
   }
 
   .initiative-bar__roll {
-    background: var(--color-ink, #263235);
-    color: var(--color-bg, #fff);
+    background: var(--accent);
+    color: var(--accent-ink);
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-card);
     padding: 6px 14px;
     font: inherit;
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--text-base);
     cursor: pointer;
   }
 
+  .initiative-bar__roll:hover {
+    background: var(--color-ink);
+  }
+
   .initiative-bar__roll:focus-visible {
-    outline: 2px solid var(--color-blue, var(--color-amber, #b88a2c));
+    outline: 2px solid var(--color-blue);
     outline-offset: 2px;
   }
 
   .initiative-bar__hint {
-    color: var(--color-ink-mute, #627171);
-    font-size: 12px;
+    color: var(--color-ink-mute);
+    font-size: var(--text-sm);
   }
 
   .not-yet-rolled {
@@ -1297,6 +1899,14 @@
       position: static;
       max-height: none;
       overflow: visible;
+    }
+
+    .workspace--library-closed {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'track'
+        'details'
+        'log';
     }
   }
 

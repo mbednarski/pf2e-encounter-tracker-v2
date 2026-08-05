@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Creature, Hazard, PartyMember } from '../domain';
+  import type { Creature, EffectDefinition, Hazard, PartyMember } from '../domain';
   import type {
     ConditionOption,
     ManualCombatantInput,
@@ -10,6 +10,7 @@
   import LibraryManageModal from './LibraryManageModal.svelte';
   import PartySection from './PartySection.svelte';
   import SetupPanel from './SetupPanel.svelte';
+  import SpellEffectsSection from './SpellEffectsSection.svelte';
 
   export let canStart: boolean;
   export let creatures: Creature[];
@@ -26,12 +27,16 @@
   export let onRemoveOneFromHazardsCount: (hazardId: string) => void;
   export let onImportHazardFiles: (files: File[]) => void;
   export let onRemoveHazard: (id: string) => void;
+  export let spellEffects: EffectDefinition[] = [];
+  export let onImportSpellEffectFiles: ((files: File[]) => void) | undefined = undefined;
+  export let onLoadSampleSpellEffects: (() => void) | undefined = undefined;
+  export let onRemoveSpellEffect: (id: string) => void = () => {};
   export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
   export let onRemovePartyMember: (id: string) => void;
   export let onSavePartyMember: (partyMember: PartyMember) => void;
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
-  export let onReset: () => void;
+  export let onReset: () => Promise<boolean>;
 
   let manageOpen = false;
 
@@ -64,6 +69,12 @@
     {onImportHazardFiles}
     onOpenManageLibrary={openManage}
   />
+  <SpellEffectsSection
+    effects={spellEffects}
+    onImportEffectFiles={onImportSpellEffectFiles}
+    onLoadSamples={onLoadSampleSpellEffects}
+    onOpenManageLibrary={openManage}
+  />
   <PartySection
     {partyMembers}
     {conditionOptions}
@@ -81,8 +92,10 @@
   <LibraryManageModal
     {creatures}
     {hazards}
+    {spellEffects}
     onRemove={onRemoveCreature}
     {onRemoveHazard}
+    {onRemoveSpellEffect}
     onClose={closeManage}
   />
 {/if}

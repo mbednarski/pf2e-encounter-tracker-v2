@@ -80,14 +80,15 @@ describe('CombatantCard select affordance', () => {
     );
   });
 
-  test('clicking the card body calls onSelect with the combatant id', async () => {
+  test('the card body is not exposed as a nested button', async () => {
     const onSelect = vi.fn();
     const { container } = render(CombatantCard, { props: baseProps({ onSelect }) });
     const article = container.querySelector('article.combatant-card') as HTMLElement;
     expect(article).not.toBeNull();
     await fireEvent.click(article);
-    expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith('goblin-1');
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(article).not.toHaveAttribute('role');
+    expect(article).not.toHaveAttribute('tabindex');
   });
 
   test('clicking the inner name button does not double-fire onSelect from the card handler', async () => {
@@ -97,13 +98,32 @@ describe('CombatantCard select affordance', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  test('pressing Enter on the focused card calls onSelect', async () => {
+  test('the heading button remains the keyboard selection route', async () => {
     const onSelect = vi.fn();
-    const { container } = render(CombatantCard, { props: baseProps({ onSelect }) });
-    const article = container.querySelector('article.combatant-card') as HTMLElement;
-    await fireEvent.keyDown(article, { key: 'Enter' });
+    render(CombatantCard, { props: baseProps({ onSelect }) });
+    await fireEvent.click(screen.getByRole('button', { name: 'Goblin Warrior' }));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith('goblin-1');
+  });
+});
+
+describe('CombatantCard visible action routes', () => {
+  test('closed overflow actions are not focusable and Manage Effects is visible after opening', async () => {
+    const onManageEffects = vi.fn();
+    render(CombatantCard, { props: baseProps({ onManageEffects }) });
+    expect(screen.queryByRole('button', { name: 'Manage effects' })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: /More actions for Goblin Warrior/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Manage effects' }));
+    expect(onManageEffects).toHaveBeenCalledWith('goblin-1');
+  });
+
+  test('Remove Combatant uses the visible overflow request callback', async () => {
+    const onRequestRemove = vi.fn();
+    render(CombatantCard, { props: baseProps({ onRequestRemove }) });
+    await fireEvent.click(screen.getByRole('button', { name: /More actions for Goblin Warrior/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove combatant' }));
+    expect(onRequestRemove).toHaveBeenCalledWith('goblin-1');
   });
 });
 

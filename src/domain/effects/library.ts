@@ -393,6 +393,7 @@ export const effectLibrary: EffectLibrary = {
 
   bless: spellEffect({
     id: 'bless',
+    defaultDuration: { unit: 'minutes', value: 1, sustained: true },
     name: 'Bless',
     hasValue: false,
     modifiers: [{ stat: 'attackRolls', bonusType: 'status', value: 1 }],
@@ -400,6 +401,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   bane: spellEffect({
     id: 'bane',
+    defaultDuration: { unit: 'minutes', value: 1, sustained: true },
     name: 'Bane',
     hasValue: false,
     modifiers: [{ stat: 'attackRolls', bonusType: 'status', value: -1 }],
@@ -407,6 +409,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   haste: spellEffect({
     id: 'haste',
+    defaultDuration: { unit: 'minutes', value: 1 },
     name: 'Haste',
     hasValue: false,
     modifiers: [],
@@ -414,6 +417,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   slow: spellEffect({
     id: 'slow',
+    defaultDuration: { unit: 'minutes', value: 1 },
     name: 'Slow (spell)',
     hasValue: false,
     modifiers: [],
@@ -421,6 +425,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   heroism: spellEffect({
     id: 'heroism',
+    defaultDuration: { unit: 'minutes', value: 10 },
     name: 'Heroism',
     hasValue: true,
     maxValue: 3,
@@ -429,6 +434,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   'inspire-courage': spellEffect({
     id: 'inspire-courage',
+    defaultDuration: { unit: 'rounds', value: 1, expiry: 'turnStart' },
     name: 'Inspire Courage',
     hasValue: false,
     modifiers: [
@@ -439,6 +445,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   'inspire-defense': spellEffect({
     id: 'inspire-defense',
+    defaultDuration: { unit: 'rounds', value: 1, expiry: 'turnStart' },
     name: 'Inspire Defense',
     hasValue: false,
     modifiers: [
@@ -449,6 +456,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   'mage-armor': spellEffect({
     id: 'mage-armor',
+    defaultDuration: { unit: 'days', value: 1 },
     name: 'Mage Armor',
     hasValue: false,
     modifiers: [{ stat: 'ac', bonusType: 'item', value: 1 }],
@@ -456,6 +464,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   shield: spellEffect({
     id: 'shield',
+    defaultDuration: { unit: 'rounds', value: 1, expiry: 'turnStart' },
     name: 'Shield (spell)',
     hasValue: false,
     modifiers: [],
@@ -463,6 +472,7 @@ export const effectLibrary: EffectLibrary = {
   }),
   soothe: spellEffect({
     id: 'soothe',
+    defaultDuration: { unit: 'minutes', value: 1 },
     name: 'Soothe',
     hasValue: false,
     modifiers: [],

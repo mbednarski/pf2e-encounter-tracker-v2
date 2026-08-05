@@ -2,7 +2,7 @@
   import type { Ability } from '../../domain';
   import { parseDegrees, type Degree } from '$lib/abilities/parse-degrees';
   import { formatDamage } from '$lib/abilities/format-damage';
-  import ActionGlyph from './ActionGlyph.svelte';
+  import ActionGlyph from '../ui/ActionGlyph.svelte';
 
   export let ability: Ability;
 

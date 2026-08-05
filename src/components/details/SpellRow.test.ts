@@ -64,7 +64,7 @@ describe('SpellRow', () => {
         effectSummary: 'A roaring blast of fire deals damage to creatures in a burst.',
         base: { damage: '6d6 fire' },
         heightening: { mode: 'interval', per: 1, delta: { damage: '+2d6 fire' } },
-        aonUrl: 'https://2e.aonprd.com/Search.aspx?Query=Fireball&type=spell'
+        aonUrl: 'https://2e.aonprd.com/Spells.aspx?ID=1530'
       }
     ]);
 

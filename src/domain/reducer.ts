@@ -18,6 +18,7 @@ import type {
   PromptBoundary,
   PromptResolution,
   RestoreSpellSlotPayload,
+  RoundsExpiry,
   TemplateAdjustment,
   TurnBoundarySuggestion,
   UseSpellSlotPayload
@@ -35,8 +36,6 @@ const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   SET_INITIATIVE_SCORES: ['PREPARING'],
   REORDER_COMBATANT: ['PREPARING', 'ACTIVE'],
   END_TURN: ['ACTIVE'],
-  DELAY: ['ACTIVE'],
-  RESUME_FROM_DELAY: ['ACTIVE'],
   APPLY_DAMAGE: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   APPLY_HEALING: ['PREPARING', 'ACTIVE', 'RESOLVING'],
   SET_TEMP_HP: ['PREPARING', 'ACTIVE', 'RESOLVING'],
@@ -84,10 +83,6 @@ export function applyCommand(state: EncounterState, command: Command, effectLibr
       return startEncounter(state, effectLibrary);
     case 'END_TURN':
       return endTurn(state, effectLibrary);
-    case 'DELAY':
-      return delayTurn(state, effectLibrary);
-    case 'RESUME_FROM_DELAY':
-      return resumeFromDelay(state, command.payload.combatantId, command.payload.insertIndex, effectLibrary);
     case 'COMPLETE_ENCOUNTER':
       return completeEncounter(state);
     case 'RESET_ENCOUNTER':
@@ -199,7 +194,6 @@ function removeCombatant(state: EncounterState, combatantId: CombatantId): Comma
 
   const removedIndex = state.initiative.order.indexOf(combatantId);
   const newOrder = state.initiative.order.filter((id) => id !== combatantId);
-  const newDelaying = state.initiative.delaying.filter((id) => id !== combatantId);
 
   let newCurrentIndex = state.initiative.currentIndex;
   if (state.phase === 'ACTIVE' && removedIndex !== -1) {
@@ -216,7 +210,6 @@ function removeCombatant(state: EncounterState, combatantId: CombatantId): Comma
     initiative: {
       ...state.initiative,
       order: newOrder,
-      delaying: newDelaying,
       currentIndex: newCurrentIndex
     }
   };
@@ -391,8 +384,13 @@ function advanceAfterTurnEnd(
     return endExpiry.result;
   }
 
-  const events: DomainEvent[] = [...initialEvents, ...endExpiry.events];
-  const stateAfterEndExpiry = endExpiry.state;
+  const endTick = tickAnchoredRoundsForBoundary(endExpiry.state, 'turnEnd', currentCombatantId, effectLibrary, commandType);
+  if (endTick.kind === 'rejected') {
+    return endTick.result;
+  }
+
+  const events: DomainEvent[] = [...initialEvents, ...endExpiry.events, ...endTick.events];
+  const stateAfterEndExpiry = endTick.state;
   const endPrompts = generatePromptsForBoundary(
     stateAfterEndExpiry,
     { type: 'turnEnd', ownerId: currentCombatantId },
@@ -481,10 +479,22 @@ function advanceToNextTurn(
     return startExpiry.result;
   }
 
+  const startTick = tickAnchoredRoundsForBoundary(
+    startExpiry.state,
+    'turnStart',
+    nextTurn.combatantId,
+    effectLibrary,
+    commandType
+  );
+  if (startTick.kind === 'rejected') {
+    return startTick.result;
+  }
+
   events.push(...startExpiry.events);
+  events.push(...startTick.events);
   events.push({ type: 'turn-started', combatantId: nextTurn.combatantId, round: nextTurn.round });
 
-  return finishTurnStartBoundary(startExpiry.state, nextTurn.combatantId, 'turnStart', effectLibrary, commandType, events);
+  return finishTurnStartBoundary(startTick.state, nextTurn.combatantId, 'turnStart', effectLibrary, commandType, events);
 }
 
 type PromptGenerationResult =
@@ -732,91 +742,6 @@ function findNextLiveTurnFrom(
   return undefined;
 }
 
-function delayTurn(state: EncounterState, effectLibrary: EffectLibrary): CommandResult {
-  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
-  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
-    return reject(state, 'DELAY', 'DELAY requires a valid current combatant');
-  }
-
-  const nextOrder = state.initiative.order.filter((combatantId) => combatantId !== currentCombatantId);
-  const stateWithDelay: EncounterState = {
-    ...state,
-    initiative: {
-      ...state.initiative,
-      order: nextOrder,
-      delaying: [...state.initiative.delaying, currentCombatantId]
-    }
-  };
-  return advanceAfterTurnEnd(
-    stateWithDelay,
-    currentCombatantId,
-    [
-      { type: 'turn-ended', combatantId: currentCombatantId },
-      { type: 'combatant-delayed', combatantId: currentCombatantId }
-    ],
-    effectLibrary,
-    'DELAY',
-    state.initiative.currentIndex
-  );
-}
-
-function resumeFromDelay(
-  state: EncounterState,
-  combatantId: CombatantId,
-  insertIndex: number,
-  effectLibrary: EffectLibrary
-): CommandResult {
-  const currentCombatantId = state.initiative.order[state.initiative.currentIndex];
-  if (!currentCombatantId || !state.combatants[currentCombatantId]) {
-    return reject(state, 'RESUME_FROM_DELAY', 'RESUME_FROM_DELAY requires a valid current combatant');
-  }
-
-  const resumingCombatant = state.combatants[combatantId];
-  if (!resumingCombatant) {
-    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} not found`);
-  }
-
-  if (!state.initiative.delaying.includes(combatantId)) {
-    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} is not delaying`);
-  }
-
-  if (!resumingCombatant.isAlive) {
-    return reject(state, 'RESUME_FROM_DELAY', `Combatant ${combatantId} is not alive`);
-  }
-
-  if (!Number.isInteger(insertIndex) || insertIndex < 0 || insertIndex > state.initiative.order.length) {
-    return reject(
-      state,
-      'RESUME_FROM_DELAY',
-      `RESUME_FROM_DELAY insertIndex must be between 0 and ${state.initiative.order.length}`
-    );
-  }
-
-  const nextOrder = [...state.initiative.order];
-  nextOrder.splice(insertIndex, 0, combatantId);
-
-  const stateWithResume: EncounterState = {
-    ...state,
-    initiative: {
-      ...state.initiative,
-      order: nextOrder,
-      delaying: state.initiative.delaying.filter((delayingCombatantId) => delayingCombatantId !== combatantId)
-    }
-  };
-
-  return advanceAfterTurnEnd(
-    stateWithResume,
-    currentCombatantId,
-    [
-      { type: 'turn-ended', combatantId: currentCombatantId },
-      { type: 'combatant-resumed-from-delay', combatantId, insertIndex }
-    ],
-    effectLibrary,
-    'RESUME_FROM_DELAY',
-    insertIndex
-  );
-}
-
 function resetEncounter(state: EncounterState): CommandResult {
   const resetCombatants = Object.fromEntries(
     Object.entries(state.combatants).map(([combatantId, combatant]) => [
@@ -837,7 +762,7 @@ function resetEncounter(state: EncounterState): CommandResult {
       ...state,
       phase: 'PREPARING',
       round: 0,
-      initiative: { order: [], currentIndex: -1, delaying: [], scores: {} },
+      initiative: { order: [], currentIndex: -1, scores: {} },
       combatants: resetCombatants,
       pendingPrompts: [],
       combatLog: [],
@@ -1241,6 +1166,122 @@ function expireEffectsForBoundary(
         };
       })
     );
+  }
+
+  return {
+    kind: 'expired',
+    state: events.length > 0 ? { ...state, combatants } : state,
+    events
+  };
+}
+
+/**
+ * Advances anchored round durations when the anchor combatant's boundary
+ * passes: each matching effect loses one round, and effects on their last
+ * round expire (with implied-effect cascade), mirroring how PF2e spell
+ * durations count down at the caster's turn.
+ */
+function tickAnchoredRoundsForBoundary(
+  state: EncounterState,
+  expiry: RoundsExpiry,
+  combatantId: CombatantId,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): BoundaryExpiryResult {
+  let combatants = state.combatants;
+  const events: DomainEvent[] = [];
+
+  for (const target of Object.values(state.combatants)) {
+    const removedIds: string[] = [];
+    const removedIdSet = new Set<string>();
+    const rootIdSet = new Set<string>();
+    const tickedInstanceIds = new Set<string>();
+
+    for (const effect of target.appliedEffects) {
+      if (removedIdSet.has(effect.instanceId)) {
+        continue;
+      }
+
+      const duration = effect.duration;
+      if (
+        duration.type !== 'rounds' ||
+        duration.anchorId !== combatantId ||
+        (duration.expiry ?? 'turnStart') !== expiry
+      ) {
+        continue;
+      }
+
+      if (duration.count <= 1) {
+        rootIdSet.add(effect.instanceId);
+        for (const removedId of collectEffectRemovalIds(target.appliedEffects, effect.instanceId)) {
+          if (!removedIdSet.has(removedId)) {
+            removedIdSet.add(removedId);
+            removedIds.push(removedId);
+          }
+        }
+      } else {
+        tickedInstanceIds.add(effect.instanceId);
+      }
+    }
+
+    if (removedIds.length === 0 && tickedInstanceIds.size === 0) {
+      continue;
+    }
+
+    const touchedEffects = target.appliedEffects.filter(
+      (effect) => removedIdSet.has(effect.instanceId) || tickedInstanceIds.has(effect.instanceId)
+    );
+    const missingDefinitionEffect = touchedEffects.find((effect) => !effectLibrary[effect.effectId]);
+    if (missingDefinitionEffect) {
+      return { kind: 'rejected', result: reject(state, commandType, `Effect ${missingDefinitionEffect.effectId} not found`) };
+    }
+
+    const removedEffects = removedIds
+      .map((removedId) => target.appliedEffects.find((effect) => effect.instanceId === removedId))
+      .filter((effect): effect is AppliedEffect => effect !== undefined);
+
+    combatants = {
+      ...combatants,
+      [target.id]: {
+        ...target,
+        appliedEffects: target.appliedEffects
+          .filter((effect) => !removedIdSet.has(effect.instanceId))
+          .map((effect) =>
+            tickedInstanceIds.has(effect.instanceId) && effect.duration.type === 'rounds'
+              ? { ...effect, duration: { ...effect.duration, count: effect.duration.count - 1 } }
+              : effect
+          )
+      }
+    };
+
+    events.push(
+      ...removedEffects.map((effect): DomainEvent => {
+        const definition = effectLibrary[effect.effectId];
+        return {
+          type: 'effect-removed',
+          combatantId: target.id,
+          effectId: effect.effectId,
+          effectName: definition.name,
+          instanceId: effect.instanceId,
+          reason: rootIdSet.has(effect.instanceId) ? 'expired' : 'cascade',
+          ...(effect.parentInstanceId ? { parentInstanceId: effect.parentInstanceId } : {})
+        };
+      })
+    );
+
+    for (const effect of target.appliedEffects) {
+      if (!tickedInstanceIds.has(effect.instanceId) || effect.duration.type !== 'rounds') {
+        continue;
+      }
+      events.push({
+        type: 'effect-duration-ticked',
+        combatantId: target.id,
+        effectId: effect.effectId,
+        effectName: effectLibrary[effect.effectId].name,
+        instanceId: effect.instanceId,
+        remainingRounds: effect.duration.count - 1
+      });
+    }
   }
 
   return {
@@ -2040,7 +2081,10 @@ function isValidDuration(state: EncounterState, duration: Duration): boolean {
     case 'unlimited':
       return true;
     case 'rounds':
-      return isPositive(duration.count);
+      return (
+        isPositive(duration.count) &&
+        (duration.anchorId === undefined || Boolean(state.combatants[duration.anchorId]))
+      );
     case 'conditional':
       return duration.description.trim().length > 0;
     case 'untilTurnEnd':

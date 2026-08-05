@@ -78,4 +78,12 @@
     cursor: not-allowed;
     opacity: 0.5;
   }
+
+  /* Real, non-overlapping tablet hit boxes. */
+  @media (pointer: coarse), (max-width: 1024px) {
+    .icon-btn {
+      width: max(var(--icon-btn-size), var(--tap-target-min));
+      height: max(var(--icon-btn-size), var(--tap-target-min));
+    }
+  }
 </style>

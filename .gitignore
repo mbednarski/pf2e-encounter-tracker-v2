@@ -8,6 +8,8 @@ node_modules/
 build/
 .vite/
 coverage/
+test-results/
+playwright-report/
 
 # Local agent / tooling artifacts.
 .claude/settings.local.json
