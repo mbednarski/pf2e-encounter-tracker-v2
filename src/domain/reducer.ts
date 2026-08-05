@@ -163,6 +163,18 @@ function addCombatant(state: EncounterState, combatant: CombatantState): Command
     return reject(state, 'ADD_COMBATANT', `Combatant ${combatant.id} already exists`);
   }
 
+  if (combatant.masterId !== undefined) {
+    const master = state.combatants[combatant.masterId];
+    if (!master) {
+      return reject(state, 'ADD_COMBATANT', `Master combatant ${combatant.masterId} not found`);
+    }
+    // Minion chains are rejected: turn-boundary processing only walks one
+    // level of masterId, so a minion-of-a-minion would never be processed.
+    if (master.masterId !== undefined) {
+      return reject(state, 'ADD_COMBATANT', `Master combatant ${combatant.masterId} is itself a minion`);
+    }
+  }
+
   const newState: EncounterState = {
     ...state,
     combatants: {
@@ -191,10 +203,21 @@ function removeCombatant(state: EncounterState, combatantId: CombatantId): Comma
     return reject(state, 'REMOVE_COMBATANT', `Combatant ${combatantId} not found`);
   }
 
-  const { [combatantId]: _removed, ...remainingCombatants } = state.combatants;
+  // Removing a master removes its minions with it (party-members spec §9.1):
+  // an orphaned minion would keep dangling masterId turn processing.
+  const removedIds = new Set<CombatantId>([combatantId]);
+  for (const candidate of Object.values(state.combatants)) {
+    if (candidate.masterId === combatantId) {
+      removedIds.add(candidate.id);
+    }
+  }
+
+  const remainingCombatants = Object.fromEntries(
+    Object.entries(state.combatants).filter(([id]) => !removedIds.has(id))
+  );
 
   const removedIndex = state.initiative.order.indexOf(combatantId);
-  const newOrder = state.initiative.order.filter((id) => id !== combatantId);
+  const newOrder = state.initiative.order.filter((id) => !removedIds.has(id));
 
   let newCurrentIndex = state.initiative.currentIndex;
   if (state.phase === 'ACTIVE' && removedIndex !== -1) {
@@ -217,7 +240,11 @@ function removeCombatant(state: EncounterState, combatantId: CombatantId): Comma
 
   return {
     newState,
-    events: [{ type: 'combatant-removed', combatantId, name: combatant.name }]
+    events: [...removedIds].map((removedId) => ({
+      type: 'combatant-removed',
+      combatantId: removedId,
+      name: state.combatants[removedId].name
+    }))
   };
 }
 
@@ -238,6 +265,12 @@ function setInitiativeOrder(state: EncounterState, order: CombatantId[]): Comman
 
     if (!combatant.isAlive) {
       return reject(state, 'SET_INITIATIVE_ORDER', `Combatant ${combatantId} is not alive`);
+    }
+
+    // Minions act during their master's turn (party-members spec §4.4) and
+    // never hold their own initiative slot.
+    if (combatant.masterId !== undefined) {
+      return reject(state, 'SET_INITIATIVE_ORDER', `Combatant ${combatantId} is a minion and cannot be placed in initiative`);
     }
   }
 
@@ -565,46 +598,58 @@ function generatePromptsForBoundary(
   effectLibrary: EffectLibrary,
   commandType: CommandType
 ): PromptGenerationResult {
-  const target = state.combatants[boundary.ownerId];
-  if (!target) {
+  const owner = state.combatants[boundary.ownerId];
+  if (!owner) {
     return { kind: 'rejected', result: reject(state, commandType, `Combatant ${boundary.ownerId} not found`) };
   }
+
+  // Minions have no turn of their own: their effects prompt at the master's
+  // boundaries instead (party-members spec §2.3). Dead minions stay silent —
+  // same as dead combatants never reaching a turn.
+  const targets = [
+    owner,
+    ...Object.values(state.combatants).filter(
+      (candidate) => candidate.masterId === boundary.ownerId && candidate.isAlive
+    )
+  ];
 
   const prompts: Prompt[] = [];
   const events: DomainEvent[] = [];
 
-  for (const effect of target.appliedEffects) {
-    if (effect.duration.type === 'untilTurnEnd' || effect.duration.type === 'untilTurnStart') {
-      continue;
-    }
+  for (const target of targets) {
+    for (const effect of target.appliedEffects) {
+      if (effect.duration.type === 'untilTurnEnd' || effect.duration.type === 'untilTurnStart') {
+        continue;
+      }
 
-    const definition = effectLibrary[effect.effectId];
-    if (!definition) {
-      return { kind: 'rejected', result: reject(state, commandType, `Effect ${effect.effectId} not found`) };
-    }
+      const definition = effectLibrary[effect.effectId];
+      if (!definition) {
+        return { kind: 'rejected', result: reject(state, commandType, `Effect ${effect.effectId} not found`) };
+      }
 
-    const suggestion = boundary.type === 'turnStart' ? definition.turnStartSuggestion : definition.turnEndSuggestion;
-    if (!suggestion) {
-      continue;
-    }
+      const suggestion = boundary.type === 'turnStart' ? definition.turnStartSuggestion : definition.turnEndSuggestion;
+      if (!suggestion) {
+        continue;
+      }
 
-    const builtPrompt = buildPrompt(boundary, target.id, effect, definition, suggestion);
-    if (builtPrompt.kind === 'rejected') {
-      return { kind: 'rejected', result: reject(state, commandType, builtPrompt.reason) };
-    }
+      const builtPrompt = buildPrompt(boundary, target.id, effect, definition, suggestion);
+      if (builtPrompt.kind === 'rejected') {
+        return { kind: 'rejected', result: reject(state, commandType, builtPrompt.reason) };
+      }
 
-    const { prompt } = builtPrompt;
-    prompts.push(prompt);
-    events.push({
-      type: 'prompt-generated',
-      promptId: prompt.id,
-      boundary: prompt.boundary,
-      targetId: prompt.targetId,
-      effectInstanceId: prompt.effectInstanceId,
-      effectName: prompt.effectName,
-      suggestionType: prompt.suggestionType.type,
-      description: prompt.description
-    });
+      const { prompt } = builtPrompt;
+      prompts.push(prompt);
+      events.push({
+        type: 'prompt-generated',
+        promptId: prompt.id,
+        boundary: prompt.boundary,
+        targetId: prompt.targetId,
+        effectInstanceId: prompt.effectInstanceId,
+        effectName: prompt.effectName,
+        suggestionType: prompt.suggestionType.type,
+        description: prompt.description
+      });
+    }
   }
 
   return { kind: 'generated', prompts, events };
@@ -1395,6 +1440,22 @@ type BoundaryExpiryResult =
   | { kind: 'expired'; state: EncounterState; events: DomainEvent[] }
   | { kind: 'rejected'; result: CommandResult };
 
+/**
+ * A combatant's turn boundary also fires for its minions (party-members spec
+ * §2.3): minions never hold a turn, so durations anchored to a minion would
+ * otherwise never elapse. Returns the boundary combatant plus all combatants
+ * whose masterId points at it.
+ */
+function boundaryAnchorIds(state: EncounterState, combatantId: CombatantId): Set<CombatantId> {
+  const anchorIds = new Set<CombatantId>([combatantId]);
+  for (const candidate of Object.values(state.combatants)) {
+    if (candidate.masterId === combatantId) {
+      anchorIds.add(candidate.id);
+    }
+  }
+  return anchorIds;
+}
+
 function expireEffectsForBoundary(
   state: EncounterState,
   durationType: HardClockDurationType,
@@ -1402,6 +1463,7 @@ function expireEffectsForBoundary(
   effectLibrary: EffectLibrary,
   commandType: CommandType
 ): BoundaryExpiryResult {
+  const anchorIds = boundaryAnchorIds(state, combatantId);
   let combatants = state.combatants;
   const events: DomainEvent[] = [];
 
@@ -1415,7 +1477,7 @@ function expireEffectsForBoundary(
         continue;
       }
 
-      if (effect.duration.type !== durationType || effect.duration.combatantId !== combatantId) {
+      if (effect.duration.type !== durationType || !anchorIds.has(effect.duration.combatantId)) {
         continue;
       }
 
@@ -1483,6 +1545,7 @@ function tickAnchoredRoundsForBoundary(
   effectLibrary: EffectLibrary,
   commandType: CommandType
 ): BoundaryExpiryResult {
+  const anchorIds = boundaryAnchorIds(state, combatantId);
   let combatants = state.combatants;
   const events: DomainEvent[] = [];
 
@@ -1500,7 +1563,8 @@ function tickAnchoredRoundsForBoundary(
       const duration = effect.duration;
       if (
         duration.type !== 'rounds' ||
-        duration.anchorId !== combatantId ||
+        duration.anchorId === undefined ||
+        !anchorIds.has(duration.anchorId) ||
         (duration.expiry ?? 'turnStart') !== expiry
       ) {
         continue;

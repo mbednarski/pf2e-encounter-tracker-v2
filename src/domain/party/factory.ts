@@ -1,4 +1,4 @@
-import type { AppliedEffect, CombatantState, CreatureSnapshot, PartyMember } from '../types';
+import type { AppliedEffect, CombatantState, Companion, CreatureSnapshot, PartyMember } from '../types';
 
 export interface CreateCombatantFromPartyMemberInput {
   partyMember: PartyMember;
@@ -38,6 +38,56 @@ export function createCombatantFromPartyMember({
     passiveAbilities: [],
     reactiveAbilities: [],
     activeAbilities: []
+  };
+}
+
+export interface CreateCombatantFromCompanionInput {
+  companion: Companion;
+  combatantId: string;
+  /**
+   * Combatant id of the master in this encounter. Setting it makes the
+   * companion a minion (excluded from initiative, processed at the master's
+   * turn boundaries). Omit for the spec §9.2 edge case — a companion fighting
+   * without its master present acts independently and rolls its own initiative.
+   */
+  masterCombatantId?: string;
+  name?: string;
+}
+
+export function createCombatantFromCompanion({
+  companion,
+  combatantId,
+  masterCombatantId,
+  name
+}: CreateCombatantFromCompanionInput): CombatantState {
+  const baseSnapshot: CreatureSnapshot = {
+    level: companion.level,
+    ac: companion.ac,
+    fortitude: companion.fortitude,
+    reflex: companion.reflex,
+    will: companion.will,
+    perception: companion.perception,
+    hp: companion.hp,
+    speed: primarySpeed(companion.speed),
+    skills: structuredClone(companion.skills ?? {})
+  };
+  return {
+    id: combatantId,
+    sourceId: companion.id,
+    name: name ?? companion.name,
+    sourceType: 'companion',
+    baseSnapshot,
+    templateAdjustment: 'normal',
+    currentHp: companion.hp,
+    tempHp: 0,
+    appliedEffects: expandPersistentEffects(companion.persistentEffects, combatantId),
+    reactionUsedThisRound: false,
+    isAlive: true,
+    attacks: structuredClone(companion.attacks),
+    passiveAbilities: structuredClone(companion.passiveAbilities ?? []),
+    reactiveAbilities: structuredClone(companion.reactiveAbilities ?? []),
+    activeAbilities: structuredClone(companion.activeAbilities ?? []),
+    ...(masterCombatantId !== undefined ? { masterId: masterCombatantId } : {})
   };
 }
 
