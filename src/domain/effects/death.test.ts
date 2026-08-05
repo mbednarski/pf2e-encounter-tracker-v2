@@ -305,7 +305,7 @@ describe('recovery check at turn start (spec §3.6)', () => {
         'goblin-1': combatant('goblin-1'),
         'pc-1': pc()
       },
-      initiative: { order: ['goblin-1', 'pc-1'], currentIndex: 0, delaying: [], scores: {} }
+      initiative: { order: ['goblin-1', 'pc-1'], currentIndex: 0, scores: {} }
     });
 
     const dying = applyCommand(base, command('APPLY_EFFECT', { effectId: 'dying', targetId: 'pc-1', value: 1 }), effectLibrary);
