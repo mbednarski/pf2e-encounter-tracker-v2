@@ -286,6 +286,28 @@
                     >×</button>
                   {/if}
                 </div>
+                {#if effect.affliction}
+                  <div class="affliction-detail" aria-label={`${effect.name} affliction details`}>
+                    <div class="affliction-detail__meta">
+                      <span>Save: {effect.affliction.saveLabel}</span>
+                      <span>Interval: {effect.affliction.interval}</span>
+                      {#if effect.affliction.onset}
+                        <span>Onset: {effect.affliction.onset} (GM-tracked)</span>
+                      {/if}
+                      {#if effect.affliction.maxDuration}
+                        <span>Max duration: {effect.affliction.maxDuration}</span>
+                      {/if}
+                    </div>
+                    <ol class="affliction-detail__stages">
+                      {#each effect.affliction.stages as stage (stage.stage)}
+                        <li class:current={stage.isCurrent}>
+                          <span class="stage-num">Stage {stage.stage}</span>
+                          {stage.description}
+                        </li>
+                      {/each}
+                    </ol>
+                  </div>
+                {/if}
                 {#if durationEditorForId === effect.instanceId}
                   <div class="duration-editor">
                     <label>
@@ -632,6 +654,42 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+
+  .affliction-detail {
+    flex-basis: 100%;
+    display: grid;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--color-ink-soft);
+    border-top: 1px dashed var(--color-rule);
+    padding-top: var(--space-1);
+  }
+
+  .affliction-detail__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .affliction-detail__stages {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 2px;
+  }
+
+  .affliction-detail__stages li.current {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  .affliction-detail__stages .stage-num {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    margin-right: var(--space-2);
   }
 
   .applied-row {

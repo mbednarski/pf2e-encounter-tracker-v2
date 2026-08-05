@@ -1,4 +1,7 @@
 import {
+  afflictionSaveDeltas,
+  afflictionSaveLabel,
+  afflictionStageDescription,
   applyCommand,
   createCombatantFromCreature,
   createCombatantFromHazard,
@@ -306,6 +309,25 @@ export type AppliedEffectSource =
   | { kind: 'direct' }
   | { kind: 'implied'; parentName: string };
 
+/**
+ * Affliction display data derived per applied instance (afflictions spec §6,
+ * §5.4). Components render this verbatim — the definition lookup and stage
+ * clamping happen here so the UI stays state-free.
+ */
+export interface AfflictionEffectView {
+  saveLabel: string;
+  interval: string;
+  onset?: string;
+  maxDuration?: string;
+  virulent: boolean;
+  currentStage: number;
+  /** Clamped current-stage text (spec §6.1); undefined at stage <= 0. */
+  stageDescription?: string;
+  stages: { stage: number; description: string; isCurrent: boolean }[];
+  /** MODIFY deltas for the structured save-outcome buttons (spec §5.3). */
+  deltas: { critSuccess: number; success: number; failure: number; critFailure: number };
+}
+
 export interface AppliedEffectView {
   instanceId: string;
   effectId: string;
@@ -315,6 +337,8 @@ export interface AppliedEffectView {
   durationLabel: string;
   note?: string;
   source: AppliedEffectSource;
+  /** Present when the definition is an affliction with afflictionData. */
+  affliction?: AfflictionEffectView;
 }
 
 export type ApplyConditionChoice =
@@ -422,7 +446,34 @@ function toAppliedEffectView(
     duration: effect.duration,
     durationLabel: formatDuration(effect.duration, state),
     note: effect.note,
-    source
+    source,
+    ...(definition ? { affliction: toAfflictionEffectView(definition, effect) } : {})
+  };
+}
+
+function toAfflictionEffectView(
+  definition: EffectDefinition,
+  effect: AppliedEffect
+): AfflictionEffectView | undefined {
+  const data = definition.afflictionData;
+  if (definition.category !== 'affliction' || !data) return undefined;
+
+  const currentStage = effect.value ?? 1;
+  const clampedIndex = Math.min(Math.max(currentStage, 1), data.stages.length);
+  return {
+    saveLabel: afflictionSaveLabel(data),
+    interval: data.interval,
+    ...(data.onset !== undefined ? { onset: data.onset } : {}),
+    ...(data.maxDuration !== undefined ? { maxDuration: data.maxDuration } : {}),
+    virulent: data.virulent === true,
+    currentStage,
+    stageDescription: afflictionStageDescription(definition, currentStage),
+    stages: data.stages.map((stage) => ({
+      stage: stage.stage,
+      description: stage.description,
+      isCurrent: currentStage > 0 && stage.stage === clampedIndex
+    })),
+    deltas: afflictionSaveDeltas(data)
   };
 }
 
