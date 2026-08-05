@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteDB, openDB, type IDBPDatabase } from 'idb';
 import {
   ACTIVE_ENCOUNTER_STORE,
+  COMPANION_STORE,
   CREATURE_LIBRARY_STORE,
   DB_NAME,
   HAZARD_LIBRARY_STORE,
@@ -59,6 +60,7 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
+        COMPANION_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -91,6 +93,7 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
+        COMPANION_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -127,6 +130,7 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
+        COMPANION_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -182,6 +186,7 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
+        COMPANION_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -203,6 +208,7 @@ describe('IndexedDB schema migration', () => {
         SETTINGS_STORE,
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
+        COMPANION_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()

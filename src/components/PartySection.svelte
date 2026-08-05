@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { PartyMember } from '../domain';
+  import type { Companion, PartyMember } from '../domain';
   import type { ConditionOption } from '$lib/encounter-app';
   import IconButton from './ui/IconButton.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
@@ -8,9 +8,11 @@
   import PartyMemberEditModal from './PartyMemberEditModal.svelte';
 
   export let partyMembers: PartyMember[];
+  export let companions: Companion[] = [];
   export let conditionOptions: ConditionOption[];
   export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
   export let onRemovePartyMember: (id: string) => void;
+  export let onRemoveCompanion: (id: string) => void = () => {};
   export let onSavePartyMember: (partyMember: PartyMember) => void;
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
 
@@ -76,6 +78,20 @@
     if (pm.playerName && pm.class) return `${pm.playerName} · ${pm.class}`;
     return pm.playerName ?? pm.class ?? pm.ancestry ?? '';
   }
+
+  const COMPANION_TYPE_LABELS: Record<Companion['type'], string> = {
+    'animal-companion': 'Animal Companion',
+    familiar: 'Familiar',
+    eidolon: 'Eidolon',
+    other: 'Companion'
+  };
+
+  $: companionsByMaster = companions.reduce((map, companion) => {
+    const list = map.get(companion.masterId);
+    if (list) list.push(companion);
+    else map.set(companion.masterId, [companion]);
+    return map;
+  }, new Map<string, Companion[]>());
 </script>
 
 <details class="party" open={!collapsed} ontoggle={handleToggle}>
@@ -147,6 +163,32 @@
               </span>
             </span>
           </li>
+          {#each companionsByMaster.get(pm.id) ?? [] as companion (companion.id)}
+            <li class="row row--companion">
+              <span class="companion" title="Added to the encounter with {pm.name}">
+                <span class="row__level" aria-label="Level {companion.level}">{companion.level}</span>
+                <span class="row__body">
+                  <span class="row__name">{companion.name}</span>
+                  <span class="row__sub">{COMPANION_TYPE_LABELS[companion.type]}</span>
+                </span>
+              </span>
+              <span class="row__actions">
+                <span class="row__remove">
+                  <IconButton
+                    ariaLabel="Remove {companion.name} from library"
+                    title="Remove from library"
+                    variant="destructive"
+                    size={22}
+                    onclick={() => onRemoveCompanion(companion.id)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                      <path d="M2 6h8" />
+                    </svg>
+                  </IconButton>
+                </span>
+              </span>
+            </li>
+          {/each}
         {/each}
       </ul>
     {/if}
@@ -287,6 +329,19 @@
   .row:hover .row__remove,
   .row:focus-within .row__remove {
     opacity: 1;
+  }
+
+  .row--companion .companion {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-6);
+    min-width: 0;
+  }
+
+  .row--companion .row__level {
+    font-size: var(--text-sm);
   }
 
   .row__level {

@@ -47,6 +47,8 @@ export type {
   CombatantSpellcasting,
   CombatantState,
   Command,
+  Companion,
+  CompanionType,
   CommandResult,
   CommandType,
   ComputedModifierBucket,

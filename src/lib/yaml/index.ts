@@ -11,6 +11,11 @@ export {
   type PartyMemberSkippedDocument
 } from './party-member-import';
 export {
+  importCompanionYaml,
+  type CompanionImportResult,
+  type CompanionSkippedDocument
+} from './companion-import';
+export {
   encounterExportFilename,
   ENCOUNTER_SCHEMA_VERSION,
   exportEncounterYaml,

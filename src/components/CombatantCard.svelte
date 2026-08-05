@@ -47,6 +47,8 @@
   export let onMove: (id: string, direction: -1 | 1) => void;
   export let isFirst: boolean = false;
   export let isLast: boolean = false;
+  /** Minions render under their master and have no initiative slot to reorder. */
+  export let isMinion: boolean = false;
   export let isSelected: boolean = false;
   export let onSelect: ((id: string) => void) | undefined = undefined;
   export let onRequestRadial:
@@ -361,22 +363,24 @@
       <Chip variant={isCurrent ? 'success' : 'default'}>
         {isCurrent ? 'Turn' : phase}
       </Chip>
-      <div class="card-reorder" aria-label="Reorder">
-        <IconButton
-          ariaLabel={`Move ${combatant.name} up`}
-          title="Move up"
-          size={22}
-          disabled={isFirst || phase === 'COMPLETED'}
-          onclick={() => onMove(combatant.id, -1)}
-        >↑</IconButton>
-        <IconButton
-          ariaLabel={`Move ${combatant.name} down`}
-          title="Move down"
-          size={22}
-          disabled={isLast || phase === 'COMPLETED'}
-          onclick={() => onMove(combatant.id, 1)}
-        >↓</IconButton>
-      </div>
+      {#if !isMinion}
+        <div class="card-reorder" aria-label="Reorder">
+          <IconButton
+            ariaLabel={`Move ${combatant.name} up`}
+            title="Move up"
+            size={22}
+            disabled={isFirst || phase === 'COMPLETED'}
+            onclick={() => onMove(combatant.id, -1)}
+          >↑</IconButton>
+          <IconButton
+            ariaLabel={`Move ${combatant.name} down`}
+            title="Move down"
+            size={22}
+            disabled={isLast || phase === 'COMPLETED'}
+            onclick={() => onMove(combatant.id, 1)}
+          >↓</IconButton>
+        </div>
+      {/if}
     </div>
   </div>
 

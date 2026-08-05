@@ -2,6 +2,7 @@ import {
   applyCommand,
   createCombatantFromCreature,
   createCombatantFromHazard,
+  createCombatantFromCompanion,
   createCombatantFromPartyMember,
   deriveStats,
   durationFromSpec,
@@ -24,6 +25,7 @@ import type {
   EncounterState,
   Hazard,
   LogEntry,
+  Companion,
   PartyMember
 } from '../domain';
 import { formatEvents } from './combat-log/format';
@@ -177,6 +179,23 @@ export function makePartyMemberCombatant(input: PartyMemberCombatantInput): Comb
   return createCombatantFromPartyMember({
     partyMember: input.partyMember,
     combatantId: input.combatantId,
+    name: input.name
+  });
+}
+
+export interface CompanionCombatantInput {
+  companion: Companion;
+  combatantId: string;
+  /** Master's combatant id — omit for the master-absent case (spec §9.2). */
+  masterCombatantId?: string;
+  name?: string;
+}
+
+export function makeCompanionCombatant(input: CompanionCombatantInput): CombatantState {
+  return createCombatantFromCompanion({
+    companion: input.companion,
+    combatantId: input.combatantId,
+    masterCombatantId: input.masterCombatantId,
     name: input.name
   });
 }

@@ -1,5 +1,5 @@
 import { extractPersistentEffects } from '../domain';
-import type { CombatantState, EffectLibrary, PartyMember } from '../domain';
+import type { CombatantState, Companion, EffectLibrary, PartyMember } from '../domain';
 
 /**
  * Sync-back on encounter completion (party-members spec §4.5): fold each
@@ -25,6 +25,31 @@ export function syncPartyMembersAfterEncounter(
     if (!member) continue;
     updated.set(member.id, {
       ...member,
+      persistentEffects: extractPersistentEffects(combatant, effectLibrary)
+    });
+  }
+
+  return [...updated.values()];
+}
+
+/**
+ * Companion counterpart to syncPartyMembersAfterEncounter (spec §4.5 applies
+ * to both persistent kinds). Same contract: pure merge, caller saves.
+ */
+export function syncCompanionsAfterEncounter(
+  combatants: Record<string, CombatantState>,
+  storedCompanions: readonly Companion[],
+  effectLibrary: EffectLibrary
+): Companion[] {
+  const bySourceId = new Map(storedCompanions.map((companion) => [companion.id, companion]));
+  const updated = new Map<string, Companion>();
+
+  for (const combatant of Object.values(combatants)) {
+    if (combatant.sourceType !== 'companion') continue;
+    const companion = bySourceId.get(combatant.sourceId);
+    if (!companion) continue;
+    updated.set(companion.id, {
+      ...companion,
       persistentEffects: extractPersistentEffects(combatant, effectLibrary)
     });
   }

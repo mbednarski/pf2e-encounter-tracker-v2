@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Creature, Duration, EffectDefinition, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Companion, Creature, Duration, EffectDefinition, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import EncounterHeader from '../components/EncounterHeader.svelte';
@@ -36,6 +36,7 @@
     makeCombatant,
     makeCreatureCombatant,
     makeHazardCombatant,
+    makeCompanionCombatant,
     makePartyMemberCombatant,
     newEncounterState,
     registerLibraryEffects,
@@ -89,13 +90,15 @@
     removePartyMember,
     savePartyMember
   } from '$lib/storage/party-members';
+  import { addCompanions, loadCompanions, removeCompanion, saveCompanion } from '$lib/storage/companions';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
-  import { syncPartyMembersAfterEncounter } from '$lib/party-sync';
+  import { syncCompanionsAfterEncounter, syncPartyMembersAfterEncounter } from '$lib/party-sync';
   import { loadGameClock, saveGameClock } from '$lib/storage/game-clock';
   import { clampClock } from '$lib/game-clock';
   import {
     encounterExportFilename,
     exportEncounterYaml,
+    importCompanionYaml,
     importCreatureYaml,
     importEncounterYaml,
     importHazardYaml,
@@ -146,6 +149,7 @@
   let storedCreatures: Creature[] = [];
   let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
+  let storedCompanions: Companion[] = [];
   let clockMinutes = 0;
 
   function setClock(minutes: number) {
@@ -178,7 +182,19 @@
   $: orderedCombatants = encounter.initiative.order
     .map((id) => encounter.combatants[id])
     .filter((combatant): combatant is CombatantState => Boolean(combatant));
-  $: unorderedCombatants = Object.values(encounter.combatants).filter((combatant) => !encounter.initiative.order.includes(combatant.id));
+  // Minions never appear in initiative — they render nested under their
+  // master's card, so exclude them from the "not yet rolled" bucket too.
+  $: unorderedCombatants = Object.values(encounter.combatants).filter(
+    (combatant) => !encounter.initiative.order.includes(combatant.id) && combatant.masterId === undefined
+  );
+  $: minionsByMaster = Object.values(encounter.combatants).reduce((map, combatant) => {
+    if (combatant.masterId !== undefined) {
+      const list = map.get(combatant.masterId);
+      if (list) list.push(combatant);
+      else map.set(combatant.masterId, [combatant]);
+    }
+    return map;
+  }, new Map<string, CombatantState[]>());
   $: activeCombatant = currentCombatant(encounter);
   $: canStart = encounter.phase === 'PREPARING' && encounter.initiative.order.length >= 2;
   $: combatantIdSet = new Set(Object.keys(encounter.combatants));
@@ -313,11 +329,12 @@
 
   onMount(async () => {
     hydrated = true;
-    const [restored, loadResult, hazardResult, partyResult, spellEffectResult, clock] = await Promise.all([
+    const [restored, loadResult, hazardResult, partyResult, companionResult, spellEffectResult, clock] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
       loadHazards(),
       loadPartyMembers(),
+      loadCompanions(),
       loadSpellEffects(),
       loadGameClock()
     ]);
@@ -376,6 +393,16 @@
           : 'Could not load your party members from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
       );
     }
+    if (companionResult.ok) {
+      storedCompanions = companionResult.companions;
+    } else {
+      appendFeedback(
+        nextFeedbackId('companion-load-fail'),
+        companionResult.reason === 'unavailable'
+          ? 'Could not load your companions: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your companions from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
+      );
+    }
     if (spellEffectResult.ok) {
       storedSpellEffects = spellEffectResult.effects;
       registerLibraryEffects(spellEffectResult.effects);
@@ -397,6 +424,11 @@
     runCommand(toCommand('ADD_COMBATANT', { combatant }, nextCommandId()));
     const nextOrder = [...encounter.initiative.order, combatant.id];
     runCommand(toCommand('SET_INITIATIVE_ORDER', { order: nextOrder }, nextCommandId()));
+  }
+
+  /** Minions stay out of initiative (the reducer rejects them there). */
+  function addMinionCombatant(combatant: CombatantState) {
+    runCommand(toCommand('ADD_COMBATANT', { combatant }, nextCommandId()));
   }
 
   function handleAddOneFromBestiary(creature: Creature, adjustment: TemplateAdjustmentChoice) {
@@ -828,8 +860,11 @@
       let partyMembers: PartyMember[];
       let issues: ReturnType<typeof importPartyMemberYaml>['issues'];
       let skipped: ReturnType<typeof importPartyMemberYaml>['skipped'];
+      let companions: Companion[];
+      let companionIssues: ReturnType<typeof importCompanionYaml>['issues'];
       try {
         ({ partyMembers, issues, skipped } = importPartyMemberYaml(text));
+        ({ companions, issues: companionIssues } = importCompanionYaml(text));
       } catch (err) {
         appendFeedback(
           nextFeedbackId('pm-import-fail'),
@@ -837,6 +872,16 @@
         );
         continue;
       }
+
+      // Both importers parse the same envelopes, so envelope-level issues
+      // (broken YAML, unknown kind) appear in both lists — keep one copy.
+      const seenIssues = new Set(issues.map((i) => `${i.documentIndex}|${i.path}|${i.message}`));
+      companionIssues = companionIssues.filter(
+        (i) => !seenIssues.has(`${i.documentIndex}|${i.path}|${i.message}`)
+      );
+      issues = [...issues, ...companionIssues];
+      // Companion docs are handled by the companion importer — not "skipped".
+      skipped = skipped.filter((skip) => skip.kind !== 'companion');
 
       const persistResult = await addPartyMembers(partyMembers);
 
@@ -866,6 +911,31 @@
         );
       }
 
+      const companionPersist = await addCompanions(companions);
+      if (!companionPersist.ok) {
+        appendFeedback(
+          nextFeedbackId('companion-import-persist-fail'),
+          companionPersist.reason === 'unavailable'
+            ? `Could not save companions from "${file.name}": storage is unavailable.`
+            : `Could not save companions from "${file.name}": storage write failed.`
+        );
+      } else {
+        for (const companion of companionPersist.rejected) {
+          appendFeedback(
+            nextFeedbackId('companion-import-dup'),
+            `Skipped "${companion.name}" from "${file.name}": id "${companion.id}" is already in your companion library.`
+          );
+        }
+        if (companionPersist.added.length > 0) {
+          storedCompanions = [...storedCompanions, ...companionPersist.added];
+          appendFeedback(
+            nextFeedbackId('companion-import-ok'),
+            `Imported ${companionPersist.added.length} companion${companionPersist.added.length === 1 ? '' : 's'} from "${file.name}".`,
+            'success'
+          );
+        }
+      }
+
       for (const skip of skipped) {
         appendFeedback(
           nextFeedbackId('pm-import-skip'),
@@ -888,11 +958,12 @@
         persistResult.rejected.length === 0 &&
         issues.length === 0 &&
         skipped.length === 0 &&
-        partyMembers.length === 0
+        partyMembers.length === 0 &&
+        companions.length === 0
       ) {
         appendFeedback(
           nextFeedbackId('pm-import-empty'),
-          `"${file.name}" contained no party-member documents.`
+          `"${file.name}" contained no party-member or companion documents.`
         );
       }
     }
@@ -904,6 +975,32 @@
       combatantId: `${partyMember.id}-${combatantCounter++}`
     });
     addCombatant(combatant);
+    // Companions ride along as minions under the member's card (spec §4.2).
+    // Unwanted ones can be removed during PREPARING.
+    for (const companion of storedCompanions) {
+      if (companion.masterId !== partyMember.id) continue;
+      addMinionCombatant(
+        makeCompanionCombatant({
+          companion,
+          combatantId: `${companion.id}-${combatantCounter++}`,
+          masterCombatantId: combatant.id
+        })
+      );
+    }
+  }
+
+  async function handleRemoveCompanion(id: string) {
+    const result = await removeCompanion(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('companion-remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove companion: storage is unavailable.'
+          : 'Could not remove companion: storage write failed.'
+      );
+      return;
+    }
+    storedCompanions = storedCompanions.filter((c) => c.id !== id);
   }
 
   async function handleRemovePartyMember(id: string) {
@@ -977,27 +1074,46 @@
    */
   async function syncBackPartyMembers() {
     if (encounter.phase !== 'COMPLETED') return;
-    const updated = syncPartyMembersAfterEncounter(
+    const library = activeEffectLibrary();
+    const updatedMembers = syncPartyMembersAfterEncounter(
       encounter.combatants,
       storedPartyMembers,
-      activeEffectLibrary()
+      library
     );
-    if (updated.length === 0) return;
-    const results = await Promise.all(
-      updated.map(async (member) => ({ member, result: await savePartyMember(member) }))
+    const updatedCompanions = syncCompanionsAfterEncounter(
+      encounter.combatants,
+      storedCompanions,
+      library
     );
-    const saved = results.filter(({ result }) => result.ok).map(({ member }) => member);
-    if (saved.length > 0) {
-      const savedById = new Map(saved.map((member) => [member.id, member]));
-      storedPartyMembers = storedPartyMembers.map(
-        (member) => savedById.get(member.id) ?? member
-      );
+    if (updatedMembers.length === 0 && updatedCompanions.length === 0) return;
+
+    const [memberResults, companionResults] = await Promise.all([
+      Promise.all(
+        updatedMembers.map(async (member) => ({ record: member, result: await savePartyMember(member) }))
+      ),
+      Promise.all(
+        updatedCompanions.map(async (companion) => ({ record: companion, result: await saveCompanion(companion) }))
+      )
+    ]);
+
+    const savedMembers = new Map(
+      memberResults.filter(({ result }) => result.ok).map(({ record }) => [record.id, record])
+    );
+    if (savedMembers.size > 0) {
+      storedPartyMembers = storedPartyMembers.map((member) => savedMembers.get(member.id) ?? member);
     }
-    const failed = results.filter(({ result }) => !result.ok);
+    const savedCompanions = new Map(
+      companionResults.filter(({ result }) => result.ok).map(({ record }) => [record.id, record])
+    );
+    if (savedCompanions.size > 0) {
+      storedCompanions = storedCompanions.map((companion) => savedCompanions.get(companion.id) ?? companion);
+    }
+
+    const failed = [...memberResults, ...companionResults].filter(({ result }) => !result.ok);
     if (failed.length > 0) {
       appendFeedback(
         nextFeedbackId('pm-sync'),
-        `Could not save conditions back to ${failed.map(({ member }) => member.name).join(', ')} — changes apply to this session only.`
+        `Could not save conditions back to ${failed.map(({ record }) => record.name).join(', ')} — changes apply to this session only.`
       );
     }
   }
@@ -1478,6 +1594,7 @@
         creatures={availableCreatures}
         hazards={storedHazards}
         partyMembers={storedPartyMembers}
+        companions={storedCompanions}
         {conditionOptions}
         {encounterCounts}
         onAddOneFromBestiary={handleAddOneFromBestiary}
@@ -1495,6 +1612,7 @@
         onRemoveSpellEffect={handleRemoveSpellEffect}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
         onRemovePartyMember={handleRemovePartyMember}
+        onRemoveCompanion={handleRemoveCompanion}
         onSavePartyMember={handleSavePartyMember}
         onImportPartyMemberYamlFiles={handleImportPartyMemberYamlFiles}
         onStart={startEncounter}
@@ -1576,6 +1694,39 @@
             onApplyPersistentDamage={applyPersistentDamageFromPrompt}
             onRollSave={rollSaveFor}
           />
+          {#each minionsByMaster.get(combatant.id) ?? [] as minion (minion.id)}
+            <div class="minion-card" data-master={combatant.id}>
+              <CombatantCard
+                combatant={minion}
+                isMinion={true}
+                isCurrent={false}
+                isSelected={minion.id === selection.id}
+                phase={encounter.phase}
+                actions={combatantCardActions(encounter, minion.id)}
+                appliedEffectsView={viewAppliedEffects(minion, encounter)}
+                {conditionOptions}
+                onHpEdit={applyHpEdit}
+                onEndTurn={endTurn}
+                onMarkReactionUsed={markReactionUsed}
+                onMarkDead={markDead}
+                onRevive={revive}
+                onApplyCondition={applyCondition}
+                onRemoveCondition={removeCondition}
+                onModifyConditionValue={modifyConditionValue}
+                onSetConditionValue={setConditionValue}
+                onMove={moveCombatant}
+                onSelect={selectCombatant}
+                onRequestRadial={openRadial}
+                onManageEffects={(id) => openEffectModal(id, 'applied')}
+                onRequestRemove={requestRemoveCombatant}
+                pendingPrompts={encounter.pendingPrompts}
+                combatantsById={encounter.combatants}
+                onResolvePrompt={resolvePrompt}
+                onApplyPersistentDamage={applyPersistentDamageFromPrompt}
+                onRollSave={rollSaveFor}
+              />
+            </div>
+          {/each}
         {/each}
       </div>
     </section>
@@ -1811,6 +1962,13 @@
   .cards {
     display: grid;
     gap: 10px;
+  }
+
+  /* Minion cards nest visually under their master's card. */
+  .minion-card {
+    margin-left: var(--space-6);
+    border-left: 2px solid var(--color-rule);
+    padding-left: var(--space-3);
   }
 
   .completed-notice {
