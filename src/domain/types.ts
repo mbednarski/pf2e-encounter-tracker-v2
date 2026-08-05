@@ -5,7 +5,6 @@ export type EncounterPhase = 'PREPARING' | 'ACTIVE' | 'RESOLVING' | 'COMPLETED';
 export interface InitiativeState {
   order: CombatantId[];
   currentIndex: number;
-  delaying: CombatantId[];
   scores: Record<CombatantId, number>;
 }
 
@@ -262,10 +261,18 @@ export interface PartyMember {
   tags: string[];
 }
 
+export type RoundsExpiry = 'turnStart' | 'turnEnd';
+
 export type Duration =
   | { type: 'untilTurnEnd'; combatantId: CombatantId }
   | { type: 'untilTurnStart'; combatantId: CombatantId }
-  | { type: 'rounds'; count: number }
+  /**
+   * With `anchorId` set, the count decrements automatically at the anchor
+   * combatant's boundary (`expiry`, default 'turnStart') and the effect
+   * expires when it reaches 0 — PF2e spell durations tick down at the start
+   * of the caster's turn. Without `anchorId` the count is a manual label.
+   */
+  | { type: 'rounds'; count: number; anchorId?: CombatantId; expiry?: RoundsExpiry }
   | { type: 'unlimited' }
   | { type: 'conditional'; description: string };
 
@@ -350,6 +357,10 @@ export interface LogEntry {
   id: string;
   message: string;
   tone: LogEntryTone;
+  /** Present for reducer-derived entries so encounter history can retain and mark their audit trail. */
+  commandId?: string;
+  /** True when the originating command is currently undone in the in-memory history branch. */
+  undone?: boolean;
 }
 
 export interface EncounterState {
@@ -461,8 +472,6 @@ export type Command =
   | BaseCommand<'SET_INITIATIVE_SCORES', { scores: Record<CombatantId, number | null> }>
   | BaseCommand<'REORDER_COMBATANT', { combatantId: CombatantId; newIndex: number }>
   | BaseCommand<'END_TURN', Record<string, never>>
-  | BaseCommand<'DELAY', Record<string, never>>
-  | BaseCommand<'RESUME_FROM_DELAY', { combatantId: CombatantId; insertIndex: number }>
   | BaseCommand<'APPLY_DAMAGE', { combatantId: CombatantId; amount: number; damageType?: string }>
   | BaseCommand<'APPLY_HEALING', { combatantId: CombatantId; amount: number }>
   | BaseCommand<'SET_TEMP_HP', { combatantId: CombatantId; amount: number }>
@@ -504,8 +513,6 @@ export type CommandType =
   | 'SET_INITIATIVE_SCORES'
   | 'REORDER_COMBATANT'
   | 'END_TURN'
-  | 'DELAY'
-  | 'RESUME_FROM_DELAY'
   | 'APPLY_DAMAGE'
   | 'APPLY_HEALING'
   | 'SET_TEMP_HP'
@@ -546,8 +553,6 @@ export type DomainEvent =
   | { type: 'initiative-set'; order: CombatantId[] }
   | { type: 'initiative-changed'; combatantId: CombatantId; newIndex: number }
   | { type: 'initiative-scores-changed'; scores: Record<CombatantId, number | null>; order: CombatantId[] }
-  | { type: 'combatant-delayed'; combatantId: CombatantId }
-  | { type: 'combatant-resumed-from-delay'; combatantId: CombatantId; insertIndex: number }
   | { type: 'turn-started'; combatantId: CombatantId; round: number }
   | { type: 'turn-ended'; combatantId: CombatantId }
   | { type: 'combatant-died'; combatantId: CombatantId; cause: 'marked-dead' | 'dying-threshold' }
@@ -588,6 +593,14 @@ export type DomainEvent =
       effectId: string;
       effectName: string;
       instanceId: string;
+    }
+  | {
+      type: 'effect-duration-ticked';
+      combatantId: CombatantId;
+      effectId: string;
+      effectName: string;
+      instanceId: string;
+      remainingRounds: number;
     }
   | {
       type: 'prompt-generated';
@@ -708,6 +721,20 @@ export type TurnBoundarySuggestion =
   | { type: 'promptResolution'; description: string }
   | { type: 'reminder'; description: string };
 
+export type EffectDurationUnit = 'rounds' | 'minutes' | 'hours' | 'days' | 'unlimited';
+
+/**
+ * Declarative default duration carried by spell-effect definitions (mapped
+ * from Foundry `system.duration`). Converted into a concrete `Duration` at
+ * apply time — see `durationFromSpec`.
+ */
+export interface EffectDurationSpec {
+  unit: EffectDurationUnit;
+  value?: number;
+  expiry?: RoundsExpiry;
+  sustained?: boolean;
+}
+
 export interface EffectDefinition {
   id: string;
   name: string;
@@ -721,6 +748,12 @@ export interface EffectDefinition {
   turnEndSuggestion?: TurnBoundarySuggestion;
   persistAfterEncounter?: boolean;
   traits?: string[];
+  /** Default duration applied when this effect is cast, unless overridden. */
+  defaultDuration?: EffectDurationSpec;
+  /** Spell rank / effect level (from Foundry `system.level`). Display-only. */
+  level?: number;
+  /** Slug of the spell that grants this effect, for spell-list matching. */
+  sourceSpellSlug?: string;
 }
 
 export type EffectLibrary = Record<string, EffectDefinition>;

@@ -444,9 +444,11 @@ describe('formatDuration', () => {
       .toBe("until start of Fighter's turn");
   });
 
-  test('falls back to combatant id when the target is missing', () => {
+  test('names the absence instead of leaking an id when the target is missing', () => {
     expect(formatDuration({ type: 'untilTurnEnd', combatantId: 'ghost' }, state))
-      .toBe("until end of ghost's turn");
+      .toBe("until end of a departed combatant's turn");
+    expect(formatDuration({ type: 'rounds', count: 2, anchorId: 'ghost' }, state))
+      .toBe("2 rounds (ticks on a departed combatant's turn)");
   });
 
   test('renders conditional durations using the description text', () => {

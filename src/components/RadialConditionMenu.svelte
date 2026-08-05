@@ -479,7 +479,7 @@
   >
     <defs>
       <filter id="radialShadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="3" dy="4" stdDeviation="3" flood-color="#1f1a14" flood-opacity="0.18" />
+        <feDropShadow class="radial-shadow" dx="3" dy="4" stdDeviation="3" flood-opacity="0.18" />
       </filter>
     </defs>
 
@@ -633,7 +633,7 @@
     inset: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(31, 26, 20, 0.04);
+    background: color-mix(in srgb, var(--color-ink) 4%, transparent);
     border: 0;
     margin: 0;
     padding: 0;
@@ -646,6 +646,10 @@
     pointer-events: auto;
     outline: none;
     user-select: none;
+  }
+
+  .radial-shadow {
+    flood-color: var(--color-ink);
   }
 
   .guide-ring {

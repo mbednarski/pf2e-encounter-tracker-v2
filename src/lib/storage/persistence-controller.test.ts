@@ -36,15 +36,16 @@ describe('createPersistenceController', () => {
       expect(deps.clear).not.toHaveBeenCalled();
     });
 
-    it('clears COMPLETED states instead of saving', async () => {
+    it('saves COMPLETED states for read-only review after reload', async () => {
       const deps = makeDeps();
       const controller = createPersistenceController(deps);
+      const state = completedEncounter();
 
-      controller.persist(completedEncounter());
+      controller.persist(state);
       await flush();
 
-      expect(deps.clear).toHaveBeenCalledOnce();
-      expect(deps.save).not.toHaveBeenCalled();
+      expect(deps.save).toHaveBeenCalledWith(state);
+      expect(deps.clear).not.toHaveBeenCalled();
     });
 
     it('saves PREPARING states (not just ACTIVE)', async () => {
@@ -73,10 +74,10 @@ describe('createPersistenceController', () => {
       expect(onPersistFailed).toHaveBeenCalledOnce();
     });
 
-    it('fires onPersistFailed when COMPLETED clear rejects', async () => {
+    it('fires onPersistFailed when a COMPLETED save rejects', async () => {
       const onPersistFailed = vi.fn();
       const deps = makeDeps({
-        clear: vi.fn().mockRejectedValue(new Error('blocked'))
+        save: vi.fn().mockRejectedValue(new Error('blocked'))
       });
       const controller = createPersistenceController({ ...deps, onPersistFailed });
 
@@ -101,24 +102,45 @@ describe('createPersistenceController', () => {
       const deps = makeDeps();
       const controller = createPersistenceController(deps);
 
-      controller.reset();
-      await flush();
+      await expect(controller.reset()).resolves.toBe(true);
 
       expect(deps.clear).toHaveBeenCalledOnce();
       expect(deps.save).not.toHaveBeenCalled();
     });
 
-    it('fires onPersistFailed when clear rejects', async () => {
+    it('keeps failure feedback specific when clear rejects', async () => {
       const onPersistFailed = vi.fn();
+      const onClearFailed = vi.fn();
       const deps = makeDeps({
         clear: vi.fn().mockRejectedValue(new Error('blocked'))
       });
-      const controller = createPersistenceController({ ...deps, onPersistFailed });
+      const controller = createPersistenceController({ ...deps, onPersistFailed, onClearFailed });
 
-      controller.reset();
+      await expect(controller.reset()).resolves.toBe(false);
+
+      expect(onClearFailed).toHaveBeenCalledOnce();
+      expect(onPersistFailed).not.toHaveBeenCalled();
+    });
+
+    it('waits for queued saves before clearing storage', async () => {
+      let finishSave: (() => void) | undefined;
+      const save = vi.fn(
+        () => new Promise<void>((resolve) => {
+          finishSave = resolve;
+        })
+      );
+      const clear = vi.fn().mockResolvedValue(undefined);
+      const controller = createPersistenceController(makeDeps({ save, clear }));
+
+      controller.persist(activeEncounter());
+      const reset = controller.reset();
       await flush();
 
-      expect(onPersistFailed).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledOnce();
+      expect(clear).not.toHaveBeenCalled();
+      finishSave!();
+      await expect(reset).resolves.toBe(true);
+      expect(clear).toHaveBeenCalledOnce();
     });
   });
 

@@ -52,6 +52,9 @@
   export let onRequestRadial:
     | ((id: string, anchor: { x: number; y: number }) => void)
     | undefined = undefined;
+  export let onManageEffects: ((id: string) => void) | undefined = undefined;
+  export let onRequestRemove: ((id: string) => void) | undefined = undefined;
+  export let showShortcutHint = false;
   export let initiativeScore: number | undefined = undefined;
   export let onSetInitiative: ((id: string, value: number | null) => void) | undefined = undefined;
   export let pendingPrompts: Prompt[] = [];
@@ -85,13 +88,13 @@
   }
 
   function handleContextMenu(event: MouseEvent) {
-    if (!onRequestRadial) return;
+    if (!onRequestRadial || phase === 'COMPLETED') return;
     event.preventDefault();
     onRequestRadial(combatant.id, { x: event.clientX, y: event.clientY });
   }
 
   function handleArticlePointerDown(event: PointerEvent) {
-    if (!onRequestRadial) return;
+    if (!onRequestRadial || phase === 'COMPLETED') return;
     if (event.pointerType !== 'touch') return;
     if (event.target !== event.currentTarget) return;
     longPressFired = false;
@@ -133,14 +136,6 @@
       longPressFired = false;
       return;
     }
-    onSelect(combatant.id);
-  }
-
-  function handleArticleKeyDown(event: KeyboardEvent) {
-    if (!onSelect) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    if (isInnerInteractive(event.target, event.currentTarget)) return;
-    event.preventDefault();
     onSelect(combatant.id);
   }
 
@@ -187,6 +182,7 @@
   let pickerValue = 1;
   let editingInstanceId: string | null = null;
   let editingValue = 1;
+  let overflowOpen = false;
 
   $: pickerSelected = conditionOptions.find((option) => option.id === pickerEffectId);
 
@@ -314,26 +310,25 @@
   $: willAriaLabel = `Roll ${combatant.name} Will save (${formatModifier(computed.will.final)})`;
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
+<!-- Pointer-only conveniences: the name button below is the accessible
+     selection control, so the card body stays free of button semantics. -->
 <article
   class:current-card={isCurrent}
   class:selected-card={isSelected}
   class:selectable={Boolean(onSelect)}
   class:dimmed={visualState !== 'alive'}
+  class:menu-open={overflowOpen}
   data-visual-state={visualState}
   data-hp-tone={hpTone}
   data-faction={faction}
   class="combatant-card"
-  role={onSelect ? 'button' : undefined}
-  tabindex={onSelect ? 0 : -1}
-  aria-label={onSelect ? `Select ${combatant.name}` : undefined}
   oncontextmenu={handleContextMenu}
   onpointerdown={handleArticlePointerDown}
   onpointermove={handleArticlePointerMove}
   onpointerup={handleArticlePointerEnd}
   onpointercancel={handleArticlePointerEnd}
   onclick={handleArticleClick}
-  onkeydown={handleArticleKeyDown}
 >
   <div class="card-heading">
     <div class="card-title">
@@ -347,7 +342,7 @@
           type="button"
           class="card-name-button"
           aria-pressed={isSelected}
-          title={isSelected ? `${combatant.name} is selected` : `Show details for ${combatant.name}`}
+          title={isSelected ? `${combatant.name} is selected` : `Show details for ${combatant.name}; right-click or hold for quick effects`}
           onclick={() => onSelect?.(combatant.id)}
         >{combatant.name}</button>
       </h2>
@@ -371,14 +366,14 @@
           ariaLabel={`Move ${combatant.name} up`}
           title="Move up"
           size={22}
-          disabled={isFirst}
+          disabled={isFirst || phase === 'COMPLETED'}
           onclick={() => onMove(combatant.id, -1)}
         >↑</IconButton>
         <IconButton
           ariaLabel={`Move ${combatant.name} down`}
           title="Move down"
           size={22}
-          disabled={isLast}
+          disabled={isLast || phase === 'COMPLETED'}
           onclick={() => onMove(combatant.id, 1)}
         >↓</IconButton>
       </div>
@@ -427,6 +422,7 @@
             displayAriaLabel={`HP ${combatant.currentHp} of ${adjustedView.hp}, click to edit`}
             placeholder="−5, +3, 42"
             displayClass="hp-value"
+            disabled={phase === 'COMPLETED'}
             onCommit={(parsed) => onHpEdit(combatant.id, 'hp', parsed)}
           />
           <span class="hp-max">/ {adjustedView.hp}</span>
@@ -440,6 +436,7 @@
               : `Temp HP ${combatant.tempHp}, click to edit`}
             placeholder="+3, 5, −2"
             displayClass="temp-hp-value"
+            disabled={phase === 'COMPLETED'}
             emptyDisplay="+ temp"
             onCommit={(parsed) => onHpEdit(combatant.id, 'tempHp', parsed)}
           />
@@ -516,7 +513,9 @@
           <span class="condition-dice">{view.note}</span>
         {/if}
         {#if view.value.kind === 'valued'}
-          {#if editingInstanceId === view.instanceId}
+          {#if phase === 'COMPLETED'}
+            <span class="condition-value-readonly">{view.value.current}</span>
+          {:else if editingInstanceId === view.instanceId}
             <input
               class="condition-value-input"
               type="number"
@@ -552,6 +551,7 @@
         {#if view.source.kind === 'implied'}
           <span class="condition-parent">via {view.source.parentName}</span>
         {/if}
+        {#if phase !== 'COMPLETED'}
         <IconButton
           size={22}
           variant="destructive"
@@ -559,10 +559,11 @@
           title="Remove"
           onclick={() => onRemoveCondition(combatant.id, view.instanceId)}
         >✕</IconButton>
+        {/if}
       </span>
     {/each}
 
-    {#if !pickerOpen}
+    {#if phase !== 'COMPLETED' && !pickerOpen}
       <Button
         size="sm"
         variant="ghost"
@@ -623,13 +624,29 @@
       disabled={!actions.canMarkReactionUsed}
       onclick={() => onMarkReactionUsed(combatant.id)}
     >Reaction Used</Button>
-    <details class="card-overflow">
-      <summary
+    <div class="card-overflow">
+      <button
+        type="button"
         class="card-overflow__toggle"
         aria-label={`More actions for ${combatant.name}`}
+        aria-expanded={overflowOpen}
         title="More actions"
-      >⋯</summary>
-      <div class="card-overflow__menu" role="menu">
+        onclick={() => (overflowOpen = !overflowOpen)}
+      >⋯</button>
+      {#if overflowOpen}
+      <div class="card-overflow__menu" aria-label={`Actions for ${combatant.name}`}>
+        {#if phase !== 'COMPLETED'}
+        <Button
+          size="sm"
+          variant="secondary"
+          ariaLabel="Manage effects"
+          onclick={() => {
+            overflowOpen = false;
+            onManageEffects?.(combatant.id);
+          }}
+        >Manage Effects…</Button>
+        {/if}
+        {#if phase !== 'COMPLETED'}
         <Button
           size="sm"
           variant="secondary"
@@ -646,9 +663,23 @@
           disabled={!actions.canRevive}
           onclick={() => onRevive(combatant.id)}
         >Revive</Button>
+        <Button
+          size="sm"
+          variant="destructive"
+          ariaLabel="Remove combatant"
+          onclick={() => {
+            overflowOpen = false;
+            onRequestRemove?.(combatant.id);
+          }}
+        >Remove Combatant…</Button>
+        {/if}
       </div>
-    </details>
+      {/if}
+    </div>
   </div>
+  {#if showShortcutHint}
+    <p class="card-shortcut-hint">Tip: right-click or press and hold safe card space for quick effects.</p>
+  {/if}
 </article>
 
 <style>
@@ -691,7 +722,7 @@
   .selected-card {
     box-shadow:
       inset 0 0 0 2px var(--color-blue),
-      0 1px 2px rgba(20, 20, 14, 0.08);
+      var(--shadow-soft);
   }
 
   .selected-card.current-card {
@@ -705,9 +736,11 @@
     cursor: pointer;
   }
 
-  .combatant-card:focus-visible {
-    outline: 2px solid var(--color-blue);
-    outline-offset: 2px;
+  /* The open overflow menu must paint above later-sibling cards; .dimmed's
+     opacity creates a stacking context that traps the menu's z-index, so the
+     owning card itself has to be lifted. */
+  .combatant-card.menu-open {
+    z-index: 10;
   }
 
   .combatant-card.dimmed {
@@ -1069,6 +1102,13 @@
     padding: 2px 6px;
   }
 
+  .condition-value-readonly {
+    min-width: 22px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-align: center;
+  }
+
   .condition-value-input {
     border: var(--border-thin);
     background: var(--color-panel);
@@ -1133,10 +1173,6 @@
     user-select: none;
   }
 
-  .card-overflow__toggle::-webkit-details-marker {
-    display: none;
-  }
-
   .card-overflow__toggle:hover {
     border-color: var(--color-ink);
     color: var(--color-ink);
@@ -1147,7 +1183,7 @@
     outline-offset: 1px;
   }
 
-  .card-overflow[open] .card-overflow__toggle {
+  .card-overflow__toggle[aria-expanded='true'] {
     border-color: var(--color-ink);
     color: var(--color-ink);
   }
@@ -1166,6 +1202,22 @@
     box-shadow: var(--shadow-soft);
     z-index: 5;
     white-space: nowrap;
+  }
+
+  .card-shortcut-hint {
+    margin: var(--space-2) 0 0;
+    color: var(--color-ink-mute);
+    font-size: var(--text-xs);
+  }
+
+  @media (pointer: coarse), (max-width: 1024px) {
+    .card-overflow__toggle,
+    .condition-value,
+    .condition-value-input,
+    .card-initiative__input {
+      min-height: var(--tap-target-min);
+      min-width: var(--tap-target-min);
+    }
   }
 
   @media (max-width: 760px) {

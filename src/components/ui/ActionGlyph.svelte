@@ -14,7 +14,7 @@
 <style>
   .action-glyph {
     display: inline-block;
-    color: var(--color-red);
+    color: var(--accent);
     font-family: var(--font-serif);
     font-size: var(--text-base);
     font-weight: 700;

@@ -4,7 +4,7 @@
 
   export let entries: LogEntry[];
 
-  let open = true;
+  export let open = true;
 
   function toggle() {
     open = !open;

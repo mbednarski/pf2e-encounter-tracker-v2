@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, writeFileSync, existsSync, statSync } from '
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { transformSpell } from './spell-index/transform';
+import { fetchAonIndex, resolveAonUrl } from './spell-index/aon-ids';
 import type { SpellIndexEntry, SpellIndexFile } from '../src/lib/spell-index/types';
 
 const SRC = process.env.FOUNDRY_PF2E_DIR;
@@ -97,6 +98,23 @@ for (const f of files) {
 
 spells.sort((a, b) => a.slug.localeCompare(b.slug));
 
+// Enrich with direct Archives of Nethys page links. resolveAonUrl returns
+// undefined for the handful of spells with no confident match; those keep the
+// search-URL fallback that transformSpell already set.
+let aonResolved = 0;
+try {
+  const aonIndex = await fetchAonIndex();
+  for (const spell of spells) {
+    const url = resolveAonUrl(aonIndex, spell.name, spell.baseLevel);
+    if (url) {
+      spell.aonUrl = url;
+      aonResolved++;
+    }
+  }
+} catch (err) {
+  console.warn(`\nAoN id resolution skipped (${(err as Error).message}); spells keep search-URL links.`);
+}
+
 const output: SpellIndexFile = {
   version: 1,
   generatedAt: new Date().toISOString(),
@@ -110,6 +128,7 @@ console.log(`Imported ${spells.length} spells from ${files.length} files.`);
 console.log(`  cantrips: ${spells.filter((s) => s.isCantrip).length}`);
 console.log(`  with heightening: ${spells.filter((s) => s.heightening).length}`);
 console.log(`  with damage: ${spells.filter((s) => s.base.damage).length}`);
+console.log(`  direct AoN links: ${aonResolved} / ${spells.length}`);
 if (issues.length > 0) {
   console.warn(`\nSkipped ${issues.length} files:`);
   for (const i of issues.slice(0, 20)) console.warn(`  ${i.file}: ${i.reason}`);

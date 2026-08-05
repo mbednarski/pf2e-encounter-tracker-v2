@@ -234,7 +234,6 @@ This is the single entry point for all state mutations. It is a pure function. T
 interface InitiativeState {
   order: CombatantId[]          // sorted sequence of combatant IDs
   currentIndex: number          // pointer into order — whose turn it is
-  delaying: CombatantId[]       // combatants currently delaying
 }
 ```
 
@@ -242,7 +241,7 @@ interface InitiativeState {
 
 - Initiative is a manually-orderable list. The GM sets initial order (typically by rolling), and can drag-reorder at any time.
 - **Turn advancement:** `END_TURN` triggers turn-end processing and then moves `currentIndex` forward. When it wraps past the end, `round` increments.
-- **Delay:** Combatant is moved from `order` to `delaying`. Pointer advances to next combatant. When the delaying combatant re-enters, they are inserted at the chosen position in `order`.
+- **Delay:** The GM represents Delay manually by reordering initiative. The tracker does not automate its timing or effect-boundary semantics.
 - **Ready:** Not an initiative mutation. The combatant's turn is spent normally; they gain a "readied action" effect (reminder-only).
 - **Death/removal:** Combatant can be marked dead but remains in order (greyed out, skipped). Alternatively removed entirely. GM's choice.
 - **Joining mid-combat:** New combatant inserted at the appropriate position in `order`.
@@ -500,14 +499,15 @@ interface UndoStack {
 }
 ```
 
-- **New command:** truncate everything after `currentIndex`, push new snapshot and command, advance index.
+- **New accepted state-changing encounter command:** truncate the redo branch, push before/after snapshots and command metadata, and enforce a 50-frame cap.
 - **Undo:** decrement `currentIndex`, set store to `snapshots[currentIndex]`.
 - **Redo:** increment `currentIndex`, set store to that snapshot.
 - **Not persisted.** On page reload, undo history is lost. Encounter state is restored from the IndexedDB snapshot.
+- Rejected and no-op commands do not create frames. Local dice-roll log entries, library CRUD, imports, and settings changes are outside encounter history.
 
 ### 12.2 Snapshot Strategy
 
-Every command produces a full state snapshot stored alongside it. Given state is ~100KB for a 10-combatant encounter, storing 50-100 snapshots is ~5-10MB — negligible in memory. This makes undo O(1) instead of replaying commands.
+Every accepted state-changing encounter command stores before/after state references. The stack is capped at 50 frames. This makes undo and redo O(1) instead of replaying commands.
 
 ---
 
@@ -530,8 +530,8 @@ Every command produces a full state snapshot stored alongside it. Given state is
 On page load:
 
 1. Read `activeEncounter` from IndexedDB.
-2. If present and `phase !== "COMPLETED"`: restore into Svelte store, resume where left off. Undo history is empty (lost).
-3. If absent or completed: show encounter creation screen.
+2. If present: restore into the Svelte store at its saved phase. `COMPLETED` restores as an explicit read-only review state. Undo history is empty (lost).
+3. If absent: show encounter creation guidance.
 
 ### 13.3 YAML Import/Export
 
@@ -545,6 +545,14 @@ YAML is the exchange format. Import/export covers:
 - **Effect definitions:** Custom effects in the same shape as `EffectDefinition`.
 
 The YAML schema is a direct serialization of the TypeScript types. `pf2e-yaml-schema-spec.md` defines the document envelope, supported document kinds, and import/export rules.
+
+### 13.4 Table-Session Lifecycle and Safety
+
+- `ACTIVE` exposes **Complete Encounter** only when no prompts are unresolved.
+- `COMPLETED` is read-only and exposes **Prepare Rematch**, **Export Encounter**, and the confirmed **Start New Encounter…** flow.
+- Discarding always requires an in-app confirmation and clears only the active encounter record; creature, hazard, and party libraries remain.
+- Tablets are the primary table context. Frequent controls use real hit boxes of at least 44 by 44 CSS pixels, the setup/library pane collapses once when combat starts, and every required action has a visible non-long-press route.
+- Undo/redo controls and `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` are available outside text and number editing fields.
 
 ---
 
@@ -623,7 +631,7 @@ The complete command vocabulary is canonical in `pf2e-command-vocabulary-spec.md
 `ADD_COMBATANT`, `REMOVE_COMBATANT`, `RENAME_COMBATANT`
 
 ### 16.3 Initiative
-`SET_INITIATIVE_ORDER`, `REORDER_COMBATANT`, `END_TURN`, `DELAY`, `RESUME_FROM_DELAY`
+`SET_INITIATIVE_ORDER`, `REORDER_COMBATANT`, `END_TURN`
 
 ### 16.4 HP & Damage
 `APPLY_DAMAGE`, `APPLY_HEALING`, `SET_TEMP_HP`, `SET_HP`

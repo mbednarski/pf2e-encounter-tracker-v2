@@ -9,6 +9,7 @@
   export let emptyDisplay: string | undefined = undefined;
   export let displayClass: string = '';
   export let onCommit: (parsed: CommittableEdit) => void;
+  export let disabled = false;
 
   let editing = false;
   let buffer = '';
@@ -77,6 +78,10 @@
       <span id={hintId} class="hint" role="status">use 42, +3, or −5</span>
     {/if}
   </span>
+{:else if disabled}
+  <span class="display display--readonly {displayClass}" aria-label={displayAriaLabel}>
+    {#if value === 0 && emptyDisplay !== undefined}{emptyDisplay}{:else}{value}{/if}
+  </span>
 {:else}
   <button
     type="button"
@@ -106,8 +111,8 @@
     font: inherit;
     font-variant-numeric: tabular-nums;
     text-align: right;
-    border: 1px solid var(--input-border, #888);
-    border-radius: 3px;
+    border: var(--border-strong);
+    border-radius: var(--radius-chip);
     background: var(--color-panel-up);
     color: inherit;
   }
@@ -134,7 +139,7 @@
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 3px;
-    text-decoration-color: rgba(0, 0, 0, 0.25);
+    text-decoration-color: color-mix(in srgb, var(--color-ink) 25%, transparent);
   }
 
   .display:hover,
@@ -142,9 +147,22 @@
     text-decoration-color: currentColor;
   }
 
+  .display--readonly {
+    cursor: default;
+    text-decoration: none;
+  }
+
   .display:focus-visible {
     outline: 2px solid var(--color-blue);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: var(--radius-chip);
+  }
+
+  @media (pointer: coarse), (max-width: 1024px) {
+    input,
+    .display {
+      min-height: var(--tap-target-min);
+      min-width: var(--tap-target-min);
+    }
   }
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
   type Variant =
     | 'default'
+    | 'trait'
     | 'pc'
     | 'enemy'
     | 'success'
@@ -43,6 +44,15 @@
     color: var(--color-ink-soft);
     border: var(--border-thin);
     background: transparent;
+  }
+
+  /* The PF2e trait tag — deep-crimson fill, light text, sharp corners.
+     This is the identity anchor every other filled variant derives from.
+     Distinct from chip--danger, which uses the brighter danger red. */
+  .chip--trait {
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
+    background: var(--accent);
   }
 
   .chip--pc {
