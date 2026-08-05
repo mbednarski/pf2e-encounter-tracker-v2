@@ -96,10 +96,17 @@ Usage tracking and the encounter details UI are implemented. Direct bulk/set/res
 - [x] Add IndexedDB hazard library (DB v5) with import/manage UI.
 - [x] Add hazard combatant rendering: stat block, Stealth/Hardness, free-form routine + disable text. (Spec: `pf2e-hazards-spec.md`.)
 
+## M8 Party Members
+
+Issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entities.
+
+- [x] Persistent-effect sync-back on encounter completion (spec §4.5): Wounded/Doomed/afflictions written back to the stored record and carried into the next encounter.
+- [ ] Companions and minion combatants (`masterId` turn-boundary processing, initiative exclusion, removal cascade).
+- [ ] Parties and one-click "Add Party" encounter setup.
+
 ## Deferred milestones
 
 Specs are authoritative; tracking issues hold scope so the work is not lost. None of these are in the active backlog filter.
 
 - **Afflictions** — issue #51, spec `pf2e-afflictions-spec.md`. Poison/disease/curse staging, saves, and turn-boundary prompts.
-- **Party members** — issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entities, not ad-hoc combatants.
 - **Creature types** — spec `pf2e-creature-types-spec.md`. Folds into #48 once the import-driven creature library lands.

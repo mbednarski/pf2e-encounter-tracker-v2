@@ -27,6 +27,7 @@
     groupConditionsByCategory,
     listAfflictionOptions,
     listConditionOptions,
+    activeEffectLibrary,
     listConditionWedgeCounts,
     listPersistentDamageOptions,
     listRecentConditionOptions,
@@ -89,6 +90,7 @@
     savePartyMember
   } from '$lib/storage/party-members';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
+  import { syncPartyMembersAfterEncounter } from '$lib/party-sync';
   import { loadGameClock, saveGameClock } from '$lib/storage/game-clock';
   import { clampClock } from '$lib/game-clock';
   import {
@@ -965,6 +967,39 @@
   function completeEncounter() {
     if (encounter.phase !== 'ACTIVE' || encounter.pendingPrompts.length > 0) return;
     runCommand(toCommand('COMPLETE_ENCOUNTER', undefined, nextCommandId()));
+    void syncBackPartyMembers();
+  }
+
+  /**
+   * Party-members spec §4.5: on completion, persist each party-member
+   * combatant's surviving effects (Wounded, Doomed, afflictions, …) back to
+   * its stored record so they carry into the next encounter.
+   */
+  async function syncBackPartyMembers() {
+    if (encounter.phase !== 'COMPLETED') return;
+    const updated = syncPartyMembersAfterEncounter(
+      encounter.combatants,
+      storedPartyMembers,
+      activeEffectLibrary()
+    );
+    if (updated.length === 0) return;
+    const results = await Promise.all(
+      updated.map(async (member) => ({ member, result: await savePartyMember(member) }))
+    );
+    const saved = results.filter(({ result }) => result.ok).map(({ member }) => member);
+    if (saved.length > 0) {
+      const savedById = new Map(saved.map((member) => [member.id, member]));
+      storedPartyMembers = storedPartyMembers.map(
+        (member) => savedById.get(member.id) ?? member
+      );
+    }
+    const failed = results.filter(({ result }) => !result.ok);
+    if (failed.length > 0) {
+      appendFeedback(
+        nextFeedbackId('pm-sync'),
+        `Could not save conditions back to ${failed.map(({ member }) => member.name).join(', ')} — changes apply to this session only.`
+      );
+    }
   }
 
   function prepareRematch() {
