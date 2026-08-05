@@ -103,7 +103,7 @@ Issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entit
 - [x] Persistent-effect sync-back on encounter completion (spec §4.5): Wounded/Doomed/afflictions written back to the stored record and carried into the next encounter.
 - [x] Companion domain model and minion combat rules: `Companion` type, combatant factory, `masterId` validation, initiative exclusion, removal cascade, and turn-boundary processing at the master's turn (spec §2.3, §4.4, §8.4, §9.1).
 - [x] Companion storage/import and UI grouping: `companions` IndexedDB store (DB v7), `kind: companion` YAML import through the party Import button, companions listed under their member in the party panel, added to encounters as minions under the member's card, and persistent-effect sync-back on completion.
-- [ ] Parties and one-click "Add Party" encounter setup.
+- [x] Parties and one-click "Add Party": `Party` record + `parties` store (DB v8), `kind: party` YAML import, create/edit modal with member picker, and a party row that dispatches every member plus companions in one click (spec §4.2).
 
 ## Deferred milestones
 

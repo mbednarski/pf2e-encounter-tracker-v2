@@ -49,6 +49,7 @@ export type {
   Command,
   Companion,
   CompanionType,
+  Party,
   CommandResult,
   CommandType,
   ComputedModifierBucket,

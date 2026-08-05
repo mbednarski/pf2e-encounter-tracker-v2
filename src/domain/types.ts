@@ -261,6 +261,20 @@ export interface PartyMember {
   tags: string[];
 }
 
+/**
+ * Named group of party members (party-members spec §3.3). Multiple parties are
+ * supported from day one; `level` feeds future encounter-builder XP budgets.
+ * Pure grouping record — companions attach to members, not to the party.
+ */
+export interface Party {
+  id: string;
+  name: string;
+  /** References PartyMember.id records. */
+  memberIds: string[];
+  level: number;
+  notes?: string;
+}
+
 export type CompanionType = 'animal-companion' | 'familiar' | 'eidolon' | 'other';
 
 /**
