@@ -17,6 +17,12 @@ export {
 } from './creatures/adjusted-view';
 export type { AdjustedView } from './creatures/adjusted-view';
 export { effectLibrary } from './effects/library';
+export {
+  afflictionDataIssues,
+  afflictionSaveDeltas,
+  afflictionSaveLabel,
+  afflictionStageDescription
+} from './effects/afflictions';
 export { deriveStats } from './effects/derivation';
 export { durationFromSpec } from './effects/duration';
 export {
@@ -36,6 +42,8 @@ export type {
   Ability,
   AbilitySave,
   AbilityScores,
+  AfflictionData,
+  AfflictionStage,
   AppliedModifier,
   AppliedEffect,
   Attack,

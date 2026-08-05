@@ -36,7 +36,22 @@ function persistentDamage(type: string, name: string): EffectDefinition {
 function affliction(definition: Omit<EffectDefinition, 'category'>): EffectDefinition {
   // Afflictions (diseases, poisons, curses) persist narratively between
   // encounters (party-members spec §10.6); a definition may still opt out.
-  return { category: 'affliction', persistAfterEncounter: true, ...definition };
+  const base: EffectDefinition = { category: 'affliction', persistAfterEncounter: true, ...definition };
+
+  // Combat afflictions (interval "1 round") prompt a save at the carrier's
+  // turn end (afflictions spec §5). The description follows the standard or
+  // virulent outcome template (§5.2) so every affliction reads identically.
+  const data = base.afflictionData;
+  if (data && data.interval === '1 round' && !base.turnEndSuggestion) {
+    const save = data.saveType.charAt(0).toUpperCase() + data.saveType.slice(1);
+    base.turnEndSuggestion = {
+      type: 'promptResolution',
+      description: data.virulent
+        ? `${save} save DC ${data.saveDC} (virulent). Crit Success → reduce by 1. Success → no change. Failure → increase by 1. Crit Failure → increase by 2.`
+        : `${save} save DC ${data.saveDC}. Crit Success → reduce by 2. Success → reduce by 1. Failure → increase by 1. Crit Failure → increase by 2.`
+    };
+  }
+  return base;
 }
 
 function spellEffect(definition: Omit<EffectDefinition, 'category'>): EffectDefinition {
@@ -362,8 +377,23 @@ export const effectLibrary: EffectLibrary = {
     hasValue: true,
     maxValue: 4,
     modifiers: [],
-    description:
-      'Disease (DC 17 Fortitude). Stage 1: carrier (1 day). Stage 2: 3d8 negative damage and enfeebled 2 (1 day). Stage 3: 3d8 negative damage and enfeebled 2 (1 day). Stage 4: as stage 3, and the creature dies if reduced to 0 HP, rising as a ghoul on the next midnight.'
+    description: 'Disease. Goblins and goblin dogs are not immune; anyone slain while at stage 4 rises as a ghoul.',
+    afflictionData: {
+      saveType: 'fortitude',
+      saveDC: 17,
+      onset: '1 day',
+      interval: '1 day',
+      stages: [
+        { stage: 1, description: 'Carrier with no ill effect (1 day)' },
+        { stage: 2, description: '3d8 negative damage and enfeebled 2 (1 day)' },
+        { stage: 3, description: '3d8 negative damage and enfeebled 2 (1 day)' },
+        {
+          stage: 4,
+          description:
+            'As stage 3, and the creature dies if reduced to 0 HP, rising as a ghoul on the next midnight (1 day)'
+        }
+      ]
+    }
   }),
   'goblin-pox': affliction({
     id: 'goblin-pox',
@@ -371,8 +401,17 @@ export const effectLibrary: EffectLibrary = {
     hasValue: true,
     maxValue: 3,
     modifiers: [],
-    description:
-      'Disease (DC 17 Fortitude). Stage 1: sickened 1 (1 round). Stage 2: sickened 2 and slowed 1 (1 round). Stage 3: sickened 2 (1 day). Goblins and goblin dogs are immune.'
+    description: 'Disease. Goblins and goblin dogs are immune.',
+    afflictionData: {
+      saveType: 'fortitude',
+      saveDC: 17,
+      interval: '1 round',
+      stages: [
+        { stage: 1, description: 'Sickened 1 (1 round)' },
+        { stage: 2, description: 'Sickened 2 and slowed 1 (1 round)' },
+        { stage: 3, description: 'Sickened 2; cannot reduce sickened below 1 (1 day)' }
+      ]
+    }
   }),
   'drow-sleep-poison': affliction({
     id: 'drow-sleep-poison',
@@ -380,8 +419,21 @@ export const effectLibrary: EffectLibrary = {
     hasValue: true,
     maxValue: 3,
     modifiers: [],
-    description:
-      'Poison (DC 18 Fortitude). Stage 1: enfeebled 1 (1 round). Stage 2: fall unconscious (1 minute, with normal Perception checks to wake).'
+    description: 'Poison.',
+    afflictionData: {
+      saveType: 'fortitude',
+      saveDC: 18,
+      interval: '1 round',
+      maxDuration: '1 minute',
+      stages: [
+        { stage: 1, description: 'Enfeebled 1 (1 round)' },
+        {
+          stage: 2,
+          description: 'Fall unconscious (1 minute, with normal Perception checks to wake)'
+        },
+        { stage: 3, description: 'Fall unconscious (1 hour, cannot wake by Perception alone)' }
+      ]
+    }
   }),
   'spider-venom': affliction({
     id: 'spider-venom',
@@ -389,8 +441,18 @@ export const effectLibrary: EffectLibrary = {
     hasValue: true,
     maxValue: 3,
     modifiers: [],
-    description:
-      'Poison (DC 22 Fortitude). Stage 1: 1d4 poison damage and enfeebled 1 (1 round). Stage 2: 1d4 poison damage and enfeebled 2 (1 round). Stage 3: 2d4 poison damage and enfeebled 2 (1 round).'
+    description: 'Poison.',
+    afflictionData: {
+      saveType: 'fortitude',
+      saveDC: 22,
+      interval: '1 round',
+      maxDuration: '6 rounds',
+      stages: [
+        { stage: 1, description: '1d4 poison damage and enfeebled 1 (1 round)' },
+        { stage: 2, description: '1d4 poison damage and enfeebled 2 (1 round)' },
+        { stage: 3, description: '2d4 poison damage and enfeebled 2 (1 round)' }
+      ]
+    }
   }),
 
   bless: spellEffect({

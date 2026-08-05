@@ -105,9 +105,14 @@ Issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entit
 - [x] Companion storage/import and UI grouping: `companions` IndexedDB store (DB v7), `kind: companion` YAML import through the party Import button, companions listed under their member in the party panel, added to encounters as minions under the member's card, and persistent-effect sync-back on completion.
 - [x] Parties and one-click "Add Party": `Party` record + `parties` store (DB v8), `kind: party` YAML import, create/edit modal with member picker, and a party row that dispatches every member plus companions in one click (spec §4.2).
 
+## M9 Afflictions
+
+Issue #51, spec `pf2e-afflictions-spec.md`. Reminder-only stage tracking — the GM applies stage conditions manually (arch decision A4).
+
+- [x] `AfflictionData`/`AfflictionStage` on `EffectDefinition`, stage-description/save-label/save-delta helpers with clamping, structural validation (spec §10 error rules), and structured data + auto-generated save prompts on the four built-in afflictions.
+- [ ] UI: stage description on effect chips, expanded save/interval/onset metadata, structured 4-button save resolution (spec §5.4, §6).
+
 ## Deferred milestones
 
 Specs are authoritative; tracking issues hold scope so the work is not lost. None of these are in the active backlog filter.
-
-- **Afflictions** — issue #51, spec `pf2e-afflictions-spec.md`. Poison/disease/curse staging, saves, and turn-boundary prompts.
 - **Creature types** — spec `pf2e-creature-types-spec.md`. Folds into #48 once the import-driven creature library lands.
