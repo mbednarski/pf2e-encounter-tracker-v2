@@ -126,12 +126,27 @@ describe('computeEncounterCounts', () => {
     expect(computeEncounterCounts({})).toEqual({});
   });
 
-  test('skips combatants whose sourceType is not "creature"', () => {
+  test('skips combatants whose sourceType is neither "creature" nor "hazard"', () => {
     const result = computeEncounterCounts({
       'aric-1': combatant('aric-1', { sourceType: 'partyMember', sourceId: 'aric' }),
       'goblin-1': combatant('goblin-1', { sourceType: 'creature', sourceId: 'goblin' })
     });
     expect(result).toEqual({ goblin: 1 });
+  });
+
+  test('counts hazard combatants alongside creatures', () => {
+    const result = computeEncounterCounts({
+      'goblin-1': combatant('goblin-1', { sourceType: 'creature', sourceId: 'goblin' }),
+      'dart-gallery-1': combatant('dart-gallery-1', {
+        sourceType: 'hazard',
+        sourceId: 'dart-gallery'
+      }),
+      'dart-gallery-2': combatant('dart-gallery-2', {
+        sourceType: 'hazard',
+        sourceId: 'dart-gallery'
+      })
+    });
+    expect(result).toEqual({ goblin: 1, 'dart-gallery': 2 });
   });
 
   test('aggregates multiple combatants sharing a sourceId', () => {

@@ -48,14 +48,14 @@
   }
 
   .btn--primary {
-    background: var(--color-ink);
-    color: var(--color-panel);
-    border: 1px solid var(--color-ink);
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
   }
 
   .btn--primary:hover:not(:disabled) {
-    background: var(--color-ink-soft);
-    border-color: var(--color-ink-soft);
+    background: var(--color-ink);
+    border-color: var(--color-ink);
   }
 
   .btn--secondary {
@@ -98,5 +98,13 @@
   .btn:disabled {
     cursor: not-allowed;
     opacity: 0.5;
+  }
+
+  /* Touch devices get comfortable hit areas without changing the
+     pointer-device density. */
+  @media (pointer: coarse), (max-width: 1024px) {
+    .btn {
+      min-height: var(--tap-target-min);
+    }
   }
 </style>

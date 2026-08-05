@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import SetupPanel from './SetupPanel.svelte';
 
 function baseProps(overrides: Record<string, unknown> = {}) {
@@ -7,7 +7,7 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     canStart: false,
     onAddManual: vi.fn(),
     onStart: vi.fn(),
-    onReset: vi.fn(),
+    onReset: vi.fn().mockResolvedValue(true),
     ...overrides
   };
 }
@@ -27,11 +27,58 @@ describe('SetupPanel — Start Encounter button', () => {
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  test('Reset Local button calls onReset', async () => {
+  test('opening and cancelling Discard Encounter does not reset', async () => {
     const onReset = vi.fn();
     render(SetupPanel, { props: baseProps({ onReset }) });
-    await fireEvent.click(screen.getByRole('button', { name: 'Reset Local' }));
-    expect(onReset).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByRole('button', { name: 'Discard Encounter…' }));
+
+    expect(screen.getByRole('dialog', { name: 'Discard active encounter?' })).toBeInTheDocument();
+    expect(screen.getByText(/active encounter and combat log/i)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep Encounter' }));
+
+    expect(onReset).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('Escape closes Discard Encounter without resetting', async () => {
+    const onReset = vi.fn();
+    render(SetupPanel, { props: baseProps({ onReset }) });
+    await fireEvent.click(screen.getByRole('button', { name: 'Discard Encounter…' }));
+    await fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onReset).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('confirming Discard Encounter calls onReset once and closes after it succeeds', async () => {
+    const onReset = vi.fn().mockResolvedValue(true);
+    render(SetupPanel, { props: baseProps({ onReset }) });
+    await fireEvent.click(screen.getByRole('button', { name: 'Discard Encounter…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Discard Encounter' }));
+
+    expect(onReset).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  test('does not submit discard twice while clearing persistence', async () => {
+    let finishDiscard: ((discarded: boolean) => void) | undefined;
+    const onReset = vi.fn(
+      () => new Promise<boolean>((resolve) => {
+        finishDiscard = resolve;
+      })
+    );
+    render(SetupPanel, { props: baseProps({ onReset }) });
+    await fireEvent.click(screen.getByRole('button', { name: 'Discard Encounter…' }));
+
+    const discardButton = screen.getByRole('button', { name: 'Discard Encounter' });
+    await fireEvent.click(discardButton);
+    expect(discardButton).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Keep Encounter' })).toBeDisabled();
+    await fireEvent.click(discardButton);
+    expect(onReset).toHaveBeenCalledOnce();
+
+    finishDiscard!(true);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });
 

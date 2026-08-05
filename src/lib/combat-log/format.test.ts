@@ -74,12 +74,6 @@ describe('formatEvent — exhaustive over DomainEvent', () => {
     expect(fmt({ type: 'initiative-changed', combatantId: 'fighter-1', newIndex: 0 })).toMatchObject({
       message: 'Fighter moved to position 1 in the order.'
     });
-    expect(fmt({ type: 'combatant-delayed', combatantId: 'goblin-1' })).toMatchObject({
-      message: 'Goblin Warrior is delaying.'
-    });
-    expect(
-      fmt({ type: 'combatant-resumed-from-delay', combatantId: 'goblin-1', insertIndex: 1 })
-    ).toMatchObject({ message: 'Goblin Warrior resumed from delay.' });
     expect(fmt({ type: 'turn-started', combatantId: 'goblin-1', round: 2 })).toMatchObject({
       message: "Goblin Warrior's turn (round 2)."
     });

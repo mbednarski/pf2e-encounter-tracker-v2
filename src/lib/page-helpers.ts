@@ -47,7 +47,9 @@ export function computeEncounterCounts(
 ): CountsBySourceId {
   const counts: CountsBySourceId = {};
   for (const combatant of Object.values(combatants)) {
-    if (combatant.sourceType !== 'creature') continue;
+    // Creatures and hazards are added from the library in repeatable
+    // instances, so each library section needs a per-source-id count.
+    if (combatant.sourceType !== 'creature' && combatant.sourceType !== 'hazard') continue;
     counts[combatant.sourceId] = (counts[combatant.sourceId] ?? 0) + 1;
   }
   return counts;

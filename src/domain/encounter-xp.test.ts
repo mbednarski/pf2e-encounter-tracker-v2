@@ -14,7 +14,7 @@ function makeEncounter(combatants: CombatantState[]): EncounterState {
     name: 'Test Encounter',
     phase: 'PREPARING',
     round: 0,
-    initiative: { order: [], currentIndex: 0, delaying: [], scores: {} },
+    initiative: { order: [], currentIndex: 0, scores: {} },
     combatants: Object.fromEntries(combatants.map((c) => [c.id, c])),
     pendingPrompts: [],
     combatLog: [],

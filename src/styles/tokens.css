@@ -1,10 +1,18 @@
 /*
- * Design tokens — "Cool Slate / Teal" palette.
+ * Design tokens — "Statblock Parchment" identity.
  *
- * Surfaces are paper-toned (no pure white anywhere), ink is neutral-cool,
- * accents are tuned for AA contrast on the surfaces below them. Roll-type,
- * effect-category, faction, and HP-tone aliases are layered on top of the
- * primitive colors so component CSS reads what it means, not what it is.
+ * The UI quotes the visual language of official PF2e rulebook statblocks:
+ * warm parchment surfaces (no pure white anywhere), warm near-black ink,
+ * and a deep-crimson identity accent (trait chips, section rules, primary
+ * actions). --color-red stays a separate, brighter DANGER semantic —
+ * crimson is identity, red is damage/danger; the two must read differently.
+ *
+ * Roll-type, effect-category, faction, and HP-tone aliases are layered on
+ * top of the primitive colors so component CSS reads what it means, not
+ * what it is.
+ *
+ * Every ink/surface and chip fg/bg pairing below is checked at WCAG AA
+ * (>= 4.5:1); treat AA as a hard requirement when retuning any primitive.
  *
  * Any UI surface that needs a color, spacing, font, or radius MUST read it
  * from a token here so a later [data-theme="dark"] block can override the
@@ -12,30 +20,44 @@
  */
 
 :root {
-  /* Surfaces — paper, not bulb */
-  --color-bg: #eef0eb;          /* page backdrop */
-  --color-panel: #f5f6f1;       /* card / panel resting */
-  --color-panel-2: #e8eae4;     /* sub-panel, header strip, hover */
-  --color-panel-up: #fafbf6;    /* active / lifted card — eggshell, never #fff */
-  --color-hp-bg: #ddded7;       /* HP meter track */
+  /* Surfaces — parchment, not bulb */
+  --color-bg: #efe8d2;          /* page backdrop */
+  --color-panel: #f7f1e1;       /* card / panel resting */
+  --color-panel-2: #ede5cc;     /* sub-panel, header strip, hover */
+  --color-panel-up: #fcf8ec;    /* active / lifted card — eggshell, never #fff */
+  --color-hp-bg: #dfd6ba;       /* HP meter track */
 
   /* Ink (text & rules) */
-  --color-ink: #14140e;         /* primary text, primary borders */
-  --color-ink-soft: #555a51;    /* secondary text, AA on panel */
-  --color-ink-mute: #7d8278;    /* tertiary text, AA-large for caps labels */
-  --color-rule: #cbcec5;        /* light dividers */
-  --color-rule-strong: #aaada4; /* medium dividers, frame edges */
+  --color-ink: #211b12;         /* primary text, primary borders */
+  --color-ink-soft: #5d5442;    /* secondary text, AA on panel */
+  --color-ink-mute: #6e6450;    /* tertiary text, AA for caps labels */
+  --color-rule: #d5cbae;        /* light dividers */
+  --color-rule-strong: #b3a780; /* medium dividers, frame edges */
+
+  /* Identity accent — the deep crimson of PF2e trait tags and section
+     rules. -ink is the light text placed on a crimson fill. */
+  --color-crimson: #5d1f1f;
+  --color-crimson-soft: #eddad4;
+  --color-crimson-ink: #f7f1e1;
 
   /* Semantic accents — primitives. *-soft values are the soft fill behind
      a chip whose text/border uses the corresponding non-soft primitive. */
-  --color-red: #b22a39;         /* danger, damage, persistent, faction-enemy */
-  --color-red-soft: #f1d4d8;
+  --color-red: #a92832;         /* danger, damage, persistent, faction-enemy */
+  --color-red-soft: #f2d5d3;
   --color-green: #0d6e6e;       /* HP-OK, save accent — TEAL */
-  --color-green-soft: #cfe6e6;
-  --color-amber: #b8841a;       /* HP-warn, moderate difficulty */
-  --color-amber-soft: #f5e4b8;
+  --color-green-soft: #d2e4dd;
+  --color-amber: #8a5f0b;       /* HP-warn, moderate difficulty */
+  --color-amber-soft: #f4e8c9;
   --color-blue: #2c4d6e;        /* PCs, attack rolls, focus ring */
-  --color-blue-soft: #d3e0ee;
+  --color-blue-soft: #d7e0e7;
+
+  /* Identity aliases — use these (not --color-crimson directly) so the
+     accent can be retuned in one place. --rule-accent is the tapered
+     crimson section rule under statblock headings. */
+  --accent: var(--color-crimson);
+  --accent-soft: var(--color-crimson-soft);
+  --accent-ink: var(--color-crimson-ink);
+  --rule-accent: linear-gradient(90deg, var(--color-crimson) 0%, var(--color-crimson) 55%, transparent 100%);
 
   /* Roll-type aliases — used by chips and roll buttons so a glance at the
      UI tells you what kind of roll you're about to make. */
@@ -48,8 +70,8 @@
 
   /* Effect-category aliases — conditions vs persistent damage must look
      different. Conditions get bronze/amber, persistent damage stays red. */
-  --effect-cond: #8a5a14;
-  --effect-cond-soft: #f1e1be;
+  --effect-cond: #855410;
+  --effect-cond-soft: #efdfba;
   --effect-pers: var(--color-red);
   --effect-pers-soft: var(--color-red-soft);
 
@@ -63,7 +85,11 @@
   --hp-warn: var(--color-amber);
   --hp-crit: var(--color-red);
 
-  /* Typography */
+  /* Typography.
+     Section labels are serif + uppercase + widest tracking (true
+     small-caps render inconsistently for Source Serif 4 Variable across
+     platforms, so uppercase-with-tracking is the canonical treatment).
+     Every HUD numeral (init, HP, AC, DC, round) uses --font-mono. */
   --font-serif: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -97,25 +123,31 @@
   --space-7: 32px;
   --space-8: 48px;
 
+  /* Minimum physical-table hit area for frequent controls. */
+  --tap-target-min: 44px;
+
   /* Borders */
   --border-thin: 1px solid var(--color-rule);
   --border-strong: 1px solid var(--color-rule-strong);
   --border-ink: 1px solid var(--color-ink);
 
-  /* Flat by design — no border-radius. A future Direction B can override. */
+  /* Flat by design — no border-radius anywhere. Sharp corners are part of
+     the printed-statblock identity (trait chips are deliberately square). */
   --radius-card: 0;
   --radius-chip: 0;
 
-  /* Shadows */
-  --shadow-paper: 4px 6px 0 rgba(20, 20, 14, 0.18);
-  --shadow-soft: 0 1px 2px rgba(20, 20, 14, 0.08);
+  /* Shadows — warm ink, print-style offset blocks */
+  --shadow-paper: 4px 6px 0 rgba(33, 27, 18, 0.18);
+  --shadow-soft: 0 1px 2px rgba(33, 27, 18, 0.08);
+  --shadow-lift: 3px 4px 0 rgba(93, 31, 31, 0.16);
 }
 
 /*
  * Direction B (dark "Console") palette — stub.
  * Populate this block in a future PR to enable a [data-theme="dark"]
- * toggle. Intentionally left empty so the cascade falls through to the
- * :root values until the dark slice ships.
+ * toggle. A dark theme must override at minimum: the five surface tokens,
+ * the ink scale + rules, every *-soft fill, --color-crimson(-soft/-ink),
+ * and the shadow tokens; the role aliases then follow automatically.
  */
 [data-theme='dark'] {
   /* TODO(direction-b): paste dark palette here. */
