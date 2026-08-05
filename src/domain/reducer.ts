@@ -24,6 +24,7 @@ import type {
   UseSpellSlotPayload
 } from './types';
 import { getAdjustedView } from './creatures/adjusted-view';
+import { conditionValue, dyingDeathThreshold, findConditionInstance } from './effects/death';
 
 const allowedPhases: Record<CommandType, EncounterPhase[]> = {
   START_ENCOUNTER: ['PREPARING'],
@@ -886,6 +887,10 @@ function applyEffect(
     return reject(state, 'APPLY_EFFECT', `Effect ${command.payload.effectId} not found`);
   }
 
+  if (effect.id === 'dying') {
+    return applyDying(state, command, target, source, effect, effectLibrary);
+  }
+
   const duration = command.payload.duration ?? { type: 'unlimited' };
   if (!isValidDuration(state, duration)) {
     return reject(state, 'APPLY_EFFECT', 'APPLY_EFFECT duration is invalid');
@@ -920,6 +925,290 @@ function applyEffect(
       recentEffectIds: pushRecent(state.recentEffectIds, command.payload.effectId)
     }
   };
+}
+
+function withRecentEffect(result: CommandResult, priorRecent: readonly string[], effectId: string): CommandResult {
+  return {
+    ...result,
+    newState: { ...result.newState, recentEffectIds: pushRecent(priorRecent, effectId) }
+  };
+}
+
+/**
+ * Apply the Dying condition (death-tracking spec §3.2). Gaining Dying folds in
+ * the combatant's Wounded value and checks the Doomed-adjusted death threshold.
+ * Re-applying Dying to a combatant that already has it is rejected — the GM
+ * raises the existing value via MODIFY_EFFECT_VALUE (spec §3.3) instead.
+ */
+function applyDying(
+  state: EncounterState,
+  command: Extract<Command, { type: 'APPLY_EFFECT' }>,
+  target: CombatantState,
+  source: CombatantState | undefined,
+  dyingDef: EffectDefinition,
+  effectLibrary: EffectLibrary
+): CommandResult {
+  const requested = command.payload.value ?? 1;
+  if (!isPositive(requested)) {
+    return reject(state, 'APPLY_EFFECT', `APPLY_EFFECT value must be >= 1 for ${dyingDef.name}`);
+  }
+
+  if (findConditionInstance(target, 'dying')) {
+    return reject(
+      state,
+      'APPLY_EFFECT',
+      `Combatant ${target.id} is already Dying; adjust the existing Dying value instead`
+    );
+  }
+
+  const woundedValue = conditionValue(target, 'wounded');
+  const doomedValue = conditionValue(target, 'doomed');
+  const threshold = dyingDeathThreshold(doomedValue);
+  const effectiveValue = requested + woundedValue;
+
+  if (effectiveValue >= threshold) {
+    return applyFatalDying(state, command, target, source, dyingDef, threshold);
+  }
+
+  const appliedEffects = [...target.appliedEffects];
+  const events: DomainEvent[] = [];
+  const created = appendAppliedEffect({
+    target,
+    effectLibrary,
+    appliedEffects,
+    events,
+    commandId: command.id,
+    effect: dyingDef,
+    sourceId: command.payload.sourceId,
+    sourceLabel: source?.name,
+    value: effectiveValue,
+    duration: { type: 'unlimited' },
+    note: command.payload.note,
+    seenEffectIds: new Set()
+  });
+
+  if (created.error) {
+    return reject(state, 'APPLY_EFFECT', created.error);
+  }
+
+  return withRecentEffect(
+    updateCombatant(state, { ...target, appliedEffects }, events),
+    state.recentEffectIds,
+    'dying'
+  );
+}
+
+/**
+ * Gaining Dying at or beyond the death threshold (spec §3.2 step 5): record
+ * Dying capped at the threshold and mark the combatant dead. No implied
+ * Unconscious — the combatant is dead, not merely unconscious.
+ */
+function applyFatalDying(
+  state: EncounterState,
+  command: Extract<Command, { type: 'APPLY_EFFECT' }>,
+  target: CombatantState,
+  source: CombatantState | undefined,
+  dyingDef: EffectDefinition,
+  threshold: number
+): CommandResult {
+  const instanceId = nextEffectInstanceId(command.id, target.appliedEffects);
+  const dyingEffect: AppliedEffect = {
+    instanceId,
+    effectId: 'dying',
+    value: threshold,
+    ...(command.payload.sourceId ? { sourceId: command.payload.sourceId } : {}),
+    ...(source ? { sourceLabel: source.name } : {}),
+    duration: { type: 'unlimited' }
+  };
+
+  const updated: CombatantState = {
+    ...target,
+    appliedEffects: [...target.appliedEffects, dyingEffect],
+    isAlive: false
+  };
+
+  const events: DomainEvent[] = [
+    {
+      type: 'effect-applied',
+      combatantId: target.id,
+      effectId: 'dying',
+      effectName: dyingDef.name,
+      instanceId,
+      value: threshold
+    },
+    { type: 'combatant-died', combatantId: target.id, cause: 'dying-threshold' }
+  ];
+
+  return withRecentEffect(updateCombatant(state, updated, events), state.recentEffectIds, 'dying');
+}
+
+/**
+ * Recovering from Dying (spec §3.4): remove Dying (cascading to its implied
+ * Unconscious / Off-Guard), then add Wounded 1 or raise existing Wounded by 1.
+ */
+function recoverFromDying(
+  state: EncounterState,
+  target: CombatantState,
+  dyingInstanceId: string,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): CommandResult {
+  const removal = removeExistingEffect(state, target, dyingInstanceId, effectLibrary, 'removed', commandType);
+  if (removal.events.some((event) => event.type === 'command-rejected')) {
+    return removal;
+  }
+
+  const woundedDef = effectLibrary['wounded'];
+  const updatedTarget = removal.newState.combatants[target.id];
+  if (!woundedDef || !updatedTarget) {
+    return removal;
+  }
+
+  const existingWounded = findConditionInstance(updatedTarget, 'wounded');
+  if (existingWounded) {
+    const from = existingWounded.value ?? 1;
+    const to = woundedDef.maxValue !== undefined ? Math.min(from + 1, woundedDef.maxValue) : from + 1;
+    if (to === from) {
+      return removal;
+    }
+    return updateCombatant(removal.newState, replaceEffect(updatedTarget, { ...existingWounded, value: to }), [
+      ...removal.events,
+      {
+        type: 'effect-value-changed',
+        combatantId: updatedTarget.id,
+        effectId: 'wounded',
+        effectName: woundedDef.name,
+        instanceId: existingWounded.instanceId,
+        from,
+        to
+      }
+    ]);
+  }
+
+  const appliedEffects = [...updatedTarget.appliedEffects];
+  const events: DomainEvent[] = [...removal.events];
+  const created = appendAppliedEffect({
+    target: updatedTarget,
+    effectLibrary,
+    appliedEffects,
+    events,
+    commandId: `${dyingInstanceId}:recover`,
+    effect: woundedDef,
+    value: 1,
+    duration: { type: 'unlimited' },
+    seenEffectIds: new Set()
+  });
+
+  if (created.error) {
+    return reject(state, commandType, created.error);
+  }
+
+  return updateCombatant(removal.newState, { ...updatedTarget, appliedEffects }, events);
+}
+
+/**
+ * Resolve a change to an existing Dying value (spec §3.3 increase / §3.4
+ * recovery). Reaching 0 recovers (adding Wounded); reaching the threshold marks
+ * the combatant dead with Dying capped at the threshold.
+ */
+function applyDyingTransition(
+  state: EncounterState,
+  target: CombatantState,
+  dyingEffect: AppliedEffect,
+  dyingDef: EffectDefinition,
+  fromValue: number,
+  newValue: number,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): CommandResult {
+  if (newValue <= 0) {
+    return recoverFromDying(state, target, dyingEffect.instanceId, effectLibrary, commandType);
+  }
+
+  const threshold = dyingDeathThreshold(conditionValue(target, 'doomed'));
+  const dead = newValue >= threshold;
+  const finalValue = dead ? threshold : newValue;
+
+  const events: DomainEvent[] = [
+    {
+      type: 'effect-value-changed',
+      combatantId: target.id,
+      effectId: 'dying',
+      effectName: dyingDef.name,
+      instanceId: dyingEffect.instanceId,
+      from: fromValue,
+      to: finalValue
+    }
+  ];
+
+  let updated = replaceEffect(target, { ...dyingEffect, value: finalValue });
+  if (dead) {
+    updated = { ...updated, isAlive: false };
+    events.push({ type: 'combatant-died', combatantId: target.id, cause: 'dying-threshold' });
+  }
+
+  return updateCombatant(state, updated, events);
+}
+
+/**
+ * Resolve a change to Doomed (spec §3.5): apply the new Doomed value, then, if
+ * the combatant is currently Dying, re-check the death threshold and mark dead
+ * if the now-lower threshold has been crossed.
+ */
+function applyDoomedChange(
+  state: EncounterState,
+  target: CombatantState,
+  doomedEffect: AppliedEffect,
+  doomedDef: EffectDefinition,
+  fromValue: number,
+  newValue: number,
+  effectLibrary: EffectLibrary,
+  commandType: CommandType
+): CommandResult {
+  let base: CommandResult;
+  let effectiveDoomed: number;
+
+  if (newValue <= 0) {
+    base = removeExistingEffect(state, target, doomedEffect.instanceId, effectLibrary, 'auto-decremented', commandType);
+    effectiveDoomed = 0;
+  } else {
+    base = updateCombatant(state, replaceEffect(target, { ...doomedEffect, value: newValue }), [
+      {
+        type: 'effect-value-changed',
+        combatantId: target.id,
+        effectId: 'doomed',
+        effectName: doomedDef.name,
+        instanceId: doomedEffect.instanceId,
+        from: fromValue,
+        to: newValue
+      }
+    ]);
+    effectiveDoomed = newValue;
+  }
+
+  if (base.events.some((event) => event.type === 'command-rejected')) {
+    return base;
+  }
+
+  const updatedTarget = base.newState.combatants[target.id];
+  if (!updatedTarget?.isAlive) {
+    return base;
+  }
+
+  const dyingEffect = findConditionInstance(updatedTarget, 'dying');
+  if (!dyingEffect) {
+    return base;
+  }
+
+  const dyingValue = dyingEffect.value ?? 1;
+  if (dyingValue < dyingDeathThreshold(effectiveDoomed)) {
+    return base;
+  }
+
+  return updateCombatant(base.newState, { ...updatedTarget, isAlive: false }, [
+    ...base.events,
+    { type: 'combatant-died', combatantId: updatedTarget.id, cause: 'dying-threshold' }
+  ]);
 }
 
 interface AppendAppliedEffectInput {
@@ -1038,6 +1327,12 @@ function removeEffect(
   const effect = target.appliedEffects.find((appliedEffect) => appliedEffect.instanceId === instanceId);
   if (!effect) {
     return reject(state, 'REMOVE_EFFECT', `Effect instance ${instanceId} not found on ${targetId}`);
+  }
+
+  // Removing Dying from a living combatant is a recovery (spec §3.4): it grants
+  // Wounded. Removing it from a corpse is plain cleanup — no Wounded.
+  if (effect.effectId === 'dying' && target.isAlive) {
+    return recoverFromDying(state, target, instanceId, effectLibrary, 'REMOVE_EFFECT');
   }
 
   return removeExistingEffect(state, target, instanceId, effectLibrary, reason, 'REMOVE_EFFECT');
@@ -1316,6 +1611,13 @@ function setEffectValue(
     return reject(state, 'SET_EFFECT_VALUE', 'SET_EFFECT_VALUE newValue must be >= 1');
   }
 
+  if (effect.effectId === 'dying' && target.isAlive) {
+    return applyDyingTransition(state, target, effect, definition, effect.value ?? 1, newValue, effectLibrary, 'SET_EFFECT_VALUE');
+  }
+  if (effect.effectId === 'doomed') {
+    return applyDoomedChange(state, target, effect, definition, effect.value ?? 1, newValue, effectLibrary, 'SET_EFFECT_VALUE');
+  }
+
   const from = effect.value ?? 1;
   const updatedEffect = { ...effect, value: newValue };
 
@@ -1359,6 +1661,14 @@ function modifyEffectValue(
 
   const from = effect.value ?? 1;
   const to = from + delta;
+
+  if (effect.effectId === 'dying' && target.isAlive) {
+    return applyDyingTransition(state, target, effect, definition, from, to, effectLibrary, 'MODIFY_EFFECT_VALUE');
+  }
+  if (effect.effectId === 'doomed') {
+    return applyDoomedChange(state, target, effect, definition, from, to, effectLibrary, 'MODIFY_EFFECT_VALUE');
+  }
+
   if (to <= 0) {
     return removeExistingEffect(state, target, instanceId, effectLibrary, 'auto-decremented', 'MODIFY_EFFECT_VALUE');
   }
