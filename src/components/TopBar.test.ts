@@ -8,6 +8,8 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     phase: 'PREPARING' as const,
     round: 0,
     activeName: undefined,
+    clockMinutes: 0,
+    onClockChange: () => {},
     ...overrides
   };
 }
