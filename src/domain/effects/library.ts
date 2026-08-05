@@ -34,7 +34,9 @@ function persistentDamage(type: string, name: string): EffectDefinition {
 }
 
 function affliction(definition: Omit<EffectDefinition, 'category'>): EffectDefinition {
-  return { category: 'affliction', ...definition };
+  // Afflictions (diseases, poisons, curses) persist narratively between
+  // encounters (party-members spec §10.6); a definition may still opt out.
+  return { category: 'affliction', persistAfterEncounter: true, ...definition };
 }
 
 function spellEffect(definition: Omit<EffectDefinition, 'category'>): EffectDefinition {
