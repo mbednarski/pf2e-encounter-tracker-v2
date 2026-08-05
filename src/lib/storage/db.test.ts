@@ -3,6 +3,7 @@ import { deleteDB, openDB, type IDBPDatabase } from 'idb';
 import {
   ACTIVE_ENCOUNTER_STORE,
   COMPANION_STORE,
+  PARTY_STORE,
   CREATURE_LIBRARY_STORE,
   DB_NAME,
   HAZARD_LIBRARY_STORE,
@@ -61,6 +62,7 @@ describe('IndexedDB schema migration', () => {
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
         COMPANION_STORE,
+        PARTY_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -94,6 +96,7 @@ describe('IndexedDB schema migration', () => {
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
         COMPANION_STORE,
+        PARTY_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -131,6 +134,7 @@ describe('IndexedDB schema migration', () => {
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
         COMPANION_STORE,
+        PARTY_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -187,6 +191,7 @@ describe('IndexedDB schema migration', () => {
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
         COMPANION_STORE,
+        PARTY_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()
@@ -209,6 +214,7 @@ describe('IndexedDB schema migration', () => {
         CREATURE_LIBRARY_STORE,
         PARTY_MEMBER_STORE,
         COMPANION_STORE,
+        PARTY_STORE,
         HAZARD_LIBRARY_STORE,
         SPELL_EFFECT_LIBRARY_STORE
       ].sort()

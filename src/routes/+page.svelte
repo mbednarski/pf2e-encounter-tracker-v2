@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Command, CombatantState, Companion, Creature, Duration, EffectDefinition, EncounterState, Hazard, LogEntry, PartyMember, PromptResolution } from '../domain';
+  import type { Command, CombatantState, Companion, Creature, Duration, EffectDefinition, EncounterState, Hazard, LogEntry, Party, PartyMember, PromptResolution } from '../domain';
   import { computeEncounterXP, getAdjustedView } from '../domain';
   import EncounterDifficultyMeter from '../components/EncounterDifficultyMeter.svelte';
   import EncounterHeader from '../components/EncounterHeader.svelte';
@@ -91,6 +91,7 @@
     savePartyMember
   } from '$lib/storage/party-members';
   import { addCompanions, loadCompanions, removeCompanion, saveCompanion } from '$lib/storage/companions';
+  import { addParties, loadParties, removeParty, saveParty } from '$lib/storage/parties';
   import { createPersistenceController } from '$lib/storage/persistence-controller';
   import { syncCompanionsAfterEncounter, syncPartyMembersAfterEncounter } from '$lib/party-sync';
   import { loadGameClock, saveGameClock } from '$lib/storage/game-clock';
@@ -100,6 +101,7 @@
     exportEncounterYaml,
     importCompanionYaml,
     importCreatureYaml,
+    importPartyYaml,
     importEncounterYaml,
     importHazardYaml,
     importPartyMemberYaml
@@ -150,6 +152,7 @@
   let storedHazards: Hazard[] = [];
   let storedPartyMembers: PartyMember[] = [];
   let storedCompanions: Companion[] = [];
+  let storedParties: Party[] = [];
   let clockMinutes = 0;
 
   function setClock(minutes: number) {
@@ -329,12 +332,13 @@
 
   onMount(async () => {
     hydrated = true;
-    const [restored, loadResult, hazardResult, partyResult, companionResult, spellEffectResult, clock] = await Promise.all([
+    const [restored, loadResult, hazardResult, partyResult, companionResult, partiesResult, spellEffectResult, clock] = await Promise.all([
       persistence.restore(),
       loadCreatures(),
       loadHazards(),
       loadPartyMembers(),
       loadCompanions(),
+      loadParties(),
       loadSpellEffects(),
       loadGameClock()
     ]);
@@ -391,6 +395,16 @@
         partyResult.reason === 'unavailable'
           ? 'Could not load your party members: storage is unavailable. Imports this session will not survive a reload.'
           : 'Could not load your party members from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
+      );
+    }
+    if (partiesResult.ok) {
+      storedParties = partiesResult.parties;
+    } else {
+      appendFeedback(
+        nextFeedbackId('parties-load-fail'),
+        partiesResult.reason === 'unavailable'
+          ? 'Could not load your parties: storage is unavailable. Imports this session will not survive a reload.'
+          : 'Could not load your parties from storage. Try reloading the page; if it persists, your saved data may be inaccessible.'
       );
     }
     if (companionResult.ok) {
@@ -862,9 +876,12 @@
       let skipped: ReturnType<typeof importPartyMemberYaml>['skipped'];
       let companions: Companion[];
       let companionIssues: ReturnType<typeof importCompanionYaml>['issues'];
+      let parties: Party[];
+      let partyIssues: ReturnType<typeof importPartyYaml>['issues'];
       try {
         ({ partyMembers, issues, skipped } = importPartyMemberYaml(text));
         ({ companions, issues: companionIssues } = importCompanionYaml(text));
+        ({ parties, issues: partyIssues } = importPartyYaml(text));
       } catch (err) {
         appendFeedback(
           nextFeedbackId('pm-import-fail'),
@@ -873,15 +890,19 @@
         continue;
       }
 
-      // Both importers parse the same envelopes, so envelope-level issues
-      // (broken YAML, unknown kind) appear in both lists — keep one copy.
+      // All three importers parse the same envelopes, so envelope-level issues
+      // (broken YAML, unknown kind) appear in every list — keep one copy.
       const seenIssues = new Set(issues.map((i) => `${i.documentIndex}|${i.path}|${i.message}`));
-      companionIssues = companionIssues.filter(
-        (i) => !seenIssues.has(`${i.documentIndex}|${i.path}|${i.message}`)
-      );
-      issues = [...issues, ...companionIssues];
-      // Companion docs are handled by the companion importer — not "skipped".
-      skipped = skipped.filter((skip) => skip.kind !== 'companion');
+      const unseen = (list: typeof issues) =>
+        list.filter((i) => {
+          const key = `${i.documentIndex}|${i.path}|${i.message}`;
+          if (seenIssues.has(key)) return false;
+          seenIssues.add(key);
+          return true;
+        });
+      issues = [...issues, ...unseen(companionIssues), ...unseen(partyIssues)];
+      // Companion and party docs are handled by their own importers — not "skipped".
+      skipped = skipped.filter((skip) => skip.kind !== 'companion' && skip.kind !== 'party');
 
       const persistResult = await addPartyMembers(partyMembers);
 
@@ -936,6 +957,31 @@
         }
       }
 
+      const partyPersist = await addParties(parties);
+      if (!partyPersist.ok) {
+        appendFeedback(
+          nextFeedbackId('party-import-persist-fail'),
+          partyPersist.reason === 'unavailable'
+            ? `Could not save parties from "${file.name}": storage is unavailable.`
+            : `Could not save parties from "${file.name}": storage write failed.`
+        );
+      } else {
+        for (const party of partyPersist.rejected) {
+          appendFeedback(
+            nextFeedbackId('party-import-dup'),
+            `Skipped party "${party.name}" from "${file.name}": id "${party.id}" is already in your library.`
+          );
+        }
+        if (partyPersist.added.length > 0) {
+          storedParties = [...storedParties, ...partyPersist.added];
+          appendFeedback(
+            nextFeedbackId('party-import-ok'),
+            `Imported ${partyPersist.added.length} part${partyPersist.added.length === 1 ? 'y' : 'ies'} from "${file.name}".`,
+            'success'
+          );
+        }
+      }
+
       for (const skip of skipped) {
         appendFeedback(
           nextFeedbackId('pm-import-skip'),
@@ -959,11 +1005,12 @@
         issues.length === 0 &&
         skipped.length === 0 &&
         partyMembers.length === 0 &&
-        companions.length === 0
+        companions.length === 0 &&
+        parties.length === 0
       ) {
         appendFeedback(
           nextFeedbackId('pm-import-empty'),
-          `"${file.name}" contained no party-member or companion documents.`
+          `"${file.name}" contained no party-member, companion, or party documents.`
         );
       }
     }
@@ -987,6 +1034,61 @@
         })
       );
     }
+  }
+
+  /**
+   * "Add Party" convenience (spec §4.2): one click dispatches the whole
+   * roster — each member plus its companions as minions. Members deleted
+   * since the party was saved are reported, not silently skipped.
+   */
+  function handleAddPartyToEncounter(party: Party) {
+    const membersById = new Map(storedPartyMembers.map((m) => [m.id, m]));
+    const missing: string[] = [];
+    for (const memberId of party.memberIds) {
+      const member = membersById.get(memberId);
+      if (!member) {
+        missing.push(memberId);
+        continue;
+      }
+      handleAddPartyMemberToEncounter(member);
+    }
+    if (missing.length > 0) {
+      appendFeedback(
+        nextFeedbackId('party-add-missing'),
+        `Party "${party.name}": ${missing.length === 1 ? 'member' : 'members'} ${missing.join(', ')} no longer in the library — skipped.`
+      );
+    }
+  }
+
+  async function handleSaveParty(party: Party) {
+    const result = await saveParty(party);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('party-save-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not save party: storage is unavailable.'
+          : 'Could not save party: storage write failed.'
+      );
+      return;
+    }
+    const exists = storedParties.some((p) => p.id === party.id);
+    storedParties = exists
+      ? storedParties.map((p) => (p.id === party.id ? party : p))
+      : [...storedParties, party];
+  }
+
+  async function handleRemoveParty(id: string) {
+    const result = await removeParty(id);
+    if (!result.ok) {
+      appendFeedback(
+        nextFeedbackId('party-remove-fail'),
+        result.reason === 'unavailable'
+          ? 'Could not remove party: storage is unavailable.'
+          : 'Could not remove party: storage write failed.'
+      );
+      return;
+    }
+    storedParties = storedParties.filter((p) => p.id !== id);
   }
 
   async function handleRemoveCompanion(id: string) {
@@ -1595,6 +1697,7 @@
         hazards={storedHazards}
         partyMembers={storedPartyMembers}
         companions={storedCompanions}
+        parties={storedParties}
         {conditionOptions}
         {encounterCounts}
         onAddOneFromBestiary={handleAddOneFromBestiary}
@@ -1611,9 +1714,12 @@
         onLoadSampleSpellEffects={handleLoadSampleSpellEffects}
         onRemoveSpellEffect={handleRemoveSpellEffect}
         onAddPartyMemberToEncounter={handleAddPartyMemberToEncounter}
+        onAddPartyToEncounter={handleAddPartyToEncounter}
         onRemovePartyMember={handleRemovePartyMember}
         onRemoveCompanion={handleRemoveCompanion}
+        onRemoveParty={handleRemoveParty}
         onSavePartyMember={handleSavePartyMember}
+        onSaveParty={handleSaveParty}
         onImportPartyMemberYamlFiles={handleImportPartyMemberYamlFiles}
         onStart={startEncounter}
         onReset={resetLocal}

@@ -1,30 +1,39 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Companion, PartyMember } from '../domain';
+  import type { Companion, Party, PartyMember } from '../domain';
   import type { ConditionOption } from '$lib/encounter-app';
   import IconButton from './ui/IconButton.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
   import Button from './ui/Button.svelte';
   import PartyMemberEditModal from './PartyMemberEditModal.svelte';
+  import PartyEditModal from './PartyEditModal.svelte';
 
   export let partyMembers: PartyMember[];
   export let companions: Companion[] = [];
+  export let parties: Party[] = [];
   export let conditionOptions: ConditionOption[];
   export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
+  export let onAddPartyToEncounter: (party: Party) => void = () => {};
   export let onRemovePartyMember: (id: string) => void;
   export let onRemoveCompanion: (id: string) => void = () => {};
+  export let onRemoveParty: (id: string) => void = () => {};
   export let onSavePartyMember: (partyMember: PartyMember) => void;
+  export let onSaveParty: (party: Party) => void = () => {};
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
 
   const COLLAPSE_KEY = 'pf2e:partyCollapsed';
 
   let editingMember: PartyMember | null = null;
   let isCreatingNew = false;
+  let editingParty: Party | null = null;
+  let isCreatingParty = false;
   let fileInput: HTMLInputElement | undefined;
   let collapsed = false;
 
   $: existingIds = partyMembers.map((pm) => pm.id);
+  $: existingPartyIds = parties.map((p) => p.id);
   $: modalOpen = isCreatingNew || editingMember !== null;
+  $: partyModalOpen = isCreatingParty || editingParty !== null;
 
   onMount(() => {
     try {
@@ -63,6 +72,31 @@
   function handleSave(member: PartyMember) {
     onSavePartyMember(member);
     closeModal();
+  }
+
+  function openNewParty() {
+    editingParty = null;
+    isCreatingParty = true;
+  }
+
+  function openEditParty(party: Party) {
+    isCreatingParty = false;
+    editingParty = party;
+  }
+
+  function closePartyModal() {
+    editingParty = null;
+    isCreatingParty = false;
+  }
+
+  function handleSaveParty(party: Party) {
+    onSaveParty(party);
+    closePartyModal();
+  }
+
+  function partySubtext(party: Party): string {
+    const n = party.memberIds.length;
+    return `Level ${party.level} · ${n} member${n === 1 ? '' : 's'}`;
   }
 
   function handleFileChange(event: Event) {
@@ -106,6 +140,7 @@
   <div class="party__body">
     <div class="party__actions">
       <Button variant="secondary" size="sm" onclick={openNew}>New</Button>
+      <Button variant="secondary" size="sm" onclick={openNewParty}>New Party</Button>
       <Button variant="secondary" size="sm" onclick={() => fileInput?.click()}>Import YAML…</Button>
       <input
         bind:this={fileInput}
@@ -116,6 +151,54 @@
         onchange={handleFileChange}
       />
     </div>
+
+    {#if parties.length > 0}
+      <ul class="rows rows--parties" aria-label="Parties">
+        {#each parties as party (party.id)}
+          <li class="row">
+            <button
+              type="button"
+              class="row__add"
+              aria-label="Add party {party.name} to encounter"
+              title="Add whole party to encounter"
+              onclick={() => onAddPartyToEncounter(party)}
+            >
+              <span class="row__level" aria-hidden="true">⚑</span>
+              <span class="row__body">
+                <span class="row__name">{party.name}</span>
+                <span class="row__sub">{partySubtext(party)}</span>
+              </span>
+            </button>
+            <span class="row__actions">
+              <IconButton
+                ariaLabel="Edit party {party.name}"
+                title="Edit party"
+                variant="default"
+                size={22}
+                onclick={() => openEditParty(party)}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 10l1-3 5-5 2 2-5 5-3 1z" />
+                </svg>
+              </IconButton>
+              <span class="row__remove">
+                <IconButton
+                  ariaLabel="Remove party {party.name} from library"
+                  title="Remove party (members stay in the library)"
+                  variant="destructive"
+                  size={22}
+                  onclick={() => onRemoveParty(party.id)}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <path d="M2 6h8" />
+                  </svg>
+                </IconButton>
+              </span>
+            </span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
 
     {#if partyMembers.length === 0}
       <p class="empty">Click <strong>New</strong> or <strong>Import YAML</strong> to add party members.</p>
@@ -202,6 +285,16 @@
     {existingIds}
     onSave={handleSave}
     onClose={closeModal}
+  />
+{/if}
+
+{#if partyModalOpen}
+  <PartyEditModal
+    party={editingParty}
+    {partyMembers}
+    existingIds={existingPartyIds}
+    onSave={handleSaveParty}
+    onClose={closePartyModal}
   />
 {/if}
 
@@ -329,6 +422,11 @@
   .row:hover .row__remove,
   .row:focus-within .row__remove {
     opacity: 1;
+  }
+
+  .rows--parties {
+    border-bottom: var(--border-thin);
+    max-height: 160px;
   }
 
   .row--companion .companion {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Companion, Creature, EffectDefinition, Hazard, PartyMember } from '../domain';
+  import type { Companion, Creature, EffectDefinition, Hazard, Party, PartyMember } from '../domain';
   import type {
     ConditionOption,
     ManualCombatantInput,
@@ -32,9 +32,13 @@
   export let onLoadSampleSpellEffects: (() => void) | undefined = undefined;
   export let onRemoveSpellEffect: (id: string) => void = () => {};
   export let companions: Companion[] = [];
+  export let parties: Party[] = [];
   export let onAddPartyMemberToEncounter: (partyMember: PartyMember) => void;
+  export let onAddPartyToEncounter: (party: Party) => void = () => {};
   export let onRemovePartyMember: (id: string) => void;
   export let onRemoveCompanion: (id: string) => void = () => {};
+  export let onRemoveParty: (id: string) => void = () => {};
+  export let onSaveParty: (party: Party) => void = () => {};
   export let onSavePartyMember: (partyMember: PartyMember) => void;
   export let onImportPartyMemberYamlFiles: (files: File[]) => void;
   export let onStart: () => void;
@@ -80,11 +84,15 @@
   <PartySection
     {partyMembers}
     {companions}
+    {parties}
     {conditionOptions}
     {onAddPartyMemberToEncounter}
+    {onAddPartyToEncounter}
     {onRemovePartyMember}
     {onRemoveCompanion}
+    {onRemoveParty}
     {onSavePartyMember}
+    {onSaveParty}
     {onImportPartyMemberYamlFiles}
   />
   <div class="library__configure">
