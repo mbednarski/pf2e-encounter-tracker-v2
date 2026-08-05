@@ -110,7 +110,7 @@ Issue #52, spec `pf2e-party-members-spec.md`. PCs as first-class persisted entit
 Issue #51, spec `pf2e-afflictions-spec.md`. Reminder-only stage tracking — the GM applies stage conditions manually (arch decision A4).
 
 - [x] `AfflictionData`/`AfflictionStage` on `EffectDefinition`, stage-description/save-label/save-delta helpers with clamping, structural validation (spec §10 error rules), and structured data + auto-generated save prompts on the four built-in afflictions.
-- [ ] UI: stage description on effect chips, expanded save/interval/onset metadata, structured 4-button save resolution (spec §5.4, §6).
+- [x] UI: stage description on effect chips (save DC as tooltip), expanded save/interval/onset/stage metadata in the effect modal's Applied tab, and structured Crit Success / Success / Failure / Crit Failure save resolution dispatching stage deltas — recovery removes at stage ≤ 0, virulent success dismisses (spec §5.4, §6).
 
 ## Deferred milestones
 

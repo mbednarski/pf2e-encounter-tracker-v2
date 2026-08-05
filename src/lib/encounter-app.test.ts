@@ -458,6 +458,34 @@ describe('formatDuration', () => {
 });
 
 describe('viewAppliedEffects', () => {
+  test('afflictions carry stage, save, and delta view data', () => {
+    const started = startedState();
+    const applied = dispatchEncounterCommand(
+      started,
+      toCommand('APPLY_EFFECT', {
+        effectId: 'spider-venom',
+        targetId: 'fighter-1',
+        value: 2,
+        duration: { type: 'unlimited' }
+      }, 'cmd-venom')
+    );
+
+    const views = viewAppliedEffects(applied.state.combatants['fighter-1'], applied.state);
+    const venom = views.find((v) => v.effectId === 'spider-venom');
+    expect(venom?.affliction).toMatchObject({
+      saveLabel: 'Fortitude DC 22',
+      interval: '1 round',
+      maxDuration: '6 rounds',
+      virulent: false,
+      currentStage: 2,
+      stageDescription: '1d4 poison damage and enfeebled 2 (1 round)',
+      deltas: { critSuccess: -2, success: -1, failure: 1, critFailure: 2 }
+    });
+    expect(venom?.affliction?.stages.map((s) => s.isCurrent)).toEqual([false, true, false]);
+
+    expect(views.every((v) => v.effectId === 'spider-venom' || v.affliction === undefined)).toBe(true);
+  });
+
   test('returns an empty list for a combatant with no effects', () => {
     const state = stateWithTwoCombatants();
     expect(viewAppliedEffects(state.combatants['goblin-1'], state)).toEqual([]);

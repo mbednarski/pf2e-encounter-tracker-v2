@@ -8,6 +8,7 @@
     TurnBoundarySuggestion
   } from '../domain';
   import { rollDiceFormula } from '$lib/dice/formula';
+  import type { AppliedEffectView } from '$lib/encounter-app';
   import Button from './ui/Button.svelte';
   import SectionLabel from './ui/SectionLabel.svelte';
 
@@ -20,6 +21,8 @@
     amount: number,
     damageType: string
   ) => void = () => {};
+  /** Effect views for this card's combatant — used to detect affliction prompts. */
+  export let appliedEffectsView: AppliedEffectView[] = [];
 
   $: focused = phase === 'RESOLVING' && prompts.length > 0;
 
@@ -32,6 +35,60 @@
   let damageDrafts: Record<string, number | null> = {};
 
   $: persistentBranches = computePersistentBranches(prompts, combatantsById);
+  $: afflictionBranches = computeAfflictionBranches(prompts, appliedEffectsView);
+
+  interface AfflictionBranch {
+    currentStage: number;
+    saveLabel: string;
+    outcomes: { label: string; delta: number }[];
+  }
+
+  /**
+   * Structured affliction save resolution (afflictions spec §5.4): the four
+   * save outcomes map to stage deltas. Recovery (stage <= 0) removes the
+   * effect; a virulent "no change" success dismisses the prompt.
+   */
+  function computeAfflictionBranches(
+    list: Prompt[],
+    views: AppliedEffectView[]
+  ): Record<string, AfflictionBranch> {
+    const next: Record<string, AfflictionBranch> = {};
+    for (const p of list) {
+      if (p.suggestionType.type !== 'promptResolution') continue;
+      const view = views.find((v) => v.instanceId === p.effectInstanceId);
+      if (!view?.affliction) continue;
+      const { deltas } = view.affliction;
+      next[p.id] = {
+        currentStage: view.affliction.currentStage,
+        saveLabel: view.affliction.saveLabel,
+        outcomes: [
+          { label: 'Crit Success', delta: deltas.critSuccess },
+          { label: 'Success', delta: deltas.success },
+          { label: 'Failure', delta: deltas.failure },
+          { label: 'Crit Failure', delta: deltas.critFailure }
+        ]
+      };
+    }
+    return next;
+  }
+
+  function outcomeHint(delta: number): string {
+    if (delta === 0) return 'no change';
+    return delta > 0 ? `+${delta} stage${delta === 1 ? '' : 's'}` : `${delta} stage${delta === -1 ? '' : 's'}`;
+  }
+
+  function handleAfflictionOutcome(p: Prompt, branch: AfflictionBranch, delta: number) {
+    if (delta === 0) {
+      onResolve(p.id, { type: 'dismiss' });
+      return;
+    }
+    const newValue = branch.currentStage + delta;
+    if (newValue <= 0) {
+      onResolve(p.id, { type: 'remove' });
+      return;
+    }
+    onResolve(p.id, { type: 'setValue', value: newValue });
+  }
   $: setValueDrafts = reconcileDrafts(prompts, persistentBranches, setValueDrafts);
   $: damageDrafts = reconcileDamageDrafts(prompts, persistentBranches, damageDrafts);
 
@@ -174,7 +231,32 @@
           </div>
           <p class="prompt__description">{prompt.description}</p>
           <div class="prompt__actions">
-            {#if persistentBranches[prompt.id]}
+            {#if afflictionBranches[prompt.id]}
+              {@const affliction = afflictionBranches[prompt.id]}
+              <span class="affliction-save" aria-label="Save outcome">
+                {#each affliction.outcomes as outcome (outcome.label)}
+                  <Button
+                    size="sm"
+                    variant={outcome.delta > 0 ? 'destructive' : 'primary'}
+                    ariaLabel={`${outcome.label}: ${outcomeHint(outcome.delta)}`}
+                    title={outcomeHint(outcome.delta)}
+                    onclick={() => handleAfflictionOutcome(prompt, affliction, outcome.delta)}
+                  >{outcome.label}</Button>
+                {/each}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                ariaLabel="Dismiss"
+                onclick={() => handleDismiss(prompt)}
+              >Dismiss</Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                ariaLabel="Remove effect"
+                onclick={() => handleRemove(prompt)}
+              >Remove effect</Button>
+            {:else if persistentBranches[prompt.id]}
               {@const branch = persistentBranches[prompt.id]}
               {#if branch.formula}
                 <Button
@@ -331,6 +413,15 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
+  }
+
+  .affliction-save {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+    padding-right: var(--space-2);
+    border-right: var(--border-thin);
   }
 
   .set-value {

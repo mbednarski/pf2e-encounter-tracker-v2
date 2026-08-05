@@ -508,6 +508,7 @@
         class="condition-chip"
         class:condition-chip--implied={view.source.kind === 'implied'}
         class:condition-chip--persistent={isPersistent}
+        class:condition-chip--affliction={view.affliction !== undefined}
       >
         {#if isPersistent && damageType}
           <DamageTypeGlyph type={damageType} />
@@ -564,6 +565,11 @@
           onclick={() => onRemoveCondition(combatant.id, view.instanceId)}
         >✕</IconButton>
         {/if}
+        {#if view.affliction?.stageDescription}
+          <span class="condition-stage" title={view.affliction.saveLabel}>
+            {view.affliction.stageDescription}
+          </span>
+        {/if}
       </span>
     {/each}
 
@@ -605,6 +611,7 @@
         prompts={cardPrompts}
         {combatantsById}
         {phase}
+        {appliedEffectsView}
         onResolve={onResolvePrompt}
         {onApplyPersistentDamage}
       />
@@ -1046,6 +1053,20 @@
     background: transparent;
     border-style: dashed;
     opacity: 0.85;
+  }
+
+  /* Afflictions carry a stage-description line under the chip controls
+     (afflictions spec §6.1) — allow the chip to wrap into two rows. */
+  .condition-chip--affliction {
+    flex-wrap: wrap;
+  }
+
+  .condition-stage {
+    flex-basis: 100%;
+    font-weight: 400;
+    font-size: var(--text-xs);
+    color: var(--color-ink-mute);
+    padding-bottom: 2px;
   }
 
   /* Persistent damage — distinct from a regular condition. Filled red
