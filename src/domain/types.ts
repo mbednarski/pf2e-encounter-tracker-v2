@@ -791,6 +791,32 @@ export interface EffectDurationSpec {
   sustained?: boolean;
 }
 
+/**
+ * Structured affliction metadata (afflictions spec §3). Reminder-only: the
+ * system displays stage descriptions and fires save prompts; the GM applies
+ * stage conditions manually (arch decision A4 — suggest, never auto-apply).
+ */
+export interface AfflictionData {
+  saveType: 'fortitude' | 'reflex' | 'will';
+  saveDC: number;
+  /** Advisory free text ("1 round", "1d4 hours") — no automatic activation. */
+  onset?: string;
+  /** How often saves are rolled ("1 round" afflictions prompt at turn end). */
+  interval: string;
+  /** Advisory unless the GM also sets a rounds Duration at apply time. */
+  maxDuration?: string;
+  stages: AfflictionStage[];
+  /** Virulent trait: crit success reduces by 1, success no change (spec §5.2). */
+  virulent?: boolean;
+}
+
+export interface AfflictionStage {
+  /** 1-indexed, matching AppliedEffect.value. */
+  stage: number;
+  /** Full stage effect text, verbatim from source. */
+  description: string;
+}
+
 export interface EffectDefinition {
   id: string;
   name: string;
@@ -803,6 +829,8 @@ export interface EffectDefinition {
   turnStartSuggestion?: TurnBoundarySuggestion;
   turnEndSuggestion?: TurnBoundarySuggestion;
   persistAfterEncounter?: boolean;
+  /** Present iff category === 'affliction' (afflictions spec §3.2). */
+  afflictionData?: AfflictionData;
   traits?: string[];
   /** Default duration applied when this effect is cast, unless overridden. */
   defaultDuration?: EffectDurationSpec;
