@@ -711,6 +711,16 @@
     border-left-color: var(--faction-pc);
   }
 
+  /* Player-side cards carry a tinted heading band so the GM can split the
+     board into "mine vs theirs" at a glance (#104). Enemies keep the plain
+     parchment heading — the asymmetry is the signal. */
+  .combatant-card[data-faction='pc'] .card-heading,
+  .combatant-card[data-faction='ally'] .card-heading {
+    background: var(--faction-pc-soft);
+    margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-3)) 0;
+    padding: var(--space-1) var(--space-3);
+  }
+
   .combatant-card[data-faction='enemy'] {
     border-left-color: var(--faction-enemy);
   }
@@ -810,17 +820,21 @@
     line-height: 1.2;
   }
 
+  /* Filled tags scan faster than outline-only at table distance (#104). */
   .faction-tag[data-faction='pc'],
   .faction-tag[data-faction='ally'] {
     color: var(--faction-pc);
+    background: var(--faction-pc-soft);
   }
 
   .faction-tag[data-faction='enemy'] {
     color: var(--faction-enemy);
+    background: var(--faction-enemy-soft);
   }
 
   .faction-tag[data-faction='hazard'] {
     color: var(--faction-hazard);
+    background: var(--faction-hazard-soft);
   }
 
   h2 {
@@ -885,8 +899,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    margin-top: var(--space-2);
-    padding-top: var(--space-2);
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
     border-top: 1px dashed var(--color-rule);
     flex-wrap: wrap;
   }
@@ -1170,8 +1184,8 @@
     justify-content: start;
     gap: var(--space-2);
     flex-wrap: wrap;
-    margin-top: var(--space-2);
-    padding-top: var(--space-2);
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
     border-top: 1px dashed var(--color-rule);
   }
 

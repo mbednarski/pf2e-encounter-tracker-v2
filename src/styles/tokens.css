@@ -77,8 +77,11 @@
 
   /* Faction aliases */
   --faction-pc: var(--color-blue);
+  --faction-pc-soft: var(--color-blue-soft);
   --faction-enemy: var(--color-red);
+  --faction-enemy-soft: var(--color-red-soft);
   --faction-hazard: var(--color-amber);
+  --faction-hazard-soft: var(--color-amber-soft);
 
   /* HP tone aliases */
   --hp-ok: var(--color-green);
